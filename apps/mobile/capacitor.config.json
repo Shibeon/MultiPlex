@@ -1,0 +1,13 @@
+{
+  "appId": "app.multiplex.client",
+  "appName": "MultiPlex",
+  "webDir": "../web/dist",
+  "backgroundColor": "#0f1115",
+  "server": {
+    "androidScheme": "http",
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}

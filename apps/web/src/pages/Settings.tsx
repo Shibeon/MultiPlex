@@ -1,0 +1,209 @@
+import { QUALITIES } from '@multiplex/core';
+import type { ComponentChildren } from 'preact';
+import { useState } from 'preact/hooks';
+import { t } from '../i18n';
+import { DEFAULTS, THEMES, load, sanitize, settings, update, type Settings } from '../settings';
+import { auth, logout, server, switchServer } from '../store';
+import { Icon } from '../ui';
+import type { KnownHub } from './Browse';
+
+function Row({ label, children }: { label: string; children: ComponentChildren }) {
+  return (
+    <label class="set-row">
+      <span>{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function Toggle({ k, label }: { k: keyof Settings; label: string }) {
+  return (
+    <Row label={label}>
+      <input type="checkbox" checked={settings.value[k] as boolean} onChange={(e) => update({ [k]: e.currentTarget.checked })} />
+    </Row>
+  );
+}
+
+function Range({ k, label, min, max, step = 1, unit = '' }: { k: keyof Settings; label: string; min: number; max: number; step?: number; unit?: string }) {
+  const v = settings.value[k] as number;
+  return (
+    <Row label={`${label} — ${v}${unit}`}>
+      <input type="range" min={min} max={max} step={step} value={v} onInput={(e) => update({ [k]: Number(e.currentTarget.value) })} />
+    </Row>
+  );
+}
+
+function HomeRows() {
+  const s = settings.value;
+  const known = load<KnownHub[]>('mp.hubs') ?? [];
+  if (!known.length) return <p class="muted">{t('set.homeEmpty')}</p>;
+  const pos = (id: string) => {
+    const i = s.hubOrder.indexOf(id);
+    return i < 0 ? s.hubOrder.length : i;
+  };
+  const ordered = known.map((h, i) => ({ h, i })).sort((a, b) => pos(a.h.id) - pos(b.h.id) || a.i - b.i).map((x) => x.h);
+  const move = (i: number, d: number) => {
+    const ids = ordered.map((h) => h.id);
+    const j = i + d;
+    if (j < 0 || j >= ids.length) return;
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    update({ hubOrder: ids });
+  };
+  const toggle = (id: string) => update({ hiddenHubs: s.hiddenHubs.includes(id) ? s.hiddenHubs.filter((x) => x !== id) : [...s.hiddenHubs, id] });
+  return (
+    <ul class="hub-list">
+      {ordered.map((h, i) => (
+        <li key={h.id} class={s.hiddenHubs.includes(h.id) ? 'off' : ''}>
+          <label class="check">
+            <input type="checkbox" checked={!s.hiddenHubs.includes(h.id)} onChange={() => toggle(h.id)} />
+            {h.title}
+          </label>
+          <button class="btn icon-btn" aria-label={`${h.title} ↑`} disabled={i === 0} onClick={() => move(i, -1)}>
+            <Icon name="up" size={18} />
+          </button>
+          <button class="btn icon-btn" aria-label={`${h.title} ↓`} disabled={i === ordered.length - 1} onClick={() => move(i, 1)}>
+            <Icon name="down" size={18} />
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export function SettingsPage() {
+  const s = settings.value;
+  const [msg, setMsg] = useState('');
+
+  const exportFile = () => {
+    const url = URL.createObjectURL(new Blob([JSON.stringify(s, null, 2)], { type: 'application/json' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'multiplex-settings.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const importFile = async (e: Event) => {
+    const input = e.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    try {
+      const clean = sanitize(JSON.parse(await file.text()));
+      if (!Object.keys(clean).length) throw new Error('empty');
+      update(clean);
+      setMsg('');
+    } catch {
+      setMsg(t('set.importBad'));
+    }
+  };
+
+  return (
+    <div class="page settings">
+      <h1>{t('nav.settings')}</h1>
+
+      <section>
+        <h2>{t('set.appearance')}</h2>
+        <Row label={t('set.theme')}>
+          <select value={s.theme} onChange={(e) => update({ theme: e.currentTarget.value, customVars: {} })}>
+            {Object.entries(THEMES).map(([id, th]) => (
+              <option key={id} value={id}>
+                {th.name}
+              </option>
+            ))}
+          </select>
+        </Row>
+        <Row label={t('set.accent')}>
+          <span class="inline">
+            <input type="color" value={s.accent || THEMES[s.theme]?.vars['--accent'] || '#e5a00d'} onInput={(e) => update({ accent: e.currentTarget.value })} />
+            {s.accent && (
+              <button class="link" onClick={() => update({ accent: '' })}>
+                {t('set.accentReset')}
+              </button>
+            )}
+          </span>
+        </Row>
+        <Range k="cardSize" label={t('set.cardSize')} min={100} max={260} step={10} unit=" px" />
+        <Range k="radius" label={t('set.radius')} min={0} max={24} unit=" px" />
+        <Range k="uiScale" label={t('set.uiScale')} min={80} max={160} step={5} unit=" %" />
+        <Toggle k="showTitles" label={t('set.showTitles')} />
+        <Toggle k="backdrops" label={t('set.backdrops')} />
+        <Toggle k="reduceMotion" label={t('set.reduceMotion')} />
+        <Row label={t('set.lang')}>
+          <select value={s.lang} onChange={(e) => update({ lang: e.currentTarget.value as Settings['lang'] })}>
+            <option value="fr">Français</option>
+            <option value="en">English</option>
+          </select>
+        </Row>
+      </section>
+
+      <section>
+        <h2>{t('set.home')}</h2>
+        <p class="muted">{t('set.homeHelp')}</p>
+        <HomeRows />
+      </section>
+
+      <section>
+        <h2>{t('set.playback')}</h2>
+        <Row label={t('set.quality')}>
+          <select value={s.quality} onChange={(e) => update({ quality: e.currentTarget.value })}>
+            {QUALITIES.map((q) => (
+              <option key={q.id} value={q.id}>
+                {q.label}
+              </option>
+            ))}
+          </select>
+        </Row>
+        <Toggle k="directPlay" label={t('set.directPlay')} />
+        <Toggle k="autoNext" label={t('set.autoNext')} />
+        <Toggle k="autoSkipIntro" label={t('set.autoSkipIntro')} />
+        <Toggle k="autoSkipCredits" label={t('set.autoSkipCredits')} />
+        <Range k="seekStep" label={t('set.seekStep')} min={5} max={60} step={5} unit=" s" />
+      </section>
+
+      <section>
+        <h2>{t('set.advanced')}</h2>
+        <label class="set-col">
+          <span>{t('set.customCss')}</span>
+          <small class="muted">{t('set.customCssHelp')}</small>
+          <textarea rows={6} spellcheck={false} value={s.customCss} placeholder=".card:focus-visible { transform: scale(1.08); }" onInput={(e) => update({ customCss: e.currentTarget.value })} />
+        </label>
+        <div class="actions">
+          <button class="btn" onClick={exportFile}>
+            {t('set.export')}
+          </button>
+          <label class="btn" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && (e.currentTarget.querySelector('input') as HTMLInputElement).click()}>
+            {t('set.import')}
+            <input type="file" accept="application/json,.json" hidden onChange={(e) => void importFile(e)} />
+          </label>
+          <button class="btn" onClick={() => (settings.value = { ...DEFAULTS })}>
+            {t('set.reset')}
+          </button>
+        </div>
+        {msg && (
+          <p class="error-text" role="alert">
+            {msg}
+          </p>
+        )}
+      </section>
+
+      <section>
+        <h2>{t('set.account')}</h2>
+        <p>
+          {auth.value && <strong>{auth.value.user.username || auth.value.user.title}</strong>}
+          {auth.value && ' · '}
+          {t('set.server')} : {server.value?.name}
+        </p>
+        <div class="actions">
+          <button class="btn" onClick={switchServer}>
+            {t('servers.switch')}
+          </button>
+          <button class="btn" onClick={logout}>
+            {t('set.logout')}
+          </button>
+        </div>
+        <p class="muted small">{t('set.about')}</p>
+      </section>
+    </div>
+  );
+}

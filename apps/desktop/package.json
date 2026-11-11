@@ -1,0 +1,56 @@
+{
+  "name": "@multiplex/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Coque de bureau MultiPlex (Windows, macOS, Linux)",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "typecheck": "node --check main.cjs",
+    "dist": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^39.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "author": "MultiPlex contributors",
+  "build": {
+    "appId": "app.multiplex.client",
+    "productName": "MultiPlex",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.cjs",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../web/dist",
+        "to": "web"
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.video"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "AudioVideo"
+    }
+  }
+}

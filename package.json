@@ -1,0 +1,19 @@
+{
+  "name": "multiplex",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Client Plex communautaire, rapide, personnalisable et multiplateforme",
+  "license": "MIT",
+  "scripts": {
+    "dev": "pnpm --filter @multiplex/web dev",
+    "build": "pnpm --filter @multiplex/web build",
+    "preview": "pnpm --filter @multiplex/web preview",
+    "test": "pnpm --filter @multiplex/core test",
+    "typecheck": "pnpm -r typecheck",
+    "desktop": "pnpm build && pnpm --filter @multiplex/desktop start",
+    "package:tv": "pnpm build && node scripts/package-tv.mjs",
+    "mobile:sync": "pnpm build && pnpm --filter @multiplex/mobile sync",
+    "desktop:dist": "pnpm build && pnpm --filter @multiplex/desktop dist"
+  },
+  "packageManager": "pnpm@10.33.0"
+}
