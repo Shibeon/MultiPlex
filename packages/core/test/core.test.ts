@@ -116,6 +116,11 @@ describe('serveur de démo', () => {
     expect(seasons).toHaveLength(2);
     expect(await s.children(seasons[0].ratingKey)).toHaveLength(6);
   });
+  it('simule des lectures en cours', async () => {
+    const list = await s.sessions();
+    expect(list).toHaveLength(3);
+    expect(list[0].item.viewOffset).toBeGreaterThan(0);
+  });
   it('recherche', async () => {
     expect((await s.search('chroniques'))[0].type).toBe('show');
   });

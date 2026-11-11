@@ -175,6 +175,20 @@ export interface TimelineReport {
   session: string;
 }
 
+/** Une lecture en cours sur le serveur (celle d'un ami ou la vôtre). */
+export interface ActiveSession {
+  id: string;
+  user: string;
+  userThumb?: string;
+  state: 'playing' | 'paused' | 'buffering' | string;
+  /** Nom de l'appareil ou de l'application de lecture. */
+  player: string;
+  platform?: string;
+  transcoding: boolean;
+  /** L'élément lu ; viewOffset y donne la position actuelle. */
+  item: Metadata;
+}
+
 /**
  * Contrat qu'implémente toute source de médias (serveur Plex, mode démo,
  * et demain d'autres backends). L'interface utilisateur ne dépend que de lui.
@@ -194,4 +208,6 @@ export interface MediaServer {
   selectStreams(partId: number, sel: { audioStreamID?: number; subtitleStreamID?: number }): Promise<void>;
   timeline(report: TimelineReport): Promise<void>;
   scrobble(ratingKey: string, watched: boolean): Promise<void>;
+  /** Lectures en cours. Réservé au propriétaire du serveur : sinon l'appel échoue en 401/403. */
+  sessions(): Promise<ActiveSession[]>;
 }

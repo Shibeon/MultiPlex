@@ -1,6 +1,7 @@
 import { getJson, randomId, request } from './http';
 import { planPlayback, transcodeParams } from './playback';
 import type {
+  ActiveSession,
   ClientInfo,
   Hub,
   ItemsQuery,
@@ -128,6 +129,27 @@ export class PlexServer implements MediaServer {
       }),
       { timeout: 5000 },
     );
+  }
+
+  async sessions(): Promise<ActiveSession[]> {
+    type Raw = Metadata & {
+      sessionKey?: string;
+      User?: { title?: string; thumb?: string };
+      Player?: { state?: string; title?: string; product?: string; platform?: string };
+      Session?: { id?: string };
+      TranscodeSession?: { videoDecision?: string; audioDecision?: string };
+    };
+    const list = (await this.mc<{ Metadata?: Raw[] }>('/status/sessions')).Metadata ?? [];
+    return list.map((m) => ({
+      id: m.Session?.id ?? m.sessionKey ?? m.ratingKey,
+      user: m.User?.title ?? '?',
+      userThumb: m.User?.thumb,
+      state: m.Player?.state ?? 'playing',
+      player: m.Player?.title || m.Player?.product || '',
+      platform: m.Player?.platform || m.Player?.product,
+      transcoding: m.TranscodeSession?.videoDecision === 'transcode' || m.TranscodeSession?.audioDecision === 'transcode',
+      item: m,
+    }));
   }
 
   async scrobble(ratingKey: string, watched: boolean): Promise<void> {

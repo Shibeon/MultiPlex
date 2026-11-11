@@ -1,5 +1,5 @@
 import { randomId } from './http';
-import type { Hub, ItemsQuery, Library, MediaServer, Metadata, Page, PlaybackPlan } from './types';
+import type { ActiveSession, Hub, ItemsQuery, Library, MediaServer, Metadata, Page, PlaybackPlan } from './types';
 
 /**
  * Serveur factice : permet d'essayer et de développer l'interface sans compte
@@ -190,6 +190,31 @@ export class DemoServer implements MediaServer {
   async timeline(r: { ratingKey: string; timeMs: number; state: string }): Promise<void> {
     const m = this.db.get(r.ratingKey);
     if (m && r.state !== 'buffering') m.viewOffset = r.timeMs;
+  }
+
+  private started = Date.now();
+
+  async sessions(): Promise<ActiveSession[]> {
+    // Trois amis fictifs dont la lecture avance en temps réel.
+    const elapsed = Date.now() - this.started;
+    const cast: [string, string, string, string, string, boolean][] = [
+      ['Camille', '7', 'playing', 'Salon', 'Android TV', false],
+      ['Noah', '245', 'paused', 'iPhone', 'iOS', true],
+      ['Inès', '42', 'playing', 'Chrome', 'Web', false],
+    ];
+    return cast.map(([user, key, state, player, platform, transcoding], i) => {
+      const m = this.db.get(key)!;
+      const base = (i + 1) * 11 * 60000;
+      return {
+        id: 'demo-' + i,
+        user,
+        state,
+        player,
+        platform,
+        transcoding,
+        item: { ...m, viewOffset: Math.min((m.duration ?? 0) - 1000, base + (state === 'playing' ? elapsed : 0)) },
+      };
+    });
   }
 
   async scrobble(ratingKey: string, watched: boolean): Promise<void> {

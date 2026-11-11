@@ -1,4 +1,5 @@
 import { t } from './i18n';
+import { ActivityPage } from './pages/Activity';
 import { LibraryPage, Home, SearchPage } from './pages/Browse';
 import { Details } from './pages/Details';
 import { Gate } from './pages/Gate';
@@ -25,6 +26,7 @@ function Page() {
   if (kind === 'library' && id) return <LibraryPage key={id} id={id} />;
   if (kind === 'item' && id) return <Details key={id} id={id} />;
   if (kind === 'search') return <SearchPage />;
+  if (kind === 'activity') return <ActivityPage />;
   if (kind === 'settings') return <SettingsPage />;
   return <Home />;
 }
@@ -41,6 +43,7 @@ export function App() {
         </a>
         <NavLink href="#/" icon="home" label={t('nav.home')} />
         <NavLink href="#/search" icon="search" label={t('nav.search')} />
+        <NavLink href="#/activity" icon="live" label={t('nav.live')} />
         <div class="nav-sep" />
         {libraries.value.map((l) => (
           <NavLink key={l.key} href={`#/library/${l.key}`} icon={l.type} label={l.title} />

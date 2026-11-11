@@ -50,6 +50,12 @@ const routes: Record<string, (q: URLSearchParams) => unknown> = {
   '/library/metadata/20/children': () => ({ Metadata: [movie] }),
   '/hubs/search': () => ({ Hub: [{ hubIdentifier: 'movie', title: 'Films', type: 'movie', Metadata: [movie] }] }),
   '/:/timeline': () => ({}),
+  '/status/sessions': () => ({
+    Metadata: [
+      { ...movie, viewOffset: 600000, sessionKey: '5', User: { title: 'Ami', thumb: 'https://exemple.test/a.png' }, Player: { state: 'paused', title: 'Salon', platform: 'Android' }, Session: { id: 'abc' }, TranscodeSession: { videoDecision: 'copy', audioDecision: 'transcode' } },
+      { ...movie, ratingKey: '11', sessionKey: '6', Player: { product: 'Plex Web' } },
+    ],
+  }),
   '/:/scrobble': () => ({}),
   '/:/unscrobble': () => ({}),
   '/library/parts/77': () => ({}),
@@ -149,6 +155,12 @@ describe('PlexServer contre un faux PMS', () => {
     expect(q.get('X-Plex-Token')).toBe(TOKEN);
     await srv.stopTranscode(plan.session);
     expect([last().path, last().q.get('session')]).toEqual(['/video/:/transcode/universal/stop', plan.session]);
+  });
+
+  it('liste les lectures en cours', async () => {
+    const [a, b] = await srv.sessions();
+    expect([a.id, a.user, a.state, a.player, a.platform, a.transcoding, a.item.viewOffset]).toEqual(['abc', 'Ami', 'paused', 'Salon', 'Android', true, 600000]);
+    expect([b.id, b.user, b.state, b.player, b.transcoding]).toEqual(['6', '?', 'playing', 'Plex Web', false]);
   });
 
   it('envoie progression, vu / non vu et choix de pistes', async () => {
