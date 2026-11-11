@@ -25,6 +25,8 @@ pnpm desktop    # application de bureau (Electron)
 - **Télécommande et clavier** : navigation spatiale aux flèches, touches Retour Tizen / webOS.
 - **Français et anglais**, PWA installable.
 
+Vérifié contre un vrai Plex Media Server (bibliothèques de plusieurs milliers de titres) : connexion, découverte, grille, fiches, recherche, lecture directe 4K HEVC, transcodage HLS, avance rapide, remontée de progression, vu / non vu. Limite connue : les sous-titres intégrés au fichier ne peuvent pas être servis à part par le serveur, ils imposent donc un transcodage vidéo.
+
 ## Performance
 
 - Preact + signaux : ~30 Ko gzip pour toute l'application ; `hls.js` n'est chargé que si un transcodage est nécessaire.
