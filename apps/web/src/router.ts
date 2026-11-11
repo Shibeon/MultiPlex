@@ -37,3 +37,13 @@ export function back(): void {
   if (history.length > 1) history.back();
   else go('/');
 }
+
+/**
+ * Appelée par la coque native (bouton Retour d'Android) : revient en arrière
+ * dans l'app et renvoie false à la racine, pour que le système ferme l'app.
+ */
+(window as unknown as { multiplexBack: () => boolean }).multiplexBack = () => {
+  if (route.value.hash === '/') return false;
+  back();
+  return true;
+};

@@ -2,7 +2,7 @@ import type { Hub, Metadata } from '@multiplex/core';
 import type { ComponentChildren } from 'preact';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { t } from './i18n';
-import { settings } from './settings';
+import { cardWidth } from './settings';
 import { server } from './store';
 
 const ICONS: Record<string, string> = {
@@ -73,7 +73,7 @@ export function isWatched(item: Metadata): boolean {
 
 export function Card({ item }: { item: Metadata }) {
   const srv = server.value!;
-  const w = imgWidth(settings.value.cardSize);
+  const w = imgWidth(cardWidth());
   const { title, sub } = labels(item);
   const thumb = item.type === 'episode' ? (item.grandparentThumb ?? item.thumb) : (item.thumb ?? item.parentThumb);
   const progress = item.viewOffset && item.duration ? Math.min(1, item.viewOffset / item.duration) : 0;

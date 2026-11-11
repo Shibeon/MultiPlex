@@ -4,7 +4,7 @@ import { back } from './router';
  * Navigation spatiale : les flèches (clavier, télécommande TV, manette)
  * déplacent le focus vers l'élément le plus proche dans la direction voulue.
  */
-const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),select,textarea,[tabindex="0"]';
+const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),select,textarea,summary,[tabindex="0"]';
 const DIRS: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
 /** Touche Retour des télécommandes Tizen (10009) et webOS (461). */
 const BACK_KEYCODES = [10009, 461];
@@ -50,7 +50,28 @@ export function moveFocus(dx: number, dy: number): boolean {
   return true;
 }
 
+/** Vrai tant que l'utilisateur pilote au clavier ou à la télécommande (et non au doigt ou à la souris). */
+let usingKeys = false;
+
+/**
+ * Après un changement de page, l'élément qui avait le focus a disparu : on le
+ * redonne à l'action principale, sinon la télécommande ne peut plus rien valider.
+ */
+export function focusPage(): void {
+  // Dans le lecteur, rien ne doit capter le focus : OK = lecture/pause, flèches = avance/retour.
+  if (!usingKeys || document.querySelector('[data-focus-scope]')) return;
+  const active = document.activeElement;
+  if (active && active !== document.body && document.body.contains(active)) return;
+  const scope = document.querySelector<HTMLElement>('[data-focus-scope]') ?? document.querySelector<HTMLElement>('.content') ?? document.body;
+  const target = scope.querySelector<HTMLElement>('.btn.primary:not([disabled])') ?? [...scope.querySelectorAll<HTMLElement>(FOCUSABLE)].find(visible);
+  target?.focus({ preventScroll: true });
+}
+
 export function initNav(): void {
+  addEventListener('keydown', () => (usingKeys = true), true);
+  addEventListener('pointerdown', () => (usingKeys = false), true);
+  // Les pages chargent leurs données de façon asynchrone : on réessaie brièvement.
+  addEventListener('hashchange', () => [80, 400, 1200].forEach((ms) => setTimeout(focusPage, ms)));
   // Tizen ne transmet les touches multimédia qu'aux applications qui les réclament.
   try {
     const tv = (window as unknown as { tizen?: { tvinputdevice?: { registerKeyBatch(keys: string[]): void } } }).tizen?.tvinputdevice;

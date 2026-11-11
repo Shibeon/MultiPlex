@@ -2,7 +2,7 @@ import type { Hub, Metadata } from '@multiplex/core';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { t } from '../i18n';
 import { go, route } from '../router';
-import { load, save, settings } from '../settings';
+import { cardWidth, load, save, settings } from '../settings';
 import { libraries, server, useData } from '../store';
 import { Card, ErrorBox, HubRow, Spinner, VirtualGrid } from '../ui';
 
@@ -144,7 +144,7 @@ export function LibraryPage({ id }: { id: string }) {
       {state.total > 0 && (
         <VirtualGrid
           total={state.total}
-          minWidth={s.cardSize}
+          minWidth={cardWidth()}
           extra={s.showTitles ? 50 : 0}
           onRange={(a, b) => {
             for (let p = Math.floor(a / PAGE); p <= Math.floor((b - 1) / PAGE); p++) loadPage(p);

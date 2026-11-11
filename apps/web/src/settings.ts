@@ -106,12 +106,23 @@ export function sanitize(input: unknown): Partial<Settings> {
   return out as Partial<Settings>;
 }
 
+const isTv = () => innerHeight <= 620 && innerWidth >= 900;
+const viewport = signal({ tv: typeof window !== 'undefined' && isTv() });
+
+/** Largeur d'affiche effective, réduite sur téléviseur. */
+export function cardWidth(): number {
+  return Math.round(settings.value.cardSize * (viewport.value.tv ? 0.72 : 1));
+}
+
 /** Applique thème, variables et CSS personnalisé au document, et persiste. */
 export function initSettings(): void {
   const style = document.createElement('style');
   style.id = 'custom-css';
   document.head.appendChild(style);
   let applied: string[] = [];
+  addEventListener('resize', () => {
+    if (viewport.value.tv !== isTv()) viewport.value = { tv: isTv() };
+  });
   effect(() => {
     const s = settings.value;
     save(KEY, s);
@@ -119,14 +130,16 @@ export function initSettings(): void {
     const vars: Record<string, string> = {
       ...(THEMES[s.theme] ?? THEMES.midnight).vars,
       ...s.customVars,
-      '--card-w': `${s.cardSize}px`,
+      '--card-w': `${cardWidth()}px`,
       '--radius': `${s.radius}px`,
     };
     if (s.accent) vars['--accent'] = s.accent;
     for (const k of applied) if (!(k in vars)) root.style.removeProperty(k);
     for (const [k, v] of Object.entries(vars)) root.style.setProperty(k, v);
     applied = Object.keys(vars);
-    root.style.fontSize = `${s.uiScale}%`;
+    // Les téléviseurs exposent souvent un écran logique de 960×540 : on réduit l'échelle pour que tout tienne.
+    root.style.fontSize = `${s.uiScale * (viewport.value.tv ? 0.72 : 1)}%`;
+    root.classList.toggle('tv', viewport.value.tv);
     root.lang = s.lang;
     root.classList.toggle('reduce-motion', s.reduceMotion);
     root.classList.toggle('no-titles', !s.showTitles);

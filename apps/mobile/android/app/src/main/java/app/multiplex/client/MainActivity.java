@@ -3,6 +3,7 @@ package app.multiplex.client;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.view.View;
+import androidx.activity.OnBackPressedCallback;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -21,6 +22,17 @@ public class MainActivity extends BridgeActivity {
             Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
             view.setPadding(bars.left, bars.top, bars.right, bars.bottom);
             return WindowInsetsCompat.CONSUMED;
+        });
+
+        // Bouton Retour (téléphone et télécommande) : l'app web décide ; à la racine, on quitte.
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                getBridge().getWebView().evaluateJavascript(
+                    "(function(){return !!(window.multiplexBack && window.multiplexBack())})()",
+                    handled -> { if (!"true".equals(handled)) moveTaskToBack(true); }
+                );
+            }
         });
     }
 }

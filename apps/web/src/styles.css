@@ -101,7 +101,7 @@ input[type='color'] { padding: 0; width: 3em; height: 2em; }
 .hub { margin-bottom: 1.8rem; }
 .hub h2 { margin-bottom: 0.7rem; }
 .row {
-  display: flex; gap: var(--gap); overflow-x: auto; padding: 6px; margin: -6px;
+  display: flex; gap: var(--gap); overflow-x: auto; padding: 14px; margin: -14px;
   scroll-snap-type: x proximity; scrollbar-width: thin; scrollbar-color: var(--surface-2) transparent;
 }
 .row.wrap { flex-wrap: wrap; overflow: visible; }
@@ -248,3 +248,7 @@ video::cue { background: rgba(0, 0, 0, 0.6); font-size: 1.1em; }
 @media (min-width: 761px) {
   .sidebar { padding-top: calc(1rem + env(safe-area-inset-top)); padding-left: calc(0.6rem + env(safe-area-inset-left)); }
 }
+
+/* ---------- téléviseurs : carte de connexion compacte ---------- */
+.tv .gate-card { gap: 0.6rem; padding: 1.4rem 2rem; }
+.tv .gate { padding: 0.5rem; }
