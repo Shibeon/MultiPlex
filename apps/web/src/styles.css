@@ -240,3 +240,11 @@ video::cue { background: rgba(0, 0, 0, 0.6); font-size: 1.1em; }
 @media (min-width: 1800px) {
   :root { --sidebar-w: 16rem; }
 }
+
+/* ---------- encoches et barres système (iOS, Android bord à bord) ---------- */
+.content, .gate { padding-top: env(safe-area-inset-top); }
+.player-top { padding-top: calc(1rem + env(safe-area-inset-top)); }
+.player-bottom { padding-bottom: calc(1rem + env(safe-area-inset-bottom)); }
+@media (min-width: 761px) {
+  .sidebar { padding-top: calc(1rem + env(safe-area-inset-top)); padding-left: calc(0.6rem + env(safe-area-inset-left)); }
+}
