@@ -130,6 +130,7 @@ writeFileSync(
       iconColor: '#0f1115',
       disableBackHistoryAPI: true,
       resolution: '1920x1080',
+      requiredACG: [],
     },
     null,
     2,

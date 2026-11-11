@@ -49,10 +49,10 @@ L'interface ne dépend que du contrat `MediaServer` : ajouter un autre backend r
 | Navigateurs (ordinateur, mobile), PWA | Fonctionne |
 | Windows | `pnpm desktop:dist` → installeur et version portable dans `apps/desktop/release` (non signés) |
 | macOS / Linux | Même commande, à lancer sur chaque système (dmg, AppImage, deb) ; non testé |
-| Android, Android TV, Fire TV (Capacitor) | Projet généré dans `apps/mobile/android` (`pnpm mobile:sync`) ; APK non compilé — demande JDK + SDK Android |
+| Android, Android TV, Fire TV (Capacitor) | APK de débogage compilé (`pnpm mobile:sync` puis `gradlew assembleDebug` dans `apps/mobile/android`, avec JDK 21 et SDK Android 35) ; pas encore lancé sur un appareil |
 | iOS / iPadOS (Capacitor) | `pnpm --filter @multiplex/mobile exec cap add ios` sur un Mac ; non testé |
-| Samsung Tizen | `pnpm package:tv` → `dist-platforms/tizen`, puis `tizen package -t wgt` ; non testé sur téléviseur |
-| LG webOS | `pnpm package:tv` → `dist-platforms/webos`, puis `ares-package` ; non testé sur téléviseur |
+| Samsung Tizen | `.wgt` produit (`pnpm package:tv` puis `tizen package -t wgt -s <profil>`) ; un vrai téléviseur exige un certificat Samsung lié à votre compte ; non testé sur téléviseur |
+| LG webOS | `.ipk` produit (`pnpm package:tv` puis `ares-package dist-platforms/webos`) ; non testé sur téléviseur |
 
 Les paquets TV et mobiles embarquent exactement le même build web : navigation à la télécommande, touches Retour et touches multimédia y sont déjà gérées.
 
