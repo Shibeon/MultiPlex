@@ -1,4 +1,4 @@
-import { checkPin, createPin, pinAuthUrl, type PlexPin } from '@multiplex/core';
+import { HttpError, checkPin, createPin, pinAuthUrl, type PlexPin } from '@multiplex/core';
 import type { ComponentChildren } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
 import { t } from '../i18n';
@@ -34,6 +34,7 @@ export function Login() {
   const [url, setUrl] = useState('');
   const [token, setToken] = useState('');
   const [busy, setBusy] = useState(false);
+  const [slow, setSlow] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -45,21 +46,33 @@ export function Login() {
         const [strong, short] = await Promise.all([createPin(client, true), createPin(client, false)]);
         if (!alive) return;
         setPins({ strong, short });
+        // plex.tv limite le nombre de requêtes : on interroge un seul code à la fois,
+        // on s'arrête quand l'onglet est caché et on ralentit dès qu'il répond 429.
+        let delay = 3000;
+        let turn = 0;
+        let token: string | null = null;
         const poll = async () => {
           if (!alive) return;
-          try {
-            for (const pin of [strong, short]) {
-              const tok = await checkPin(client, pin);
-              if (tok) return void (await signIn(tok));
+          if (!document.hidden) {
+            try {
+              token = token ?? (await checkPin(client, turn++ % 2 ? short : strong));
+              // Le jeton est conservé : si la suite échoue, on la retente sans redemander de code.
+              if (token) return void (await signIn(token));
+              delay = 3000;
+              setSlow(false);
+            } catch (e) {
+              const status = e instanceof HttpError ? e.status : 0;
+              if (status === 429) {
+                delay = Math.min(delay * 2, 30000);
+                setSlow(true);
+              } else if (status === 404 && !token) return setGen((g) => g + 1); // code expiré
             }
-          } catch {
-            /* coupure réseau passagère : on réessaie au prochain tour */
           }
           // Les codes expirent : on en redemande après ~10 minutes.
-          if (++polls > 300) setGen((g) => g + 1);
-          else timer = window.setTimeout(poll, 2000);
+          if (++polls > 200 && !token) setGen((g) => g + 1);
+          else timer = window.setTimeout(poll, delay);
         };
-        timer = window.setTimeout(poll, 2000);
+        timer = window.setTimeout(poll, 3000);
       } catch (e) {
         if (alive) setErr((e as Error).message);
       }
@@ -95,7 +108,7 @@ export function Login() {
           <div class="pin-code" aria-live="polite">
             {pins.short.code}
           </div>
-          <p class="muted small">{t('login.waiting')}</p>
+          <p class="muted small">{slow ? t('login.slow') : t('login.waiting')}</p>
         </>
       ) : err ? null : (
         <Spinner />
