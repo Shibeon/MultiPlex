@@ -21,6 +21,8 @@ export function Player({ id }: { id: string }) {
   const gen = useRef(0);
   const recovered = useRef(false);
   const skipped = useRef(new Set<number>());
+  const retries = useRef(0);
+  const lastTime = useRef(0);
   const hideTimer = useRef(0);
   const choice = useRef({ audio: 0, sub: 0, quality: settings.value.quality, force: false });
 
@@ -37,12 +39,21 @@ export function Player({ id }: { id: string }) {
   const audioStreams = streamsOf(part, 2);
   const subStreams = streamsOf(part, 3);
 
-  const teardown = () => {
+  const teardown = async () => {
     hls.current?.destroy();
     hls.current = null;
     const p = plan.current;
     plan.current = null;
-    if (p?.mode === 'hls') srv.stopTranscode(p.session).catch(() => {});
+    if (p?.mode === 'hls') await srv.stopTranscode(p.session).catch(() => {});
+  };
+
+  /** Un transcodage qui échoue au démarrage est retenté une fois : le serveur refuse parfois une session lancée trop tôt après la précédente. */
+  const retryOnce = (): boolean => {
+    if (retries.current >= 1) return false;
+    retries.current++;
+    const mine = gen.current;
+    setTimeout(() => mine === gen.current && void start(lastTime.current), 1500);
+    return true;
   };
 
   const report = (state: 'playing' | 'paused' | 'stopped') => {
@@ -62,7 +73,10 @@ export function Player({ id }: { id: string }) {
     const mine = ++gen.current;
     setError('');
     patch({ buffering: true });
-    teardown();
+    lastTime.current = at;
+    // On attend l'arrêt de la session précédente : en lancer deux à la fois fait répondre 400 au serveur.
+    await teardown();
+    if (mine !== gen.current) return;
     setTrackUrl((old) => (old && URL.revokeObjectURL(old), ''));
     const c = choice.current;
     try {
@@ -100,7 +114,7 @@ export function Player({ id }: { id: string }) {
           if (data.type === HlsLib.ErrorTypes.MEDIA_ERROR && !recovered.current) {
             recovered.current = true;
             h.recoverMediaError();
-          } else setError(`${t('player.error')} (${data.details})`);
+          } else if (!retryOnce()) setError(`${t('player.error')} (${data.details})`);
         });
         h.loadSource(p.url);
         h.attachMedia(v);
@@ -154,7 +168,7 @@ export function Player({ id }: { id: string }) {
       alive = false;
       gen.current++;
       report('stopped');
-      teardown();
+      void teardown();
       invalidate(`${srv.id}:`);
     };
   }, [id]);
@@ -260,6 +274,7 @@ export function Player({ id }: { id: string }) {
   const onTime = () => {
     const el = video.current;
     if (!el) return; // évènement tardif après la fermeture du lecteur
+    if (el.currentTime > 0) lastTime.current = el.currentTime;
     patch({ time: el.currentTime, duration: el.duration || (itemRef.current?.duration ?? 0) / 1000 });
     const ms = el.currentTime * 1000;
     const s = settings.value;
@@ -279,7 +294,7 @@ export function Player({ id }: { id: string }) {
       // La lecture directe a échoué (codec annoncé mais illisible) : repli sur le transcodage.
       choice.current.force = true;
       void start(video.current?.currentTime || (itemRef.current?.viewOffset ?? 0) / 1000);
-    } else setError(t('player.error'));
+    } else if (!retryOnce()) setError(t('player.error'));
   };
 
   const onEnded = () => {
@@ -310,7 +325,7 @@ export function Player({ id }: { id: string }) {
         onPlay={() => (patch({ playing: true }), report('playing'), wake())}
         onPause={() => (patch({ playing: false }), report('paused'), setVisible(true))}
         onWaiting={() => patch({ buffering: true })}
-        onPlaying={() => patch({ buffering: false })}
+        onPlaying={() => (patch({ buffering: false }), (retries.current = 0))}
         onCanPlay={() => patch({ buffering: false })}
         onTimeUpdate={onTime}
         onVolumeChange={() => video.current && patch({ muted: video.current.muted })}

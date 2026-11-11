@@ -49,11 +49,11 @@ const AUDIO_CODEC: Record<string, string> = {
 const TEXT_SUBS = ['srt', 'subrip', 'vtt', 'webvtt'];
 
 /** Type MIME complet à tester pour la lecture directe, ou null si inconnu. */
-export function directPlayMime(media: Media): string | null {
+export function directPlayMime(media: Media, audioCodec = media.audioCodec): string | null {
   const container = (media.Part[0]?.container ?? media.container ?? '').toLowerCase();
   const mime = CONTAINER_MIME[container];
   const v = VIDEO_CODEC[(media.videoCodec ?? '').toLowerCase()];
-  const a = media.audioCodec ? AUDIO_CODEC[media.audioCodec.toLowerCase()] : '';
+  const a = audioCodec ? AUDIO_CODEC[audioCodec.toLowerCase()] : '';
   if (!mime || !v || a === undefined) return null;
   return `${mime}; codecs="${a ? `${v}, ${a}` : v}"`;
 }
@@ -90,7 +90,8 @@ export function planPlayback(item: Metadata, opts: PlaybackOptions): Decision {
   if (subtitle === 'burn') return hls('sous-titres incrustés');
   const audio = streamsOf(part, 2);
   if (opts.audioStreamId && audio.length > 1 && audio[0].id !== opts.audioStreamId) return hls('piste audio secondaire');
-  const mime = directPlayMime(media);
+  // En lecture directe, le navigateur joue la première piste audio du fichier : c'est son codec qui compte.
+  const mime = directPlayMime(media, audio[0]?.codec ?? media.audioCodec);
   if (!mime) return hls('format inconnu du navigateur');
   if (!opts.canPlay(mime)) return hls('codec non pris en charge');
   return { ...base, mode: 'direct', reason: 'lecture directe', subtitle };

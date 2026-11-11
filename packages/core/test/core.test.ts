@@ -80,6 +80,14 @@ describe('lecture', () => {
     expect([burn.mode, burn.subtitle]).toEqual(['hls', 'burn']);
   });
 
+  it('juge la lecture directe sur le codec de la première piste audio', () => {
+    const m = movie({ audioCodec: 'dca' }, [{ id: 2, streamType: 2, codec: 'flac' }, { id: 3, streamType: 2, codec: 'dca' }]);
+    const seen: string[] = [];
+    const d = planPlayback(m, { quality: 'original', canPlay: (mime) => (seen.push(mime), true), audioStreamId: 2 });
+    expect(d.mode).toBe('direct');
+    expect(seen[0]).toContain('flac');
+  });
+
   it('paramètres de transcodage', () => {
     const orig = transcodeParams(movie(), { quality: 'original', canPlay: yes }, 's', client);
     expect(orig.path).toBe('/library/metadata/42');

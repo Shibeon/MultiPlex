@@ -95,11 +95,17 @@ export class PlexServer implements MediaServer {
     const subtitleUrl = d.subtitle === 'sidecar' && d.subtitleStream?.key ? this.url(d.subtitleStream.key) : undefined;
     const common = { session, reason: d.reason, subtitle: d.subtitle, subtitleUrl };
     if (d.mode === 'direct') return { ...common, mode: 'direct', url: this.url(d.part.key) };
-    return {
-      ...common,
-      mode: 'hls',
-      url: this.url('/video/:/transcode/universal/start.m3u8', transcodeParams(item, opts, session, this.client)),
-    };
+    const params = transcodeParams(item, opts, session, this.client);
+    // Le serveur exige qu'on lui demande sa décision avant de démarrer : sans cet appel,
+    // start.m3u8 répond 400 pour certains fichiers (constaté sur un vrai PMS).
+    const decision = await this.mc<{ generalDecisionCode?: number; generalDecisionText?: string }>(
+      '/video/:/transcode/universal/decision',
+      params,
+    );
+    if ((decision.generalDecisionCode ?? 1000) >= 2000) {
+      throw new Error(decision.generalDecisionText || 'Le serveur ne peut pas convertir cet élément');
+    }
+    return { ...common, mode: 'hls', url: this.url('/video/:/transcode/universal/start.m3u8', params) };
   }
 
   async stopTranscode(session: string): Promise<void> {

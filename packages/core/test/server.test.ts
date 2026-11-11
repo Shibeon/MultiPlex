@@ -54,6 +54,8 @@ const routes: Record<string, (q: URLSearchParams) => unknown> = {
   '/:/unscrobble': () => ({}),
   '/library/parts/77': () => ({}),
   '/video/:/transcode/universal/stop': () => ({}),
+  '/video/:/transcode/universal/decision': (q) =>
+    q.get('path') === '/library/metadata/66' ? { generalDecisionCode: 2001, generalDecisionText: 'Conversion impossible' } : { generalDecisionCode: 1001 },
 };
 
 let http: Server;
@@ -136,6 +138,9 @@ describe('PlexServer contre un faux PMS', () => {
 
   it('transcodage : URL HLS complète', async () => {
     const plan = await srv.playback(movie, { quality: '4000', canPlay: yes, platform: 'Firefox' });
+    // La décision est demandée avant le démarrage, avec la même session.
+    expect([last().path, last().q.get('session'), last().q.get('maxVideoBitrate')]).toEqual(['/video/:/transcode/universal/decision', plan.session, '4000']);
+    await expect(srv.playback({ ...movie, ratingKey: '66' }, { quality: '4000', canPlay: yes })).rejects.toThrow('Conversion impossible');
     const u = new URL(plan.url);
     const q = u.searchParams;
     expect(plan.mode).toBe('hls');
