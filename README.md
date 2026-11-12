@@ -93,7 +93,7 @@ L'interface ne dépend que du contrat `MediaServer` : ajouter un autre backend r
 
 Les paquets TV et mobiles embarquent exactement le même build web : navigation à la télécommande, touches Retour et touches multimédia y sont déjà gérées.
 
-Une fois le dépôt poussé sur GitHub, `.github/workflows/build.yml` lance les tests à chaque envoi ; les applications Windows / macOS / Linux et l’APK Android sont compilés sur une étiquette de version ou à la demande.
+Une fois le dépôt poussé sur GitHub, `.github/workflows/build.yml` lance les tests à chaque envoi ; les applications Windows / macOS / Linux et l’APK Android sont compilés quand une nouvelle version arrive sur `main`, ou à la demande (sans publication).
 
 ## Mises à jour automatiques
 
@@ -102,8 +102,7 @@ L'application de bureau vérifie au démarrage, puis toutes les six heures, si u
 Publier une version :
 
 1. Monter le numéro de version dans `apps/desktop/package.json`, et ajouter en tête de `apps/web/src/changelog.json` les nouveautés de cette version (en français et en anglais). L'application les montre une fois après la mise à jour, et les propose avant (« Quoi de neuf ? ») ; la publication échoue si l'entrée manque.
-2. Poser l'étiquette correspondante et l'envoyer : `git tag v0.2.0 && git push origin v0.2.0`.
-3. Le workflow compile les applications Windows, macOS et Linux et les publie comme version GitHub, avec le fichier que lit la mise à jour automatique.
+2. Envoyer sur `main`. Le workflow voit que ce numéro n'est pas encore publié : il prépare la version en brouillon, compile les applications Windows, macOS et Linux, y dépose les installeurs et le fichier que lit la mise à jour automatique, puis la rend publique et pose l'étiquette `v…` — seulement si toutes les plateformes ont réussi. Sinon le brouillon reste, et l'envoi suivant le reprend.
 
 Les versions doivent être lisibles sans authentification : une application installée ne peut pas interroger un dépôt privé. Le code reste donc dans ce dépôt, et les versions sont publiées dans un dépôt public à part, [Shibeon/MultiPlex-releases](https://github.com/Shibeon/MultiPlex-releases), qui ne contient que les installeurs. Son adresse est dans `apps/desktop/package.json` (`build.publish`).
 

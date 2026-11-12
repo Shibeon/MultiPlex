@@ -1,17 +1,19 @@
 name: build
 
 # À chaque envoi : vérification des types, tests et paquets web / TV.
-# Sur une étiquette `v1.2.3`, ou à la demande (onglet Actions → « Run workflow ») :
-# compilation des applications Windows, macOS, Linux et de l'APK Android. Ces
+#
+# Publication d'une mise à jour : il suffit d'envoyer sur `main` un numéro de
+# version (apps/desktop/package.json) qui n'a pas encore été publié, avec son
+# entrée dans apps/web/src/changelog.json. Le build prépare alors la version en
+# brouillon, compile Windows, macOS, Linux et l'APK Android, y dépose les
+# fichiers, puis la rend publique — seulement si toutes les plateformes ont
+# réussi. En cas d'échec, le brouillon reste et le prochain envoi le reprend.
+# L'application installée propose ensuite la mise à jour.
+#
+# À la demande (onglet Actions → « Run workflow ») : compilation seule, sans
+# publication, pour récupérer les installeurs dans les artefacts. Ces
 # compilations ne tournent pas à chaque envoi : sur un dépôt privé, les minutes
 # de calcul sont comptées, et celles de macOS coûtent dix fois plus cher.
-# Sur une étiquette, ou à la demande avec la case « Publier la version » cochée,
-# les applications de bureau sont en plus publiées comme version GitHub, que
-# l'application installée propose en mise à jour ; l'étiquette `v…` est alors
-# créée ici si elle manque (utile quand on ne peut pas l'envoyer soi-même).
-# De même, un envoi sur `main` dont la version (apps/desktop/package.json) n'a
-# pas encore d'étiquette est compilé, publié puis étiqueté : changer le numéro
-# de version sur `main` suffit à sortir une mise à jour.
 #
 # Les versions sont publiées dans un dépôt public à part, pour que le code puisse
 # rester privé : son adresse est dans apps/desktop/package.json (build.publish).
@@ -20,14 +22,8 @@ name: build
 on:
   push:
     branches: [main]
-    tags: ['v*']
   pull_request:
   workflow_dispatch:
-    inputs:
-      publish:
-        description: "Publier la version (celle de apps/desktop/package.json) pour la mise à jour automatique"
-        type: boolean
-        default: false
 
 permissions:
   contents: write
@@ -55,35 +51,56 @@ jobs:
           name: tv-tizen-webos
           path: dist-platforms
 
-  # Envoi sur main : la version de l'application a-t-elle déjà été publiée ?
-  version:
+
+  # Envoi sur main : la version est-elle déjà publiée ? Sinon, on la prépare en brouillon.
+  # Un seul brouillon créé ici, avant les compilations : quand chaque plateforme essayait
+  # de créer la version en même temps, GitHub refusait (« Published releases must have a
+  # valid tag ») et seule la version Windows était publiée.
+  release:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     outputs:
-      release: ${{ steps.check.outputs.release }}
+      publish: ${{ steps.prepare.outputs.publish }}
+      tag: ${{ steps.prepare.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
-      - id: check
+      - id: prepare
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
         run: |
-          tag="v$(node -p "require('./apps/desktop/package.json').version")"
-          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
-            echo "$tag déjà publiée : pas de nouvelle version."
-            echo release=false >> "$GITHUB_OUTPUT"
-          else
-            echo "$tag pas encore publiée : compilation et publication."
-            echo release=true >> "$GITHUB_OUTPUT"
+          if [ -z "$GH_TOKEN" ]; then
+            echo "Secret RELEASES_TOKEN absent : impossible de publier la version (voir le README, « Mises à jour automatiques »)." >&2
+            exit 1
           fi
+          repo=$(node -p "const p = require('./apps/desktop/package.json').build.publish[0]; p.owner + '/' + p.repo")
+          version=$(node -p "require('./apps/desktop/package.json').version")
+          tag="v$version"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          draft=$(gh release view "$tag" --repo "$repo" --json isDraft --jq .isDraft 2>/dev/null || echo none)
+          if [ "$draft" = false ]; then
+            echo "$tag est déjà publiée : rien à faire."
+            echo publish=false >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Les nouveautés de la version accompagnent la publication (affichées par l'app installée).
+          node scripts/release-notes.mjs
+          if [ "$draft" = none ]; then
+            gh release create "$tag" --repo "$repo" --draft --title "$version" --notes-file apps/desktop/release-notes.txt
+            echo "$tag préparée en brouillon."
+          else
+            gh release edit "$tag" --repo "$repo" --notes-file apps/desktop/release-notes.txt
+            echo "$tag : brouillon existant repris."
+          fi
+          echo publish=true >> "$GITHUB_OUTPUT"
 
   desktop:
-    needs: [web, version]
-    if: ${{ !cancelled() && needs.web.result == 'success' && (startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' || needs.version.outputs.release == 'true') }}
+    needs: [web, release]
+    if: ${{ !cancelled() && needs.web.result == 'success' && (github.event_name == 'workflow_dispatch' || needs.release.outputs.publish == 'true') }}
     strategy:
       fail-fast: false
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
-    env:
-      PUBLISH: ${{ startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish) || needs.version.outputs.release == 'true' }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -95,39 +112,18 @@ jobs:
       - run: pnpm fetch:mpv
       - run: pnpm build
 
-      - name: Vérifier que l'étiquette correspond à la version de l'application
-        if: startsWith(github.ref, 'refs/tags/v')
-        shell: bash
-        run: |
-          version=$(node -p "require('./apps/desktop/package.json').version")
-          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
-            echo "L'étiquette $GITHUB_REF_NAME ne correspond pas à la version $version de apps/desktop/package.json" >&2
-            exit 1
-          fi
-
-      - name: Vérifier que le jeton de publication est défini
-        if: env.PUBLISH == 'true'
-        shell: bash
-        run: |
-          if [ -z "$GH_TOKEN" ]; then
-            echo "Secret RELEASES_TOKEN absent : impossible de publier la version (voir le README, « Mises à jour automatiques »)." >&2
-            exit 1
-          fi
-        env:
-          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
-
-      # Hors étiquette : simple compilation. Sur une étiquette : publication de la version,
-      # avec le fichier « latest » que lit la mise à jour automatique.
+      # À la demande : simple compilation. Sur un envoi de nouvelle version : les fichiers
+      # sont déposés dans le brouillon, avec le fichier « latest » que lit la mise à jour automatique.
       - name: Compiler l'application
         shell: bash
         working-directory: apps/desktop
         run: |
           publish=never
           if [[ "$PUBLISH" == true ]]; then publish=always; fi
-          # Les nouveautés de la version accompagnent la publication (affichées par l'app installée).
           node ../../scripts/release-notes.mjs
           pnpm exec electron-builder --publish "$publish" -c.releaseInfo.releaseNotesFile=release-notes.txt
         env:
+          PUBLISH: ${{ needs.release.outputs.publish }}
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
 
@@ -140,27 +136,33 @@ jobs:
             apps/desktop/release/*.AppImage
             apps/desktop/release/*.deb
 
-  # Publication lancée à la main ou par un envoi sur main : l'étiquette de la version est posée sur le commit publié.
-  # (Une étiquette envoyée par ce jeton ne relance pas le build.)
-  tag:
-    needs: [desktop, version]
-    if: ${{ !cancelled() && needs.desktop.result == 'success' && ((github.event_name == 'workflow_dispatch' && inputs.publish) || needs.version.outputs.release == 'true') }}
+  # Toutes les plateformes ont réussi : la version devient publique (la mise à jour est
+  # proposée), et l'étiquette est posée ici sur le commit publié.
+  publish:
+    needs: [release, desktop]
+    if: ${{ !cancelled() && needs.release.outputs.publish == 'true' && needs.desktop.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Poser l'étiquette de la version
+      - name: Rendre la version publique
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          TAG: ${{ needs.release.outputs.tag }}
         run: |
-          tag="v$(node -p "require('./apps/desktop/package.json').version")"
-          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
-            echo "L'étiquette $tag existe déjà."
-          else
-            git tag "$tag" "$GITHUB_SHA"
-            git push origin "$tag"
+          repo=$(node -p "const p = require('./apps/desktop/package.json').build.publish[0]; p.owner + '/' + p.repo")
+          gh release edit "$TAG" --repo "$repo" --draft=false --latest
+      - name: Étiqueter le commit publié
+        env:
+          TAG: ${{ needs.release.outputs.tag }}
+        run: |
+          if ! git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null; then
+            git tag "$TAG" "$GITHUB_SHA"
+            git push origin "$TAG"
           fi
 
   android:
-    needs: [web, version]
-    if: ${{ !cancelled() && needs.web.result == 'success' && (startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' || needs.version.outputs.release == 'true') }}
+    needs: [web, release]
+    if: ${{ !cancelled() && needs.web.result == 'success' && (github.event_name == 'workflow_dispatch' || needs.release.outputs.publish == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
