@@ -1,7 +1,7 @@
 import { RelaySetting } from '../togetherui';
 import { QUALITIES } from '@multiplex/core';
 import type { ComponentChildren } from 'preact';
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { t } from '../i18n';
 import { DEFAULTS, THEMES, load, sanitize, setCouch, settings, update, type Settings } from '../settings';
 import { native, nativeAvailable } from '../native';
@@ -40,12 +40,25 @@ function Range({ k, label, min, max, step = 1, unit = '' }: { k: keyof Settings;
 function HomeRows() {
   const s = settings.value;
   const known = load<KnownHub[]>('mp.hubs') ?? [];
+  // Ordre provisoire pendant un glisser-déposer : enregistré seulement au relâchement.
+  const [draft, setDraftState] = useState<string[] | null>(null);
+  // Copie lue par les gestionnaires : le relâchement peut arriver avant le rendu suivant.
+  const draftRef = useRef<string[] | null>(null);
+  const setDraft = (ids: string[] | null) => {
+    draftRef.current = ids;
+    setDraftState(ids);
+  };
+  const drag = useRef<{ id: string; pointer: number; startY: number; active: boolean } | null>(null);
+  const list = useRef<HTMLUListElement>(null);
+  const justDragged = useRef(false);
   if (!known.length) return <p class="muted">{t('set.homeEmpty')}</p>;
   const pos = (id: string) => {
     const i = s.hubOrder.indexOf(id);
     return i < 0 ? s.hubOrder.length : i;
   };
-  const ordered = known.map((h, i) => ({ h, i })).sort((a, b) => pos(a.h.id) - pos(b.h.id) || a.i - b.i).map((x) => x.h);
+  const saved = known.map((h, i) => ({ h, i })).sort((a, b) => pos(a.h.id) - pos(b.h.id) || a.i - b.i).map((x) => x.h);
+  const byId = new Map(saved.map((h) => [h.id, h]));
+  const ordered = draft ? draft.map((id) => byId.get(id)!).filter(Boolean) : saved;
   const move = (i: number, d: number) => {
     const ids = ordered.map((h) => h.id);
     const j = i + d;
@@ -54,10 +67,64 @@ function HomeRows() {
     update({ hubOrder: ids });
   };
   const toggle = (id: string) => update({ hiddenHubs: s.hiddenHubs.includes(id) ? s.hiddenHubs.filter((x) => x !== id) : [...s.hiddenHubs, id] });
+
+  // Glisser-déposer à la souris ou au doigt : on saisit la poignée ou la ligne, la ligne suit le
+  // pointeur et les autres s'écartent. Les flèches restent pour le clavier et la télécommande.
+  const down = (e: PointerEvent, id: string) => {
+    if (e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    if (target.closest('button, input')) return;
+    drag.current = { id, pointer: e.pointerId, startY: e.clientY, active: false };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  };
+  const moveTo = (e: PointerEvent) => {
+    const d = drag.current;
+    if (!d || d.pointer !== e.pointerId) return;
+    if (!d.active) {
+      if (Math.abs(e.clientY - d.startY) < 6) return;
+      d.active = true;
+    }
+    e.preventDefault();
+    const ids = (draftRef.current ?? ordered.map((h) => h.id)).filter((x) => x !== d.id);
+    // Place de la ligne : avant la première autre ligne dont le milieu est sous le pointeur.
+    const rows = [...(list.current?.querySelectorAll<HTMLElement>('li[data-id]') ?? [])].filter((el) => el.dataset.id !== d.id);
+    let at = rows.findIndex((el) => {
+      const r = el.getBoundingClientRect();
+      return e.clientY < r.top + r.height / 2;
+    });
+    if (at < 0) at = rows.length;
+    ids.splice(at, 0, d.id);
+    if (!draftRef.current || ids.join() !== draftRef.current.join()) setDraft(ids);
+  };
+  const up = (e: PointerEvent) => {
+    const d = drag.current;
+    if (!d || d.pointer !== e.pointerId) return;
+    drag.current = null;
+    if (d.active) {
+      justDragged.current = true; // le clic qui suit le relâchement ne doit pas cocher la case
+      setTimeout(() => (justDragged.current = false), 0);
+      if (draftRef.current) update({ hubOrder: draftRef.current });
+    }
+    setDraft(null);
+  };
+  const dragging = drag.current?.active ? drag.current.id : null;
+
   return (
-    <ul class="hub-list">
+    <ul class={`hub-list${dragging ? ' sorting' : ''}`} ref={list}>
       {ordered.map((h, i) => (
-        <li key={h.id} class={s.hiddenHubs.includes(h.id) ? 'off' : ''}>
+        <li
+          key={h.id}
+          data-id={h.id}
+          class={[s.hiddenHubs.includes(h.id) ? 'off' : '', dragging === h.id ? 'dragging' : ''].filter(Boolean).join(' ')}
+          onPointerDown={(e) => down(e, h.id)}
+          onPointerMove={moveTo}
+          onPointerUp={up}
+          onPointerCancel={up}
+          onClickCapture={(e) => justDragged.current && (e.preventDefault(), e.stopPropagation())}
+        >
+          <span class="hub-grip" aria-hidden="true">
+            <Icon name="grip" size={18} />
+          </span>
           <label class="check">
             <input type="checkbox" checked={!s.hiddenHubs.includes(h.id)} onChange={() => toggle(h.id)} />
             {h.title}
