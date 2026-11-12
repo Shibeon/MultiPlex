@@ -337,6 +337,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter'
   .shell.top .nav-link.icon-only span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   .shell.top .nav-link:hover, .shell.top .nav-link:focus-visible { background: color-mix(in srgb, var(--text) 12%, transparent); opacity: 1; }
   .shell.top .nav-link.active { background: color-mix(in srgb, var(--text) 20%, transparent); color: var(--text); opacity: 1; }
+  /* Barre trop large pour l'écran (voir fitNav) : boutons resserrés, puis icônes seules. */
+  .shell.top .sidebar.nav-tight .nav-link { padding-inline: 0.7rem; }
+  .shell.top .sidebar.nav-tight .nav-link.icon-only { padding-inline: 0.5rem; }
+  .shell.top .sidebar.nav-tight .nav-link.couch-on span,
+  .shell.top .sidebar.nav-icons .nav-link span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .shell.top .sidebar.nav-small .nav-link { font-size: 0.86em; padding-inline: 0.55rem; }
+  .shell.top .sidebar.nav-icons .nav-link { font-size: inherit; }
+  .shell.top .sidebar.nav-icons .nav-link .icon { display: block; }
+  .shell.top .sidebar.nav-icons .nav-link { padding: 0.5rem 0.65rem; }
   .shell.top .content { margin-left: 0; }
   .shell.top .page { padding-top: 5.5rem; }
   /* Chargement ou erreur affichés seuls (hors .page) : sous la barre flottante, pas derrière. */

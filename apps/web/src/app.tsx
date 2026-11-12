@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef } from 'preact/hooks';
 import { t } from './i18n';
 import { ActivityPage } from './pages/Activity';
 import { LibraryPage, Home, SearchPage } from './pages/Browse';
@@ -46,6 +47,51 @@ function ProfileLink() {
   );
 }
 
+/**
+ * La barre flottante doit tenir à l'écran : sinon ses derniers boutons (réglages, profil)
+ * sortent à droite, invisibles — c'était le cas en mode TV sur un téléviseur réglé à 200 %.
+ * On lui réserve la place du bouton Retour (centrée, elle le recouvrait), puis, si elle
+ * déborde encore, on resserre les boutons, et en dernier recours on n'affiche que les icônes.
+ */
+const FIT_LEVELS = ['nav-tight', 'nav-small', 'nav-icons'];
+function fitNav(nav: HTMLElement): void {
+  nav.classList.remove(...FIT_LEVELS);
+  nav.style.cssText = '';
+  if (!nav.closest('.shell.top') || innerWidth <= 760) return;
+  const fits = () => nav.scrollWidth <= nav.clientWidth + 1;
+  const backBtn = document.querySelector<HTMLElement>('.page-back');
+  const reserve = backBtn ? backBtn.getBoundingClientRect().right + 12 : 16;
+  // Centrée, en laissant de chaque côté la place du bouton Retour.
+  nav.style.maxWidth = `${Math.max(0, innerWidth - 2 * reserve)}px`;
+  if (fits()) return;
+  // Sinon, calée juste à droite du bouton Retour, sur toute la largeur restante.
+  if (backBtn) {
+    nav.style.left = `${reserve}px`;
+    nav.style.transform = 'none';
+    nav.style.maxWidth = `${Math.max(0, innerWidth - reserve - 16)}px`;
+  }
+  for (const level of FIT_LEVELS) {
+    if (fits()) return;
+    nav.classList.add(level);
+  }
+}
+
+function useFitNav() {
+  const ref = useRef<HTMLElement>(null);
+  // À chaque rendu (changement de page, de bibliothèques, de langue, de mode TV)…
+  useLayoutEffect(() => {
+    if (ref.current) fitNav(ref.current);
+  });
+  // … et quand la fenêtre change de taille ou que les polices finissent de charger.
+  useLayoutEffect(() => {
+    const run = () => ref.current && fitNav(ref.current);
+    addEventListener('resize', run);
+    void document.fonts?.ready.then(run);
+    return () => removeEventListener('resize', run);
+  }, []);
+  return ref;
+}
+
 /** Pages où l'on arrive depuis une autre : elles ont un bouton Retour. Les pages de la navigation n'en ont pas. */
 const DEEP = new Set(['item', 'discover', 'person', 'playlist', 'themes', 'profiles']);
 
@@ -82,9 +128,10 @@ function Page() {
 
 /** Serveur injoignable : uniquement les titres téléchargés. */
 function OfflineShell() {
+  const navRef = useFitNav();
   return (
     <div class={`shell ${settings.value.layout === 'side' ? 'side' : 'top'}`}>
-      <nav class="sidebar" aria-label="Navigation">
+      <nav class="sidebar" aria-label="Navigation" ref={navRef}>
         <a class="brand" href="#/offline">
           Multi<span>Plex</span>
         </a>
@@ -113,6 +160,7 @@ export function App() {
 
 function Routes() {
   const [kind, id] = route.value.parts;
+  const navRef = useFitNav();
   // Un titre téléchargé se lit avec ou sans serveur.
   if (kind === 'offline-play' && id) return <OfflinePlayer key={id} id={id} />;
   if (status.value === 'offline') return <OfflineShell />;
@@ -125,7 +173,7 @@ function Routes() {
   }
   return (
     <div class={`shell ${settings.value.layout === 'side' ? 'side' : 'top'}`}>
-      <nav class="sidebar" aria-label="Navigation">
+      <nav class="sidebar" aria-label="Navigation" ref={navRef}>
         {/* Illustration du thème, quand il en a une : médaillon dans la navigation. */}
         <a class="nav-art" href="#/themes" title={settings.value.themeImageCredit || settings.value.themeLabel} aria-label={settings.value.themeLabel} />
         <a class="brand" href="#/">
