@@ -4,8 +4,9 @@ import { formatDuration, t } from '../i18n';
 import { go } from '../router';
 import { settings } from '../settings';
 import { invalidate, server, useData } from '../store';
-import { Card, ErrorBox, Icon, Spinner, TechBadges, artSize, isWatched } from '../ui';
+import { Card, ErrorBox, Icon, Ratings, Spinner, StarRating, TechBadges, artSize, isWatched } from '../ui';
 import { ServerWatchlistButton } from './Discover';
+import { CastRow, PeopleLinks } from './Person';
 
 /** Pour une série ou une saison : le premier épisode pas encore vu. */
 async function resolvePlayable(srv: MediaServer, item: Metadata): Promise<Metadata | undefined> {
@@ -49,6 +50,8 @@ export function Details({ id }: { id: string }) {
   const hasKids = !!item && ['show', 'season', 'artist', 'album'].includes(item.type);
   const kids = useData(hasKids ? `${srv.id}:children:${id}` : null, () => srv.children(id));
   const [busy, setBusy] = useState(false);
+  /** Note que l'on vient de donner : undefined = celle du serveur, null = retirée. */
+  const [myRating, setMyRating] = useState<number | null | undefined>(undefined);
 
   if (!item) return error ? <ErrorBox error={error} retry={reload} /> : <Spinner />;
 
@@ -82,7 +85,6 @@ export function Details({ id }: { id: string }) {
     item.year,
     formatDuration(item.duration),
     item.contentRating,
-    item.rating && `★ ${item.rating.toFixed(1)}`,
   ].filter(Boolean);
   const leftMin = item.viewOffset && item.duration ? Math.round((item.duration - item.viewOffset) / 60000) : 0;
 
@@ -104,6 +106,22 @@ export function Details({ id }: { id: string }) {
               <span key={i}>{f}</span>
             ))}
           </p>
+          {(item.type === 'movie' || item.type === 'show' || item.type === 'episode') && (
+            <p class="ratings-row">
+              <Ratings item={item} />
+              <StarRating
+                value={myRating === undefined ? item.userRating : (myRating ?? undefined)}
+                onRate={(r) => {
+                  // La fiche reflète le choix tout de suite ; en cas d'échec, elle revient à la note du serveur.
+                  setMyRating(r);
+                  srv.rate(item.ratingKey, r).then(
+                    () => invalidate(`${srv.id}:`),
+                    () => setMyRating(undefined),
+                  );
+                }}
+              />
+            </p>
+          )}
           <TechBadges item={item} />
           <div class="actions">
             {playable && (
@@ -134,22 +152,31 @@ export function Details({ id }: { id: string }) {
             {!!item.Genre?.length && <div>{item.Genre.map((g) => g.tag).join(' · ')}</div>}
             {!!item.Director?.length && (
               <div>
-                <dt>{t('item.director')}</dt> <dd>{item.Director.map((d) => d.tag).join(', ')}</dd>
+                <dt>{t('item.director')}</dt> <dd>
+                  <PeopleLinks people={item.Director} />
+                </dd>
               </div>
             )}
-            {!!item.Role?.length && (
+            {!!item.Writer?.length && (
               <div>
-                <dt>{t('item.cast')}</dt>{' '}
+                <dt>{t('item.writer')}</dt>{' '}
                 <dd>
-                  {item.Role.slice(0, 8)
-                    .map((r) => r.tag)
-                    .join(', ')}
+                  <PeopleLinks people={item.Writer} />
+                </dd>
+              </div>
+            )}
+            {!!item.Producer?.length && (
+              <div>
+                <dt>{t('item.producer')}</dt>{' '}
+                <dd>
+                  <PeopleLinks people={item.Producer.slice(0, 8)} />
                 </dd>
               </div>
             )}
           </dl>
         </div>
       </div>
+      <CastRow people={item.Role} title={t('item.cast')} />
       {hasKids && (
         <section class="children">
           <h2>{item.type === 'season' ? t('item.episodes') : item.type === 'show' ? t('item.seasons') : ''}</h2>

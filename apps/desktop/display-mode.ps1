@@ -2,7 +2,7 @@
 #   -Action list -Hwnd <fenêtre>           : écran de la fenêtre, mode en cours, fréquences possibles
 #   -Action set  -Device <écran> -Hz <n>   : change la fréquence (même définition, mêmes couleurs)
 #   -Test                                  : demande seulement à Windows si le mode serait accepté
-# Le changement est temporaire : il n'est pas enregistré et disparaît au redémarrage.
+# Le changement n'est pas enregistré : il disparaît au redémarrage, et MultiPlex le défait en fin de lecture.
 param([string]$Action = 'list', [string]$Hwnd = '0', [string]$Device = '', [int]$Hz = 0, [switch]$Test)
 $ErrorActionPreference = 'Stop'
 
@@ -67,8 +67,9 @@ if ($Action -eq 'list') {
 } elseif ($Action -eq 'set') {
   if (-not $modes.ContainsKey($Hz)) { throw 'frequence indisponible' }
   $dm = $modes[$Hz]
-  # 2 = CDS_TEST (simple vérification), 4 = CDS_FULLSCREEN (changement temporaire).
-  $flags = 4
+  # 2 = CDS_TEST (simple vérification), 0 = changement immédiat, non enregistré (perdu au redémarrage).
+  # Surtout pas CDS_FULLSCREEN (4) : Windows l'annule dès que ce script se termine.
+  $flags = 0
   if ($Test) { $flags = 2 }
   $code = [MpDisplay]::ChangeDisplaySettingsEx($Device, [ref]$dm, [IntPtr]::Zero, $flags, [IntPtr]::Zero)
   @{ device = $Device; hz = $Hz; result = $code; test = [bool]$Test } | ConvertTo-Json -Compress

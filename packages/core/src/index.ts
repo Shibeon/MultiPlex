@@ -6,5 +6,6 @@ export * from './theme';
 export * from './discover';
 export * from './community';
 export * from './markers';
+export * from './ratings';
 export { PlexServer } from './server';
 export { DemoServer } from './demo';

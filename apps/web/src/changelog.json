@@ -1,5 +1,32 @@
 [
   {
+    "version": "0.1.5",
+    "fr": [
+      "À la pause, « qui est à l’écran ? » : les acteurs présents à l’image sont reconnus et mis en avant (calcul sur votre appareil, aucune image envoyée ; désactivable).",
+      "Fiches de personnes : photo, biographie, filmographie complète par fonction, et ce qui est déjà sur votre serveur. Distribution et équipe cliquables partout, y compris depuis la pause, avec retour à la lecture.",
+      "Notes comme dans Plex : IMDb, Rotten Tomatoes, TMDB, lien Letterboxd, et votre propre note en étoiles.",
+      "Aperçu en image quand on survole ou déplace la barre de lecture (lecteur natif).",
+      "Mode TV (F10) : interface agrandie pour être lue de loin.",
+      "Son vers l’ampli : la transmission brute s’adapte par étapes à ce que l’ampli accepte, le 5.1 n’est plus réduit en stéréo, et une pastille indique ce qui est réellement envoyé.",
+      "Fréquence de l’écran accordée à la vidéo : le changement tient désormais pendant toute la lecture.",
+      "Plein écran : on en sort correctement à la fin d’un film, et F11 ne bascule plus deux fois.",
+      "Onglet Amis : le réglage « partager ce que je regarde » est en haut de la page, et aussi dans Réglages → Compte.",
+      "Après une mise à jour, les nouveautés de toutes les versions sautées sont affichées."
+    ],
+    "en": [
+      "On pause, “who is on screen?”: actors in the frame are recognised and shown first (computed on your device, no image is sent; can be turned off).",
+      "Person pages: photo, biography, full filmography by job, and what is already on your server. Cast and crew are clickable everywhere, including from pause, with a way back to playback.",
+      "Ratings as in Plex: IMDb, Rotten Tomatoes, TMDB, a Letterboxd link, and your own star rating.",
+      "Image preview when hovering or dragging the seek bar (native player).",
+      "TV mode (F10): a larger interface readable from the couch.",
+      "Sound to the receiver: passthrough now steps down to what the receiver accepts, 5.1 is no longer reduced to stereo, and a chip shows what is really being sent.",
+      "Refresh-rate matching: the change now holds for the whole playback.",
+      "Fullscreen: it is left properly when a film ends, and F11 no longer toggles twice.",
+      "Friends tab: the “share what I watch” switch is at the top of the page, and in Settings → Account.",
+      "After an update, the news of every skipped version is shown."
+    ]
+  },
+  {
     "version": "0.1.4",
     "fr": [
       "Onglet Amis refait en fil d’activité : avatars de vos amis pour filtrer, publications par jour, épisodes vus à la suite regroupés.",

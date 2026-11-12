@@ -194,6 +194,23 @@ export class PlexServer implements MediaServer {
     }));
   }
 
+  async personMedia(key: string): Promise<Metadata[]> {
+    if (!/^[0-9a-z]{1,40}$/i.test(key)) return [];
+    return (await this.mc<{ Metadata?: Metadata[] }>(`/library/people/${key}/media`)).Metadata ?? [];
+  }
+
+  async rate(ratingKey: string, rating: number | null): Promise<void> {
+    await request(
+      this.url('/:/rate', {
+        identifier: 'com.plexapp.plugins.library',
+        key: ratingKey,
+        // -1 retire la note.
+        rating: rating === null ? -1 : Math.max(0, Math.min(10, Math.round(rating))),
+      }),
+      { method: 'PUT' },
+    );
+  }
+
   async scrobble(ratingKey: string, watched: boolean): Promise<void> {
     await request(
       this.url(watched ? '/:/scrobble' : '/:/unscrobble', {

@@ -182,35 +182,56 @@ function PostCard({ p }: { p: Post }) {
   );
 }
 
-/** Le fil : ce que les amis Plex ont regardé, et le choix de partager ou non ce qu'on regarde soi-même. */
-function Feed() {
-  const c = community.value!;
-  const { data, error, reload } = useData('community:feed', () => c.feed(80));
-  const [who, setWho] = useState('');
+/**
+ * Partager ou non ce qu'on regarde avec ses amis Plex. C'est le réglage de
+ * confidentialité du compte Plex : il vaut dans toutes les applications Plex.
+ */
+export function ShareToggle() {
+  const c = community.value;
   const [shares, setShares] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
   useEffect(() => {
     let alive = true;
-    c.sharesWatching().then(
+    c?.sharesWatching().then(
       (v) => alive && setShares(v),
-      () => {},
+      () => alive && setFailed(true),
     );
     return () => {
       alive = false;
     };
   }, [c]);
+  if (!c) return null;
 
   const toggle = async (on: boolean) => {
     setBusy(true);
+    setFailed(false);
     try {
       await c.setSharesWatching(on);
       setShares(on);
     } catch {
-      /* le réglage reste tel qu'il était */
+      setFailed(true);
     }
     setBusy(false);
   };
 
+  return (
+    <label class={`feed-share${shares === false ? ' private' : ''}`}>
+      <Icon name={shares === false ? 'lock' : 'live'} size={20} />
+      <span>
+        <strong>{t('live.share')}</strong>
+        <small class="muted">{failed ? t('feed.shareFailed') : shares === null ? t('servers.connecting') : t(shares ? 'feed.shareOn' : 'feed.shareOff')}</small>
+      </span>
+      <input class="switch" type="checkbox" role="switch" checked={!!shares} disabled={busy || shares === null} onChange={(e) => void toggle(e.currentTarget.checked)} />
+    </label>
+  );
+}
+
+/** Le fil : ce que les amis Plex ont regardé. */
+function Feed() {
+  const c = community.value!;
+  const { data, error, reload } = useData('community:feed', () => c.feed(80));
+  const [who, setWho] = useState('');
   // Les amis présents dans le fil, du plus actif au moins actif.
   const friends = useMemo(() => {
     const seen = new Map<string, { user: FriendActivity['user']; count: number }>();
@@ -267,15 +288,6 @@ function Feed() {
         ))
       )}
 
-      {shares !== null && (
-        <label class="feed-share">
-          <input type="checkbox" checked={shares} disabled={busy} onChange={(e) => void toggle(e.currentTarget.checked)} />
-          <span>
-            <strong>{t('live.share')}</strong>
-            <small class="muted">{t(shares ? 'feed.shareOn' : 'feed.shareOff')}</small>
-          </span>
-        </label>
-      )}
     </section>
   );
 }
@@ -287,6 +299,7 @@ export function ActivityPage() {
         <h1>{t('live.title')}</h1>
         <span class="muted">{t('live.friendsLead')}</span>
       </header>
+      <ShareToggle />
       <LiveNow />
       {community.value ? <Feed /> : <p class="muted">{t('disc.needAccount')}</p>}
     </div>

@@ -6,13 +6,14 @@ import { DiscoverDetails, WatchlistPage } from './pages/Discover';
 import { Gate } from './pages/Gate';
 import { NativePlayer } from './pages/NativePlayer';
 import { Player } from './pages/Player';
+import { PersonPage, ResumePill, resumeAfter } from './pages/Person';
 import { ProfilesPage } from './pages/Profiles';
 import { nativeAvailable } from './native';
 import { SettingsPage } from './pages/Settings';
 import { ThemesPage } from './pages/Themes';
 import { UpdateBanner, WhatsNew } from './pages/Update';
 import { route } from './router';
-import { settings } from './settings';
+import { setCouch, settings } from './settings';
 import { auth, discover, home, libraries, server, status } from './store';
 import { Icon } from './ui';
 
@@ -50,6 +51,7 @@ function Page() {
   if (kind === 'settings') return <SettingsPage />;
   if (kind === 'themes') return <ThemesPage />;
   if (kind === 'profiles') return <ProfilesPage />;
+  if (kind === 'person' && id) return <PersonPage key={id} id={id} />;
   return <Home />;
 }
 
@@ -57,6 +59,7 @@ export function App() {
   if (status.value !== 'ready' || !server.value) return <Gate />;
   const [kind, id] = route.value.parts;
   if (kind === 'play' && id) {
+    if (resumeAfter.peek()) resumeAfter.value = null;
     // Dans l'application de bureau, mpv lit le fichier d'origine ; « ?web=1 » force le lecteur intégré.
     const useNative = nativeAvailable.value && settings.value.nativePlayer && !route.value.query.has('web');
     return useNative ? <NativePlayer key={id} id={id} /> : <Player key={id} id={id} />;
@@ -78,6 +81,10 @@ export function App() {
         ))}
         <div class="nav-sep grow" />
         <NavLink href="#/search" icon="search" label={t('nav.search')} iconOnly />
+        <button class={`nav-link icon-only${settings.value.couch ? ' active' : ''}`} aria-pressed={settings.value.couch} title={`${t('couch.title')} (F10)`} onClick={() => setCouch(!settings.value.couch)}>
+          <Icon name="tv" />
+          <span>{t('couch.title')}</span>
+        </button>
         <NavLink href="#/settings" icon="settings" label={t('nav.settings')} iconOnly />
         {home.value.length > 1 && <ProfileLink />}
       </nav>
@@ -85,6 +92,7 @@ export function App() {
       <main class="content">
         <Page />
       </main>
+      <ResumePill />
       <UpdateBanner />
       <WhatsNew />
     </div>

@@ -3,12 +3,30 @@
 // AV1, HDR, Dolby Vision, DTS, TrueHD, sous-titres ASS et PGS — sans aucune
 // conversion par le serveur.
 const { execFile, spawn } = require('node:child_process');
-const { existsSync } = require('node:fs');
+const fs = require('node:fs');
+const { existsSync } = fs;
 const net = require('node:net');
 const path = require('node:path');
 
 /** Propriétés suivies en continu ; chaque changement est transmis à l'interface. */
-const OBSERVED = ['time-pos', 'duration', 'pause', 'paused-for-cache', 'aid', 'sid', 'eof-reached', 'volume', 'mute', 'speed', 'track-list', 'chapter-list', 'demuxer-cache-time', 'current-ao', 'container-fps', 'audio-device'];
+const OBSERVED = ['time-pos', 'duration', 'pause', 'paused-for-cache', 'aid', 'sid', 'eof-reached', 'volume', 'mute', 'speed', 'track-list', 'chapter-list', 'demuxer-cache-time', 'current-ao', 'container-fps', 'audio-device', 'audio-out-params'];
+
+/**
+ * Transmission du son à un ampli : du plus riche au plus simple. Quand la sortie refuse
+ * une étape, on passe à la suivante au lieu de tout abandonner d'un coup :
+ *   1. tous les formats bruts (Dolby TrueHD / Atmos, DTS-HD, Dolby Digital Plus…) ;
+ *   2. sans les formats haute définition (liaisons ARC ou optiques) : le cœur DTS passe encore ;
+ *   3. Dolby Digital et DTS seulement ;
+ *   4. plus de son brut : son décodé, envoyé en multicanal (mode exclusif) ;
+ *   5. son décodé en mode partagé, comme n'importe quelle application.
+ */
+const AUDIO_STAGES = [
+  { spdif: 'ac3,eac3,dts-hd,truehd', exclusive: true },
+  { spdif: 'ac3,eac3,dts', exclusive: true },
+  { spdif: 'ac3,dts', exclusive: true },
+  { spdif: '', exclusive: true },
+  { spdif: '', exclusive: false },
+];
 
 /** Sorties audio du système, dans l'ordre où mpv les essaie. */
 const NATIVE_AO = process.platform === 'win32' ? 'wasapi' : process.platform === 'darwin' ? 'coreaudio' : 'pipewire,pulse,alsa';
@@ -107,7 +125,10 @@ class MpvPlayer {
     // propre repli : on lui donne donc une sortie muette de secours, et dès qu'il s'y rabat
     // on repasse au son décodé (voir onMessage). La lecture démarre dans tous les cas.
     this.spdif = !!opts.passthrough;
-    if (this.spdif) args.push('--audio-spdif=ac3,eac3,dts-hd,truehd', `--ao=${NATIVE_AO},null`);
+    this.stage = 0;
+    // Le mode exclusif donne la main à MultiPlex sur la sortie : c'est ce qui permet le son brut,
+    // et le multicanal décodé (5.1, 7.1) même si Windows est réglé en stéréo.
+    if (this.spdif) args.push(`--audio-spdif=${AUDIO_STAGES[0].spdif}`, '--audio-exclusive=yes', '--audio-channels=auto', `--ao=${NATIVE_AO},null`);
     // Sortie audio choisie dans les réglages ; sinon celle du système.
     if (opts.audioDevice) args.push(`--audio-device=${opts.audioDevice}`);
     // Tests automatiques : aucun son.
@@ -125,6 +146,7 @@ class MpvPlayer {
       this.emit('ended', { code, time: this.state['time-pos'] ?? 0, duration: this.state.duration ?? 0, eof: !!this.state['eof-reached'] || this.reachedEnd });
     });
     this.reachedEnd = false;
+    this.stepping = false;
     this.loaded = false;
     this.enteredFullscreen = false;
     await this.connect(pipe, session);
@@ -196,12 +218,8 @@ class MpvPlayer {
     if (msg.event === 'property-change') {
       this.state[msg.name] = msg.data;
       if (msg.name === 'eof-reached' && msg.data) this.reachedEnd = true;
-      if (msg.name === 'current-ao' && msg.data === 'null' && this.spdif) {
-        // Flux brut refusé par la sortie : retour au son décodé, sans interrompre la lecture.
-        this.spdif = false;
-        void this.send(['set_property', 'audio-spdif', '']);
-        this.emit('notice', { code: 'passthrough' });
-      }
+      // Sortie de secours muette : la sortie réelle a refusé ce qu'on lui proposait.
+      if (msg.name === 'current-ao' && msg.data === 'null' && this.spdif) void this.nextAudioStage();
       this.emit('state', { name: msg.name, value: msg.data });
     } else if (msg.event === 'end-file' && this.loaded) {
       // Démarré à vide, mpv resterait ouvert sur un écran noir : on le ferme à la fin du fichier.
@@ -209,6 +227,26 @@ class MpvPlayer {
       if (msg.reason === 'error') this.emit('error', { message: `Lecture impossible (${msg.file_error ?? 'erreur'})` });
       else void this.send(['quit']);
     }
+  }
+
+  /** Passe à l'étape de transmission suivante, jusqu'à ce que la sortie réelle accepte. */
+  async nextAudioStage() {
+    if (this.stepping) return;
+    this.stepping = true;
+    const session = this.session;
+    while (session === this.session && this.stage < AUDIO_STAGES.length - 1) {
+      const from = AUDIO_STAGES[this.stage];
+      const to = AUDIO_STAGES[++this.stage];
+      if (to.spdif !== from.spdif) await this.send(['set_property', 'audio-spdif', to.spdif]);
+      if (to.exclusive !== from.exclusive) await this.send(['set_property', 'audio-exclusive', to.exclusive]);
+      await this.send(['ao-reload']);
+      // On laisse la sortie se rouvrir, puis on regarde si elle a accepté.
+      await new Promise((r) => setTimeout(r, 700));
+      if (session !== this.session) break;
+      if ((await this.send(['get_property', 'current-ao'])) !== 'null') break;
+    }
+    if (session === this.session) this.emit('notice', { code: 'passthrough', stage: this.stage });
+    this.stepping = false;
   }
 
   send(command) {
@@ -251,6 +289,29 @@ class MpvPlayer {
     }
   }
 
+  /** L'image affichée en ce moment (telle qu'on la voit, HDR converti compris), en adresse « data: ». */
+  async frame() {
+    if (!this.sock) return null;
+    const file = path.join(this.app.getPath('temp'), `multiplex-frame-${process.pid}-${Date.now()}.jpg`);
+    try {
+      await this.send(['screenshot-to-file', file, 'window']);
+      // mpv répond avant d'avoir fini d'écrire : on attend que le fichier soit là et stable.
+      let size = -1;
+      for (let i = 0; i < 40; i++) {
+        await new Promise((r) => setTimeout(r, 50));
+        const now = fs.existsSync(file) ? fs.statSync(file).size : 0;
+        if (now > 0 && now === size) break;
+        size = now;
+      }
+      if (!fs.existsSync(file)) return null;
+      return `data:image/jpeg;base64,${fs.readFileSync(file).toString('base64')}`;
+    } catch {
+      return null;
+    } finally {
+      fs.rm(file, { force: true }, () => {});
+    }
+  }
+
   /** Ce que mpv décode et affiche réellement (diagnostic et tests). */
   async info() {
     const names = ['time-pos', 'duration', 'video-codec', 'audio-codec-name', 'hwdec-current', 'current-vo', 'width', 'height', 'video-params/primaries', 'video-params/gamma', 'audio-params/channel-count', 'audio-out-params/format', 'track-list/count', 'mpv-version'];
@@ -281,4 +342,4 @@ class MpvPlayer {
   }
 }
 
-module.exports = { MpvPlayer, listAudioDevices };
+module.exports = { MpvPlayer, listAudioDevices, findMpv };

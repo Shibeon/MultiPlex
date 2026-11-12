@@ -18,6 +18,16 @@ contextBridge.exposeInMainWorld('multiplexNative', {
   /** Sorties audio de la machine : [{ id, label }]. */
   audioDevices: () => ipcRenderer.invoke('audio:devices'),
   platform: process.platform,
+  /** « Qui est à l'écran ? » : modèle embarqué, image en pause, photo d'une personne. */
+  xray: {
+    model: (name) => ipcRenderer.invoke('xray:model', String(name)),
+    frame: () => ipcRenderer.invoke('xray:frame'),
+    photo: (url) => ipcRenderer.invoke('xray:photo', String(url)),
+  },
+  /** Met la fenêtre principale en plein écran, ou l'en sort. */
+  setFullscreen: (on) => ipcRenderer.send('window:fullscreen', !!on),
+  /** Aperçu en image à une position (secondes) : adresse « data: » ou null. */
+  thumb: (time) => ipcRenderer.invoke('thumb:get', Number(time) || 0),
   /** Repères d'intro communautaires pour un épisode (IntroDB). */
   segments: (imdb, season, episode) => ipcRenderer.invoke('introdb:segments', imdb, season, episode),
   /** S'abonne aux évènements du lecteur ; renvoie la fonction de désabonnement. */

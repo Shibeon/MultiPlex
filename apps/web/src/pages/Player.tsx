@@ -6,7 +6,7 @@ import { back, go, route } from '../router';
 import { withCommunityMarkers } from '../markers';
 import { settings } from '../settings';
 import { invalidate, server } from '../store';
-import { Icon, Spinner, labels } from '../ui';
+import { Icon, Spinner, labels, SeekPreview } from '../ui';
 
 type Menu = null | 'audio' | 'sub' | 'quality' | 'speed' | 'chapter' | 'version';
 
@@ -491,7 +491,7 @@ export function Player({ id }: { id: string }) {
       <div class="player-bottom">
         <div class="seek">
           <span>{formatClock(ui.time)}</span>
-          <div class="seek-track">
+          <SeekPreview duration={ui.duration}>
             <input
               type="range"
               aria-label="Position"
@@ -509,7 +509,7 @@ export function Player({ id }: { id: string }) {
                 .map((m) => (
                   <span key={m.type + m.startTimeOffset} class={`seek-mark ${m.type}`} data-label={m.type === 'intro' ? 'Intro' : t('player.credits')} style={{ left: `${(m.startTimeOffset / 1000 / ui.duration) * 100}%`, width: `${(Math.max(0, m.endTimeOffset - m.startTimeOffset) / 1000 / ui.duration) * 100}%` }} />
                 ))}
-          </div>
+          </SeekPreview>
           <span>{formatClock(ui.duration)}</span>
         </div>
         <div class="controls">

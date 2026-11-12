@@ -3,7 +3,8 @@
 const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
-const { MpvPlayer, listAudioDevices } = require('./mpv.cjs');
+const { MpvPlayer, listAudioDevices, findMpv } = require('./mpv.cjs');
+const { Thumbnailer } = require('./thumbs.cjs');
 const { setupUpdater } = require('./updater.cjs');
 const { RefreshMatcher } = require('./display.cjs');
 
@@ -35,8 +36,27 @@ let overlay = null;
 let meta = {};
 /** Accord de la fréquence de l'écran à la vidéo, et si la lecture en cours le demande. */
 let matcher = null;
+/** Aperçus en image pour la barre de lecture (second mpv invisible). */
+const thumbs = new Thumbnailer(app, findMpv);
+ipcMain.handle('thumb:get', (_e, time) => thumbs.get(time));
 let matchOn = false;
 let focusTimer = null;
+/** Plein écran demandé pendant la lecture : on en sort quand elle se termine (sauf enchaînement). */
+let fsByPlayback = false;
+let fsTimer = null;
+function togglePlaybackFullscreen() {
+  if (!main || main.isDestroyed()) return;
+  fsByPlayback = !main.isFullScreen();
+  main.setFullScreen(fsByPlayback);
+}
+function playbackOver() {
+  clearTimeout(fsTimer);
+  // Un épisode suivant peut démarrer dans la foulée : on attend un instant avant de rendre la fenêtre.
+  fsTimer = setTimeout(() => {
+    if (fsByPlayback && main && !main.isDestroyed() && main.isFullScreen()) main.setFullScreen(false);
+    fsByPlayback = false;
+  }, 1500);
+}
 /** L'application est-elle au premier plan ? (La fenêtre de contrôles en fait partie.) */
 function syncFocus() {
   clearTimeout(focusTimer);
@@ -77,7 +97,7 @@ function openOverlay() {
   win.webContents.on('before-input-event', (e, input) => {
     if (input.type === 'keyDown' && input.key === 'F11' && main && !main.isDestroyed()) {
       e.preventDefault();
-      main.setFullScreen(!main.isFullScreen());
+      togglePlaybackFullscreen();
     }
   });
   win.loadFile(INDEX, { hash: '/overlay' });
@@ -104,6 +124,8 @@ function registerPlayer(win) {
     sendTo(win, 'mpv:event', type, data);
     sendTo(overlay, 'mpv:event', type, data);
     if (type === 'ended' || type === 'error') {
+      playbackOver();
+      thumbs.stop();
       closeOverlay();
       matcher?.release();
     } else if (type === 'state' && data.name === 'container-fps' && typeof data.value === 'number' && matchOn) {
@@ -148,6 +170,40 @@ function registerPlayer(win) {
 
 ipcMain.handle('mpv:available', () => !!player?.available());
 
+// --- « Qui est à l'écran ? » : reconnaissance de visages, calculée dans la fenêtre de contrôles ---
+// L'application ne fait que fournir la matière : le modèle (embarqué), l'image en pause et
+// les photos de la distribution. Rien n'est envoyé ailleurs.
+const XRAY_MODELS = new Set(['ssd_mobilenetv1_model-weights_manifest.json', 'ssd_mobilenetv1_model.bin', 'face_landmark_68_model-weights_manifest.json', 'face_landmark_68_model.bin', 'face_recognition_model-weights_manifest.json', 'face_recognition_model.bin']);
+const XRAY_DIR = app.isPackaged ? path.join(process.resourcesPath, 'xray') : path.join(__dirname, '..', 'web', 'node_modules', '@vladmandic', 'face-api', 'model');
+ipcMain.handle('xray:model', (_e, name) => {
+  if (!XRAY_MODELS.has(String(name))) return null;
+  try {
+    return fs.readFileSync(path.join(XRAY_DIR, String(name)));
+  } catch {
+    return null;
+  }
+});
+ipcMain.handle('xray:frame', () => player?.frame() ?? null);
+ipcMain.handle('xray:photo', async (_e, url) => {
+  // Uniquement les serveurs d'images des fiches (Plex, TMDB), jamais une adresse quelconque.
+  let u;
+  try {
+    u = new URL(String(url));
+  } catch {
+    return null;
+  }
+  if (u.protocol !== 'https:' || !['metadata-static.plex.tv', 'image.tmdb.org'].includes(u.hostname)) return null;
+  try {
+    const res = await fetch(u, { signal: AbortSignal.timeout(8000) });
+    const type = res.headers.get('content-type') ?? '';
+    if (!res.ok || !type.startsWith('image/')) return null;
+    const bytes = Buffer.from(await res.arrayBuffer());
+    return bytes.length > 4 * 1024 * 1024 ? null : `data:${type.split(';')[0]};base64,${bytes.toString('base64')}`;
+  } catch {
+    return null;
+  }
+});
+
 // Repères d'intro communautaires (IntroDB). La page ne peut pas interroger ce service
 // elle-même (il refuse les navigateurs) ; seuls un identifiant IMDb et un numéro
 // d'épisode partent, rien du compte ni du serveur.
@@ -183,7 +239,9 @@ ipcMain.handle('mpv:play', async (_e, opts) => {
     .filter(([k, v]) => /^X-Plex-[A-Za-z-]{1,40}$/.test(k) && typeof v === 'string' && /^[\x20-\x7E]{1,200}$/.test(v))
     .map(([k, v]) => `${k}: ${v}`);
   meta = {};
+  clearTimeout(fsTimer);
   matchOn = !!opts.matchRefresh || (HIDDEN && !!arg('smoke-native'));
+  if (HIDDEN && arg('smoke-native')) opts.seekPreview = true;
   if (!matchOn) matcher?.release();
   const result = await player.play({
     url: opts.url,
@@ -197,10 +255,15 @@ ipcMain.handle('mpv:play', async (_e, opts) => {
     audioDevice: await knownAudioDevice(opts.audioDevice),
     buffered: !!opts.buffered,
   });
+  // Aperçus : seulement pour le fichier d'origine (un flux converti ne se parcourt pas librement).
+  if (opts.seekPreview && !opts.buffered) void thumbs.start(opts.url, headers);
+  else thumbs.stop();
   openOverlay();
   return result;
 });
 ipcMain.handle('mpv:stop', () => {
+  playbackOver();
+  thumbs.stop();
   closeOverlay();
   matcher?.release();
   return player?.stop();
@@ -226,17 +289,23 @@ ipcMain.on('overlay:meta', (e, data) => {
   meta = { ...meta, ...data };
   sendTo(overlay, 'overlay:meta', meta);
 });
+ipcMain.on('window:fullscreen', (e, on) => {
+  if (main && !main.isDestroyed() && e.sender === main.webContents && !HIDDEN) main.setFullScreen(!!on);
+});
 ipcMain.on('overlay:action', (_e, name) => {
-  if (name === 'back') {
+  const person = typeof name === 'string' && /^person:[0-9a-f]{16,40}$/i.test(name) ? name.slice(7) : '';
+  if (name === 'back' || person) {
     // Arrêt demandé par les contrôles : la page principale doit l'apprendre pour
     // enregistrer la position et revenir à la fiche.
     const time = player?.state['time-pos'] ?? 0;
     closeOverlay();
+    playbackOver();
+    thumbs.stop();
     matcher?.release();
     void player?.stop();
-    sendTo(main, 'mpv:event', 'ended', { time, eof: false });
+    sendTo(main, 'mpv:event', 'ended', { time, eof: false, goto: person ? `/person/${person}` : undefined });
   } else if (name === 'fullscreen') {
-    if (main && !main.isDestroyed()) main.setFullScreen(!main.isFullScreen());
+    togglePlaybackFullscreen();
   } else if (typeof name === 'string' && /^quality:[a-z0-9]{1,12}$/.test(name)) {
     // Le changement de qualité relance la lecture : c'est la page principale qui sait le faire.
     sendTo(main, 'mpv:event', 'quality', { id: name.slice(8) });
@@ -279,8 +348,11 @@ function createWindow() {
   win.webContents.on('will-navigate', (e, url) => {
     if (!url.startsWith('file://')) e.preventDefault();
   });
-  win.webContents.on('before-input-event', (_e, input) => {
-    if (input.type === 'keyDown' && input.key === 'F11') win.setFullScreen(!win.isFullScreen());
+  win.webContents.on('before-input-event', (e, input) => {
+    if (input.type === 'keyDown' && input.key === 'F11') {
+      e.preventDefault();
+      win.setFullScreen(!win.isFullScreen());
+    }
   });
 
   win.loadFile(INDEX);
@@ -311,6 +383,16 @@ function createWindow() {
       } catch (e) {
         result = { error: String(e) };
       }
+      // Second script facultatif, exécuté dans la fenêtre de contrôles du lecteur.
+      if (arg('smoke-overlay-js') && overlay) {
+        try {
+          result = { main: result, overlay: await overlay.webContents.executeJavaScript(`(async () => { ${fs.readFileSync(arg('smoke-overlay-js'), 'utf8')} })()`) };
+        } catch (e) {
+          result = { main: result, overlayError: String(e) };
+        }
+        if (arg('smoke-shot')) fs.writeFileSync(arg('smoke-shot').replace(/.png$/, '-overlay.png'), (await overlay.webContents.capturePage()).toPNG());
+        await player?.stop();
+      }
       fs.writeFileSync(arg('smoke-out'), JSON.stringify(result, null, 2));
       if (arg('smoke-shot')) fs.writeFileSync(arg('smoke-shot'), (await win.webContents.capturePage()).toPNG());
       app.exit(0);
@@ -327,8 +409,12 @@ function createWindow() {
       player.emit = (type, data) => (type === 'notice' && report.notices.push(data.code), forward(type, data));
       try {
         await player.play({ url: arg('smoke-file'), title: 'essai', passthrough: true, audioDevice: await knownAudioDevice(arg('smoke-audio')) });
-        await new Promise((r) => setTimeout(r, 4000));
+        await new Promise((r) => setTimeout(r, 7000));
         report.ao = await player.send(['get_property', 'current-ao']);
+        report.stage = player.stage;
+        report.out = await player.send(['get_property', 'audio-out-params']);
+        report.spdif = await player.send(['get_property', 'audio-spdif']);
+        report.exclusive = await player.send(['get_property', 'audio-exclusive']);
         report.device = await player.send(['get_property', 'audio-device']);
         report.info = await player.info();
       } catch (e) {
@@ -414,6 +500,7 @@ function createWindow() {
         await wait(9000 + (Number(arg('smoke-hold')) || 0));
         report.native = await js("!!window.multiplexNative && document.querySelector('.player')?.className");
         report.start = await player.info();
+        report.audioChip = await ui("document.querySelector('.chip[data-audio-out]')?.textContent.trim()");
         report.overlay = await ui("({ title: document.querySelector('.player-title')?.textContent, time: document.querySelector('.seek')?.textContent, buttons: [...document.querySelectorAll('.controls .btn')].map((b) => b.textContent.trim() || b.getAttribute('aria-label')), skip: document.querySelector('.skip')?.textContent, bg: getComputedStyle(document.body).backgroundColor })");
         if (arg('smoke-shot')) {
           await ui("document.querySelector('.player')?.dispatchEvent(new MouseEvent('mousemove', { bubbles: true }))");
@@ -429,12 +516,15 @@ function createWindow() {
         report.pauseClicked = await click('.controls .btn[data-act="toggle"]');
         await wait(800);
         report.paused = player.state.pause;
+        report.pauseCast = await ui("document.querySelectorAll('.pause-cast-card').length");
         report.pausedIcon = await ui("document.querySelector('.controls .btn[data-act=\"toggle\"]')?.getAttribute('aria-label')");
         await click('.controls .btn[data-act="toggle"]');
         // Déplacement, par la barre de progression.
         await ui("(() => { const r = document.querySelector('.seek input'); r.value = 300; r.dispatchEvent(new Event('input', { bubbles: true })); r.dispatchEvent(new Event('change', { bubbles: true })); })()");
         await wait(3500);
         report.afterSeekBar = (await player.info())['time-pos'];
+        // Aperçus de la barre de lecture.
+        report.thumbs = await ui("(async () => { const a = await window.multiplexNative.thumb(120); const b = await window.multiplexNative.thumb(400); return [a, b].map((x) => (x ? x.slice(0, 22) + '… ' + x.length : null)); })()");
         // Vitesse, par le menu.
         await click('.controls .btn[data-menu="speed"]');
         await wait(300);
@@ -490,6 +580,7 @@ app.whenReady().then(() => {
 });
 
 app.on('before-quit', () => {
+  thumbs.stop();
   matcher?.restoreSync();
   void player?.stop();
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ratingBadges,
   switchHomeUser,
   imdbIdOf,
   segmentsToMarkers,
@@ -207,6 +208,29 @@ describe('repères communautaires et activité des amis', () => {
     });
     expect(a).toMatchObject({ user: { name: 'Camille' }, type: 'episode', title: 'Pilote', show: 'Archipel', episode: 'S2 · E1', poster: 'https://exemple/p.jpg', discoverId: '5d9c086c7d06d9001ffd27aa' });
     expect(toFriendActivity({ id: 'y', date: '', metadataItem: null })).toBeNull();
+  });
+});
+
+describe('notes', () => {
+  it('reprend les notes de Plex dans l’ordre IMDb, critiques, public, TMDB', () => {
+    const badges = ratingBadges({
+      Rating: [
+        { image: 'themoviedb://image.rating', value: 8.4, type: 'audience' },
+        { image: 'rottentomatoes://image.rating.upright', value: 8, type: 'audience' },
+        { image: 'imdb://image.rating', value: 8.6, type: 'audience' },
+        { image: 'rottentomatoes://image.rating.ripe', value: 9.5, type: 'critic' },
+      ],
+    });
+    expect(badges).toEqual([
+      { source: 'imdb', text: '8.6' },
+      { source: 'rt-critic', text: '95%', fresh: true },
+      { source: 'rt-audience', text: '80%', fresh: true },
+      { source: 'tmdb', text: '84%' },
+    ]);
+    expect(ratingBadges({ Rating: [{ image: 'rottentomatoes://image.rating.rotten', value: 0.9, type: 'critic' }] })).toEqual([{ source: 'rt-critic', text: '9%', fresh: false }]);
+    // Sans le détail : les deux notes principales.
+    expect(ratingBadges({ rating: 7.2, ratingImage: 'imdb://image.rating' })).toEqual([{ source: 'imdb', text: '7.2' }]);
+    expect(ratingBadges({})).toEqual([]);
   });
 });
 

@@ -19,6 +19,8 @@ export interface NativePlayOptions {
   audioDevice?: string;
   /** Accorder la fréquence de l'écran à la cadence de la vidéo (Windows). */
   matchRefresh?: boolean;
+  /** Préparer les aperçus en image de la barre de lecture. */
+  seekPreview?: boolean;
   /** Flux produit en direct par le serveur : mettre davantage en tampon avant de reprendre. */
   buffered?: boolean;
 }
@@ -31,6 +33,10 @@ export interface NativeMeta {
   markers?: { type: string; start: number; end: number }[];
   hasNext?: boolean;
   hasPrev?: boolean;
+  /** Distribution du titre, montrée à la pause. */
+  cast?: { key?: string; name: string; role?: string; thumb?: string }[];
+  /** Chercher à la pause qui est à l'écran. */
+  xray?: boolean;
   /** Libellés Plex des pistes, dans l'ordre où mpv les numérote. */
   audioLabels?: string[];
   subLabels?: string[];
@@ -67,6 +73,14 @@ export interface NativeApi {
   /** Sorties audio de la machine ; absent des versions de l'app qui ne le proposent pas. */
   audioDevices?(): Promise<{ id: string; label: string }[]>;
   platform?: string;
+  /** « Qui est à l'écran ? » : ce que l'application fournit à la reconnaissance de visages. */
+  xray?: {
+    model(name: string): Promise<Uint8Array | null>;
+    frame(): Promise<string | null>;
+    photo(url: string): Promise<string | null>;
+  };
+  /** Aperçu en image à une position (secondes) ; null s'il n'y en a pas. */
+  thumb?(time: number): Promise<string | null>;
   /** Repères d'intro communautaires (IntroDB) pour un épisode ; absent hors application de bureau. */
   segments?(imdb: string, season: number, episode: number): Promise<{ intro?: { start_sec?: number; end_sec?: number } | null; outro?: { start_sec?: number; end_sec?: number } | null } | null>;
   available(): Promise<boolean>;
@@ -78,7 +92,7 @@ export interface NativeApi {
   setMeta(meta: NativeMeta): void;
   overlayInit(): Promise<{ meta: NativeMeta; state: Record<string, unknown> }>;
   onMeta(listener: (meta: NativeMeta) => void): () => void;
-  action(name: 'back' | 'fullscreen' | 'next' | 'prev' | `quality:${string}`): void;
+  action(name: 'back' | 'fullscreen' | 'next' | 'prev' | `quality:${string}` | `person:${string}`): void;
 }
 
 export const native = (window as unknown as { multiplexNative?: NativeApi }).multiplexNative;

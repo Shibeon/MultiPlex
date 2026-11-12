@@ -40,6 +40,14 @@ function build(): Map<string, Metadata & { _section: string; _children?: string[
       viewOffset: i % 17 === 3 ? 25 * 60000 : undefined,
       viewCount: i % 3 === 0 ? 1 : 0,
       rating: 5 + ((i * 3) % 50) / 10,
+      Director: [{ tag: 'Maud Ferrand', tagKey: 'demo00000000000000a1' }],
+      Role: ['Inès Morel', 'Yanis Haddad', 'Camille Roy', 'Louis Garnier', 'Sofia Lemaire'].map((tag, k) => ({ tag, tagKey: `demo00000000000000b${k}`, role: ['La capitaine', 'Le navigateur', 'La cartographe', 'Le passager', 'La gardienne'][k] })),
+      Rating: [
+        { image: 'imdb://image.rating', value: 5 + ((i * 3) % 50) / 10, type: 'audience' },
+        { image: `rottentomatoes://image.rating.${i % 3 ? 'ripe' : 'rotten'}`, value: i % 3 ? 7.4 + (i % 5) * 0.5 : 4.2, type: 'critic' },
+        { image: `rottentomatoes://image.rating.${i % 4 ? 'upright' : 'spilled'}`, value: i % 4 ? 8 : 5.5, type: 'audience' },
+        { image: 'themoviedb://image.rating', value: 6 + (i % 4) * 0.7, type: 'audience' },
+      ],
       contentRating: 'Tous publics',
       Genre: [{ tag: ['Aventure', 'Drame', 'Comédie', 'Science-fiction'][i % 4] }],
       Media: [{ id: n, container: 'mp4', videoCodec: 'h264', audioCodec: 'aac', videoResolution: '1080', Part: [{ id: n, key: TEST_STREAM, container: 'mp4' }] }],
@@ -98,6 +106,7 @@ function build(): Map<string, Metadata & { _section: string; _children?: string[
       _children: seasons,
       ratingKey: showKey,
       type: 'show',
+      Role: ['Inès Morel', 'Yanis Haddad', 'Camille Roy'].map((tag, k) => ({ tag, tagKey: `demo00000000000000c${k}`, role: ['La voyageuse', 'Le guide', 'La chroniqueuse'][k] })),
       title,
       year: 2010 + s,
       summary: `« ${title} » est une série de démonstration.`,
@@ -223,6 +232,17 @@ export class DemoServer implements MediaServer {
         item: { ...m, viewOffset: Math.min((m.duration ?? 0) - 1000, base + (state === 'playing' ? elapsed : 0)) },
       };
     });
+  }
+
+  async personMedia(key: string): Promise<Metadata[]> {
+    // Chaque personne fictive apparaît dans quelques films du serveur de démonstration.
+    const n = Number(key.replace(/\D/g, '')) || 0;
+    return [...this.db.values()].filter((m) => m.type === 'movie').filter((_, i) => (i + n) % 3 === 0).slice(0, 6);
+  }
+
+  async rate(ratingKey: string, rating: number | null): Promise<void> {
+    const m = this.db.get(ratingKey);
+    if (m) m.userRating = rating ?? undefined;
   }
 
   async scrobble(ratingKey: string, watched: boolean): Promise<void> {

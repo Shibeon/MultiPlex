@@ -70,6 +70,12 @@ export interface Settings {
   communityMarkers: boolean;
   /** Plex Home : demander « Qui regarde ? » à chaque lancement. */
   askProfile: boolean;
+  /** Lecteur natif : aperçu en image au survol de la barre de lecture. */
+  seekPreview: boolean;
+  /** Mode TV : interface agrandie pour être lue depuis le canapé, pilotée au clavier ou à la télécommande. */
+  couch: boolean;
+  /** Lecteur natif : à la pause, reconnaître les acteurs présents à l'image (calcul local). */
+  xray: boolean;
 }
 
 export const DEFAULTS: Settings = {
@@ -107,6 +113,9 @@ export const DEFAULTS: Settings = {
   matchRefresh: false,
   communityMarkers: true,
   askProfile: false,
+  seekPreview: true,
+  couch: false,
+  xray: true,
 };
 
 const KEY = 'mp.settings';
@@ -162,12 +171,24 @@ export function sanitize(input: unknown): Partial<Settings> {
   return out as Partial<Settings>;
 }
 
+/** Agrandissement du mode TV : ce qui se lit à 60 cm doit se lire à 3 m. */
+const COUCH_SCALE = 1.4;
+
 const isTv = () => innerHeight <= 620 && innerWidth >= 900;
 const viewport = signal({ tv: typeof window !== 'undefined' && isTv() });
 
 /** Largeur d'affiche effective, réduite sur téléviseur. */
 export function cardWidth(): number {
-  return Math.round(settings.value.cardSize * (viewport.value.tv ? 0.72 : 1));
+  return Math.round(settings.value.cardSize * (viewport.value.tv ? 0.72 : 1) * (settings.value.couch ? COUCH_SCALE : 1));
+}
+
+/** Entre dans le mode TV ou en sort ; en y entrant, la fenêtre passe en plein écran. */
+export function setCouch(on: boolean): void {
+  update({ couch: on });
+  const native = (window as unknown as { multiplexNative?: { setFullscreen?(on: boolean): void } }).multiplexNative;
+  if (native?.setFullscreen) native.setFullscreen(on);
+  else if (on) void document.documentElement.requestFullscreen?.().catch(() => {});
+  else if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
 }
 
 /** Applique thème, variables et CSS personnalisé au document, et persiste. */
@@ -178,6 +199,19 @@ export function initSettings(): void {
   let applied: string[] = [];
   addEventListener('resize', () => {
     if (viewport.value.tv !== isTv()) viewport.value = { tv: isTv() };
+  });
+  // Mode TV : la souris s'efface quand on ne s'en sert pas, et F10 bascule le mode.
+  let idle = 0;
+  addEventListener('mousemove', () => {
+    document.documentElement.classList.remove('idle');
+    clearTimeout(idle);
+    idle = window.setTimeout(() => document.documentElement.classList.add('idle'), 3000);
+  });
+  addEventListener('keydown', (e) => {
+    if (e.key === 'F10') {
+      e.preventDefault();
+      setCouch(!settings.value.couch);
+    }
   });
   effect(() => {
     const s = settings.value;
@@ -194,8 +228,9 @@ export function initSettings(): void {
     for (const [k, v] of Object.entries(vars)) root.style.setProperty(k, v);
     applied = Object.keys(vars);
     // Les téléviseurs exposent souvent un écran logique de 960×540 : on réduit l'échelle pour que tout tienne.
-    root.style.fontSize = `${s.uiScale * (viewport.value.tv ? 0.72 : 1)}%`;
+    root.style.fontSize = `${s.uiScale * (viewport.value.tv ? 0.72 : 1) * (s.couch ? COUCH_SCALE : 1)}%`;
     root.classList.toggle('tv', viewport.value.tv);
+    root.classList.toggle('couch', s.couch);
     // Illustration du thème : uniquement une image embarquée, jamais une adresse à charger
   // (des réglages importés pourraient en contenir une).
     const art = isThemeImage(s.themeImage) ? s.themeImage : '';

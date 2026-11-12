@@ -78,10 +78,15 @@ export function WhatsNew() {
 }
 
 /** Nouveautés d'une version proposée : liste dans la langue de l'interface, ou texte tel quel. */
-function notesLines(raw: string | undefined): string[] {
+function notesLines(raw: string | undefined, current = ''): string[] {
   if (!raw) return [];
   try {
-    const j = JSON.parse(raw) as { fr?: unknown; en?: unknown };
+    const j = JSON.parse(raw) as { fr?: unknown; en?: unknown; log?: Notes[] };
+    // Plusieurs versions manquées : tout ce qui a changé depuis celle qui est installée.
+    if (Array.isArray(j.log) && current) {
+      const missed = j.log.filter((n) => n && typeof n.version === 'string' && newer(n.version, current) && Array.isArray(n.fr) && Array.isArray(n.en));
+      if (missed.length > 1) return missed.flatMap((n) => lines(n).map((l) => `${n.version} — ${l}`)).slice(0, 60);
+    }
     const l = settings.value.lang === 'fr' ? j.fr : j.en;
     if (Array.isArray(l)) return l.filter((x): x is string => typeof x === 'string').slice(0, 20);
   } catch {
@@ -100,7 +105,7 @@ export function UpdateBanner() {
   if (!native?.updates || !settings.value.autoUpdate) return null;
   if (!['available', 'downloading', 'ready'].includes(u.status)) return null;
   if (u.status === 'available' && dismissed.value === u.version) return null;
-  const news = notesLines(u.notes);
+  const news = notesLines(u.notes, u.current);
   return (
     <div class="update-banner" role="status">
       {open && news.length > 0 && (

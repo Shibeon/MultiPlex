@@ -16,7 +16,35 @@ export interface Discover {
   details(id: string): Promise<Metadata & { watchlisted: boolean }>;
   isWatchlisted(id: string): Promise<boolean>;
   setWatchlisted(id: string, on: boolean): Promise<void>;
+  /** Fiche d'une personne (identifiant `tagKey` d'un acteur, d'un réalisateur…). */
+  person(key: string): Promise<Person>;
+  /** Sa filmographie complète, par métier. */
+  credits(key: string): Promise<CreditGroup[]>;
 }
+
+export interface Person {
+  key: string;
+  name: string;
+  thumb?: string;
+  summary?: string;
+  /** Date de naissance, « 1993-07-08 ». */
+  born?: string;
+  birthPlace?: string;
+  /** Liens publics de la personne (réseaux sociaux…), en https uniquement. */
+  links?: { title: string; url: string }[];
+}
+
+export interface CreditGroup {
+  /** « actor », « director », « writer »… */
+  type: string;
+  title: string;
+  credits: { role?: string; item: Metadata }[];
+}
+
+const personKey = (key: string) => {
+  if (!/^[0-9a-f]{16,40}$/i.test(key)) throw new Error('Personne introuvable');
+  return key;
+};
 
 const BASE = 'https://discover.provider.plex.tv';
 
@@ -94,6 +122,28 @@ export class PlexDiscover implements Discover {
     return { ...item, watchlisted };
   }
 
+  async person(key: string): Promise<Person> {
+    type Raw = { title?: string; thumb?: string; summary?: string; bornAt?: string; birthPlace?: string; External?: { sourceTitle?: string; url?: string }[] };
+    const p = (await this.get<{ MediaContainer: { Metadata?: Raw[] } }>(`/library/people/${personKey(key)}`)).MediaContainer.Metadata?.[0];
+    if (!p?.title) throw new Error('Personne introuvable');
+    const links = (p.External ?? []).filter((e): e is { sourceTitle: string; url: string } => !!e.sourceTitle && /^https:\/\//.test(e.url ?? '')).map((e) => ({ title: e.sourceTitle, url: e.url }));
+    return { key, name: p.title, thumb: p.thumb, summary: p.summary, born: p.bornAt, birthPlace: p.birthPlace, links };
+  }
+
+  async credits(key: string): Promise<CreditGroup[]> {
+    type Raw = { title?: string; type?: string; Credit?: { role?: string; Metadata?: Metadata }[] };
+    const groups = (await this.get<{ MediaContainer: { CreditGroup?: Raw[] } }>(`/library/people/${personKey(key)}/credits`)).MediaContainer.CreditGroup ?? [];
+    return groups.map((g) => ({
+      type: g.type ?? 'other',
+      title: g.title ?? '',
+      credits: (g.Credit ?? [])
+        .filter((c): c is { role?: string; Metadata: Metadata } => !!c.Metadata?.ratingKey && (c.Metadata.type === 'movie' || c.Metadata.type === 'show'))
+        // L'identifiant universel permet de retrouver l'œuvre sur le serveur.
+        .map((c) => ({ role: c.role || undefined, item: { ...c.Metadata, guid: `plex://${c.Metadata.type}/${c.Metadata.ratingKey}` } }))
+        .sort((a, b) => (b.item.year ?? 0) - (a.item.year ?? 0)),
+    }));
+  }
+
   async setWatchlisted(id: string, on: boolean): Promise<void> {
     const action = on ? 'addToWatchlist' : 'removeFromWatchlist';
     await request(`${BASE}/actions/${action}?ratingKey=${encodeURIComponent(id)}`, { method: 'PUT', headers: identityHeaders(this.client, this.token) });
@@ -161,6 +211,14 @@ export class DemoDiscover implements Discover {
     const item = this.catalogue.find((m) => m.ratingKey === id);
     if (!item) throw new Error('Titre introuvable');
     return { ...item, watchlisted: this.listed.includes(id) };
+  }
+
+  async person(key: string): Promise<Person> {
+    return { key, name: '', summary: 'Personne fictive du mode démo. Connectez votre compte Plex pour lire les vraies biographies.', born: '1984-03-12', birthPlace: 'Port-Blanc' };
+  }
+
+  async credits(): Promise<CreditGroup[]> {
+    return [{ type: 'actor', title: 'Actor', credits: this.catalogue.slice(0, 7).map((item, i) => ({ role: ['La capitaine', 'Le témoin', 'Elle-même'][i % 3], item })) }];
   }
 
   async setWatchlisted(id: string, on: boolean): Promise<void> {

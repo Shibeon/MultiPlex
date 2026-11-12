@@ -110,6 +110,13 @@ export interface Marker {
 
 export interface Tag {
   tag: string;
+  /** Numéro sur le serveur ; dans le catalogue Plex, l'identifiant de la personne. */
+  id?: number | string;
+  /** Identifiant de la personne, commun au serveur et au catalogue Plex. */
+  tagKey?: string;
+  /** Rôle joué (acteurs). */
+  role?: string;
+  thumb?: string;
 }
 
 export interface Metadata {
@@ -141,6 +148,13 @@ export interface Metadata {
   contentRating?: string;
   rating?: number;
   audienceRating?: number;
+  /** Origine des deux notes ci-dessus (« imdb://image.rating », « rottentomatoes://image.rating.ripe »…). */
+  ratingImage?: string;
+  audienceRatingImage?: string;
+  /** Toutes les notes connues : IMDb, Rotten Tomatoes (critique et public), TMDB. */
+  Rating?: { image?: string; value?: number; type?: string }[];
+  /** Note donnée par l'utilisateur, sur 10. */
+  userRating?: number;
   studio?: string;
   tagline?: string;
   originallyAvailableAt?: string;
@@ -152,6 +166,8 @@ export interface Metadata {
   Genre?: Tag[];
   Role?: Tag[];
   Director?: Tag[];
+  Writer?: Tag[];
+  Producer?: Tag[];
 }
 
 export interface Hub {
@@ -253,6 +269,10 @@ export interface MediaServer {
   selectStreams(partId: number, sel: { audioStreamID?: number; subtitleStreamID?: number }): Promise<void>;
   timeline(report: TimelineReport): Promise<void>;
   scrobble(ratingKey: string, watched: boolean): Promise<void>;
+  /** Films et séries du serveur où apparaît une personne (identifiant `tagKey`). */
+  personMedia(key: string): Promise<Metadata[]>;
+  /** Note personnelle sur 10 ; null pour la retirer. */
+  rate(ratingKey: string, rating: number | null): Promise<void>;
   /** Lectures en cours. Réservé au propriétaire du serveur : sinon l'appel échoue en 401/403. */
   sessions(): Promise<ActiveSession[]>;
 }

@@ -4,6 +4,7 @@ import { formatDuration, t } from '../i18n';
 import { settings } from '../settings';
 import { discover, invalidate, server, useData } from '../store';
 import { ErrorBox, Icon, Spinner } from '../ui';
+import { CastRow, PeopleLinks } from './Person';
 
 const PAGE = 60;
 
@@ -14,7 +15,7 @@ const availability = new Map<string, Metadata | null>();
  * Pour une liste de titres du catalogue, cherche lesquels sont déjà disponibles.
  * Les vérifications partent par petits lots et sont mémorisées pour la session.
  */
-function useAvailability(items: Metadata[] | undefined): (item: Metadata) => Metadata | null | undefined {
+export function useAvailability(items: Metadata[] | undefined): (item: Metadata) => Metadata | null | undefined {
   const srv = server.value!;
   const [, refresh] = useState(0);
   useEffect(() => {
@@ -44,18 +45,21 @@ function useAvailability(items: Metadata[] | undefined): (item: Metadata) => Met
  * déjà disponible (la carte y mène alors directement), null s'il ne l'est pas
  * encore, absent tant qu'on ne sait pas.
  */
-export function DiscoverCard({ item, local }: { item: Metadata; local?: Metadata | null }) {
+export function DiscoverCard({ item, local, note }: { item: Metadata; local?: Metadata | null; note?: string }) {
+  // Dans une filmographie (`note` = le rôle), on signale ce qui est disponible plutôt que ce qui manque.
+  const filmography = note !== undefined;
   const poster = discoverImage(item, 'poster');
   return (
-    <a class={`card${local === null ? ' pending' : ''}`} href={local ? `#/item/${local.ratingKey}` : `#/discover/${item.ratingKey}`} title={item.title}>
+    <a class={`card${local === null && !filmography ? ' pending' : ''}`} href={local ? `#/item/${local.ratingKey}` : `#/discover/${item.ratingKey}`} title={item.title}>
       <div class="poster">
         <span class="poster-fallback">{item.title}</span>
         {poster && <img loading="lazy" decoding="async" referrerpolicy="no-referrer" src={poster} alt="" />}
-        {local === null && <span class="soon">{t('disc.notOnServer')}</span>}
+        {local === null && !filmography && <span class="soon">{t('disc.notOnServer')}</span>}
+        {local && filmography && <span class="soon here">{t('disc.onServer')}</span>}
       </div>
       <div class="card-text">
         <div class="card-title">{item.title}</div>
-        <div class="card-sub">{[item.year, item.type === 'show' ? t('disc.show') : ''].filter(Boolean).join(' · ')}</div>
+        <div class="card-sub">{[item.year, item.type === 'show' ? t('disc.show') : '', note].filter(Boolean).join(' · ')}</div>
       </div>
     </a>
   );
@@ -190,22 +194,32 @@ export function DiscoverDetails({ id }: { id: string }) {
             {!!item.Genre?.length && <div>{item.Genre.map((g) => g.tag).join(' · ')}</div>}
             {!!item.Director?.length && (
               <div>
-                <dt>{t('item.director')}</dt> <dd>{item.Director.map((x) => x.tag).join(', ')}</dd>
+                <dt>{t('item.director')}</dt>{' '}
+                <dd>
+                  <PeopleLinks people={item.Director} />
+                </dd>
               </div>
             )}
-            {!!item.Role?.length && (
+            {!!item.Writer?.length && (
               <div>
-                <dt>{t('item.cast')}</dt>{' '}
+                <dt>{t('item.writer')}</dt>{' '}
                 <dd>
-                  {item.Role.slice(0, 8)
-                    .map((r) => r.tag)
-                    .join(', ')}
+                  <PeopleLinks people={item.Writer} />
+                </dd>
+              </div>
+            )}
+            {!!item.Producer?.length && (
+              <div>
+                <dt>{t('item.producer')}</dt>{' '}
+                <dd>
+                  <PeopleLinks people={item.Producer.slice(0, 8)} />
                 </dd>
               </div>
             )}
           </dl>
         </div>
       </div>
+      <CastRow people={item.Role} title={t('item.cast')} />
     </div>
   );
 }

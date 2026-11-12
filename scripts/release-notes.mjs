@@ -10,5 +10,5 @@ if (log[0]?.version !== version) {
   console.error(`Le journal des nouveautés commence à la version ${log[0]?.version}, l'application est en ${version} : ajoutez l'entrée manquante à apps/web/src/changelog.json.`);
   process.exit(1);
 }
-writeFileSync(new URL('apps/desktop/release-notes.txt', root), JSON.stringify({ fr: log[0].fr, en: log[0].en }));
+writeFileSync(new URL('apps/desktop/release-notes.txt', root), JSON.stringify({ fr: log[0].fr, en: log[0].en, log: log.slice(0, 12) }));
 console.log(`Nouveautés de la version ${version} : ${log[0].fr.length} lignes.`);

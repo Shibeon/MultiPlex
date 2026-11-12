@@ -1,7 +1,8 @@
 import { QUALITIES, randomId, streamsOf, type Metadata, type Stream } from '@multiplex/core';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { t } from '../i18n';
-import { native } from '../native';
+import { native, type NativeMeta } from '../native';
+import { resumeAfter } from './Person';
 import { back, go, route } from '../router';
 import { withCommunityMarkers } from '../markers';
 import { update } from '../settings';
@@ -24,6 +25,7 @@ const streamLabel = (s: Stream) => s.extendedDisplayTitle ?? s.displayTitle ?? s
  * la logique : pistes au démarrage, progression remontée au serveur, saut
  * automatique d'intro, enchaînement des épisodes, changement de qualité.
  */
+const castOf = (it: Metadata) => (it.Role ?? []).slice(0, 40).map((r) => ({ key: r.tagKey, name: r.tag, role: r.role, thumb: r.thumb }));
 const markersOf = (it: Metadata) => (it.Marker ?? []).filter((m) => m.type === 'intro' || m.type === 'credits').map((m) => ({ type: m.type, start: m.startTimeOffset / 1000, end: m.endTimeOffset / 1000 }));
 
 export function NativePlayer({ id }: { id: string }) {
@@ -34,6 +36,8 @@ export function NativePlayer({ id }: { id: string }) {
   const itemRef = useRef<Metadata | null>(null);
   const nextRef = useRef<Metadata | null>(null);
   const prevRef = useRef<Metadata | null>(null);
+  /** Distribution de la série, pour un épisode qui n'en a pas en propre. */
+  const castRef = useRef<NonNullable<NativeMeta['cast']>>([]);
   const session = useRef(randomId());
   const skipped = useRef(new Set<number>());
   /** Session de conversion en cours côté serveur, à arrêter quand on la quitte. */
@@ -87,6 +91,7 @@ export function NativePlayer({ id }: { id: string }) {
         passthrough: settings.value.passthrough,
         audioDevice: settings.value.audioDevice || undefined,
         matchRefresh: settings.value.matchRefresh,
+        seekPreview: settings.value.seekPreview,
       });
     } else {
       // Qualité limitée : le serveur convertit, avec la piste audio et les sous-titres choisis.
@@ -113,6 +118,8 @@ export function NativePlayer({ id }: { id: string }) {
       subLabels: original ? subs.ordered.map(streamLabel) : [],
       hasNext: !!nextRef.current,
       hasPrev: !!prevRef.current,
+      cast: castRef.current.length ? castRef.current : castOf(it),
+      xray: settings.value.xray,
       quality: quality.current,
       qualities: QUALITIES.map((q) => ({ id: q.id, label: q.label })),
     });
@@ -160,6 +167,12 @@ export function NativePlayer({ id }: { id: string }) {
         stopTranscode();
         invalidate(`${srv.id}:`);
         if (data.eof && nextRef.current && settings.value.autoNext) playNext();
+        // Fiche d'une personne demandée depuis la distribution affichée à la pause.
+        else if (typeof data.goto === 'string' && /^\/person\/[0-9a-f]+$/i.test(data.goto)) {
+          const it = itemRef.current;
+          if (it) resumeAfter.value = { key: it.ratingKey, title: labels(it).title };
+          go(data.goto, true);
+        }
         else back();
       } else if (type === 'error') setError(String(data.message ?? t('player.error')));
     });
@@ -177,6 +190,18 @@ export function NativePlayer({ id }: { id: string }) {
           setItem(full);
           native!.setMeta({ markers: markersOf(full) });
         });
+        castRef.current = [];
+        if (it.type === 'episode' && !it.Role?.length && it.grandparentRatingKey) {
+          // Un épisode n'a souvent pas de distribution à lui : on prend celle de la série.
+          void srv.metadata(it.grandparentRatingKey).then(
+            (show) => {
+              if (!alive || itemRef.current?.ratingKey !== it.ratingKey) return;
+              castRef.current = castOf(show);
+              native!.setMeta({ cast: castRef.current });
+            },
+            () => {},
+          );
+        }
         const t0 = route.value.query.get('t');
         await launch(t0 !== null ? Number(t0) || 0 : (it.viewOffset ?? 0) / 1000);
         if (!alive) return;

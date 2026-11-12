@@ -1,5 +1,5 @@
-import { techBadges, type Hub, type Metadata } from '@multiplex/core';
-import type { ComponentChildren } from 'preact';
+import { imdbIdOf, ratingBadges, techBadges, type Hub, type Metadata } from '@multiplex/core';
+import type { ComponentChildren, JSX } from 'preact';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { t } from './i18n';
 import { cardWidth } from './settings';
@@ -23,6 +23,7 @@ const ICONS: Record<string, string> = {
   check: 'M9 16.2l-3.5-3.6L4 14l5 5 11-11-1.5-1.4z',
   next: 'M5 4l10 8-10 8zm11 0h3v16h-3z',
   prev: 'M19 4L9 12l10 8zM5 4h3v16H5z',
+  tv: 'M3 5h18a1 1 0 011 1v11a1 1 0 01-1 1h-6l1.5 2.5h-9L9 18H3a1 1 0 01-1-1V6a1 1 0 011-1zm1 2v9h16V7z',
   lock: 'M7 10V7a5 5 0 0110 0v3h1a1 1 0 011 1v9a1 1 0 01-1 1H6a1 1 0 01-1-1v-9a1 1 0 011-1zm2 0h6V7a3 3 0 00-6 0z',
   full: 'M4 4h6v2H6v4H4zm10 0h6v6h-2V6h-4zM4 14h2v4h4v2H4zm14 0h2v6h-6v-2h4z',
   up: 'M12 7l7 7-1.5 1.5L12 10l-5.5 5.5L5 14z',
@@ -37,6 +38,141 @@ export function Icon({ name, size = 22 }: { name: string; size?: number }) {
     <svg class="icon" width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
       <path fill="currentColor" fill-rule="evenodd" d={ICONS[name] ?? ICONS.movie} />
     </svg>
+  );
+}
+
+/**
+ * Bulle au-dessus de la barre de lecture : l'heure visée et, quand on en a une, l'image
+ * à cet endroit. `thumb` va chercher l'image d'une position (secondes).
+ */
+export function SeekPreview({ duration, thumb, children }: { duration: number; thumb?: (time: number) => Promise<string | null> | undefined; children: ComponentChildren }) {
+  const [at, setAt] = useState<{ x: number; time: number } | null>(null);
+  const [image, setImage] = useState('');
+  const timer = useRef(0);
+  const asked = useRef(-1);
+  useEffect(() => () => clearTimeout(timer.current), []);
+
+  const move = (e: MouseEvent) => {
+    const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    if (!duration || !box.width) return;
+    const ratio = Math.min(1, Math.max(0, (e.clientX - box.left) / box.width));
+    const time = ratio * duration;
+    // La bulle reste dans la barre, même près des bords.
+    setAt({ x: Math.min(box.width - 84, Math.max(84, ratio * box.width)), time });
+    if (!thumb) return;
+    clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => {
+      asked.current = time;
+      void thumb(time)?.then((src) => src && asked.current === time && setImage(src));
+    }, 70);
+  };
+  const clock = (sec: number) => {
+    const s = Math.floor(sec);
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    return `${h ? `${h}:${String(m).padStart(2, '0')}` : m}:${String(s % 60).padStart(2, '0')}`;
+  };
+  return (
+    <div class="seek-track" onMouseMove={move} onMouseLeave={() => (setAt(null), clearTimeout(timer.current))}>
+      {children}
+      {at && (
+        <div class="seek-preview" style={{ left: `${at.x}px` }}>
+          {image && <img src={image} alt="" />}
+          <span>{clock(at.time)}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Pictogrammes des notes : dessins maison, pas les logos des services. */
+const RATING_ART: Record<string, JSX.Element> = {
+  // Tomate fraîche / éclaboussure.
+  'rt-critic-1': (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="13.5" r="8.5" fill="#fa320a" />
+      <path d="M12 6.5c-1.5-2.2-3.7-2.6-5.4-2 1.4.6 2.3 1.6 2.6 2.6-1.3-.5-2.9-.2-3.9.8 1.7.1 3.3.7 4.4 1.6 1.4-.8 3.2-.8 4.6 0 1.1-.9 2.7-1.5 4.4-1.6-1-1-2.6-1.3-3.9-.8.3-1 1.2-2 2.6-2.6-1.7-.6-3.9-.2-5.4 2z" fill="#00912d" />
+    </svg>
+  ),
+  'rt-critic-0': (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 3.5l1.6 3.3 3.2-2-.4 3.8 3.8.2-2.6 2.8 3 2.3-3.7 1 1.2 3.6-3.6-1.2-1 3.7-2.3-3-2.8 2.6-.2-3.8-3.8.4 2-3.2-3.3-1.6 3.5-1.5-1.6-3.4 3.8.6.3-3.8z" fill="#0ac855" />
+    </svg>
+  ),
+  // Pop-corn debout / renversé.
+  'rt-audience-1': (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="8" cy="7.5" r="3.3" fill="#ffd700" />
+      <circle cx="12" cy="6" r="3.6" fill="#ffe14d" />
+      <circle cx="16" cy="7.5" r="3.3" fill="#ffd700" />
+      <path d="M5.5 9.5h13l-1.6 12h-9.8z" fill="#fa320a" />
+      <path d="M9.2 9.5l.7 12h1.6l-.4-12zm3.7 0l-.4 12h1.6l.7-12z" fill="#fff" />
+    </svg>
+  ),
+  'rt-audience-0': (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <g transform="rotate(-70 12 13)">
+        <path d="M5.5 9.5h13l-1.6 12h-9.8z" fill="#0ac855" />
+        <path d="M9.2 9.5l.7 12h1.6l-.4-12zm3.7 0l-.4 12h1.6l.7-12z" fill="#fff" />
+      </g>
+      <circle cx="18.5" cy="17.5" r="2.4" fill="#ffd700" />
+      <circle cx="20.5" cy="13" r="2" fill="#ffe14d" />
+    </svg>
+  ),
+};
+
+/** Les notes d'un titre : IMDb, Rotten Tomatoes (critiques et public), TMDB. */
+export function Ratings({ item }: { item: Metadata }) {
+  const badges = ratingBadges(item);
+  if (!badges.length && !imdbIdOf(item)) return null;
+  const names: Record<string, string> = { imdb: 'IMDb', 'rt-critic': 'Rotten Tomatoes — critiques', 'rt-audience': 'Rotten Tomatoes — public', tmdb: 'TMDB', other: 'Note' };
+  return (
+    <span class="ratings">
+      {badges.map((b) => (
+        <span key={b.source} class={`rating rating-${b.source}`} title={names[b.source]}>
+          {b.source === 'imdb' ? <i class="rating-word">IMDb</i> : b.source === 'tmdb' ? <i class="rating-word">TMDB</i> : b.source === 'other' ? <i class="rating-word">★</i> : RATING_ART[`${b.source}-${b.fresh ? 1 : 0}`]}
+          <b>{b.text}</b>
+          <span class="sr-only">{names[b.source]}</span>
+        </span>
+      ))}
+      {/* Letterboxd ne publie pas ses notes : on mène à la fiche du film, où elle se lit. */}
+      {item.type === 'movie' && imdbIdOf(item) && (
+        <a class="rating rating-lb" href={`https://letterboxd.com/imdb/${imdbIdOf(item)}/`} target="_blank" rel="noreferrer" title="Letterboxd">
+          <i class="rating-word">Letterboxd</i>
+          <Icon name="next" size={10} />
+        </a>
+      )}
+    </span>
+  );
+}
+
+/** Note personnelle : cinq étoiles, par demi-étoile (clic sur la moitié gauche ou droite). */
+export function StarRating({ value, onRate, disabled }: { value: number | undefined; onRate: (rating: number | null) => void; disabled?: boolean }) {
+  const [hover, setHover] = useState<number | null>(null);
+  const shown = hover ?? value ?? 0;
+  return (
+    <span class="stars" role="group" aria-label={t('item.myRating')} onMouseLeave={() => setHover(null)}>
+      {[1, 2, 3, 4, 5].map((n) => {
+        const fill = shown >= n * 2 ? 100 : shown >= n * 2 - 1 ? 50 : 0;
+        const pick = (e: MouseEvent) => (e.offsetX < (e.currentTarget as HTMLElement).offsetWidth / 2 ? n * 2 - 1 : n * 2);
+        return (
+          <button
+            key={n}
+            class="star"
+            disabled={disabled}
+            aria-label={`${n} / 5`}
+            aria-pressed={(value ?? 0) >= n * 2 - 1}
+            style={{ '--fill': `${fill}%` }}
+            onMouseMove={(e) => setHover(pick(e))}
+            onClick={(e) => {
+              // Au clavier (pas de position de souris) : l'étoile entière. Recliquer la même note la retire.
+              const r = e.detail === 0 ? n * 2 : pick(e);
+              onRate(r === value ? null : r);
+            }}
+          />
+        );
+      })}
+    </span>
   );
 }
 

@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { formatClock, t } from '../i18n';
 import { native, type NativeMeta } from '../native';
 import { settings } from '../settings';
-import { Icon } from '../ui';
+import { warmUp, whoIsOnScreen, xrayAvailable } from '../xray';
+import { Icon, SeekPreview } from '../ui';
 
 type Menu = null | 'audio' | 'sub' | 'speed' | 'chapter' | 'quality' | 'output';
 
@@ -154,6 +155,52 @@ export function NativeOverlay() {
     return () => removeEventListener('keydown', onKey);
   }, [menu, volume, meta.hasNext]);
 
+  // Ce que mpv envoie réellement à la sortie audio : son brut (l'ampli décode) ou son décodé.
+  const out = (s['audio-out-params'] ?? null) as { format?: string; 'hr-channels'?: string; 'channel-count'?: number } | null;
+  const RAW: Record<string, string> = { 'spdif-ac3': 'Dolby Digital', 'spdif-eac3': 'Dolby Digital Plus', 'spdif-truehd': 'Dolby TrueHD', 'spdif-dts': 'DTS', 'spdif-dtshd': 'DTS-HD' };
+  const outLabel = !out?.format ? '' : out.format.startsWith('spdif') ? `${t('native.audioRaw')} · ${RAW[out.format] ?? out.format.slice(6).toUpperCase()}` : `${t('native.audioDecoded')} · ${{ stereo: '2.0', mono: '1.0' }[out['hr-channels'] ?? ''] ?? out['hr-channels'] ?? `${out['channel-count'] ?? '?'} ch`}`;
+
+  // À la pause : qui est à l'écran ? L'analyse attend que la pause soit installée, et s'efface à la reprise.
+  const [xray, setXray] = useState<{ at: number; state: 'working' | 'done' | 'failed'; faces: number; onScreen: number[] } | null>(null);
+  const pausedAt = paused ? Math.round(time) : -1;
+  useEffect(() => {
+    setXray(null);
+    if (pausedAt < 0 || !meta.xray || !xrayAvailable || !meta.cast?.length) return;
+    let alive = true;
+    const cast = meta.cast;
+    const timer = setTimeout(() => {
+      setXray({ at: pausedAt, state: 'working', faces: 0, onScreen: [] });
+      whoIsOnScreen(cast, () => alive).then(
+        (r) => alive && r && setXray({ at: pausedAt, state: 'done', ...r }),
+        (e: unknown) => {
+          // Trace pour le diagnostic : l'interface, elle, retombe sur la distribution complète.
+          console.warn('[xray]', e);
+          (window as unknown as { xrayError?: string }).xrayError = String((e as Error)?.stack ?? e);
+          if (alive) setXray({ at: pausedAt, state: 'failed', faces: 0, onScreen: [] });
+        },
+      );
+    }, 500);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [pausedAt, meta.xray, meta.cast]);
+  // Préparation en tâche de fond, quelques secondes après le début de la lecture.
+  useEffect(() => {
+    if (!meta.xray || !xrayAvailable || !meta.cast?.length) return;
+    let alive = true;
+    const cast = meta.cast;
+    const timer = setTimeout(() => void warmUp(cast, () => alive).catch(() => {}), 6000);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [meta.xray, meta.cast]);
+  // Les personnes reconnues d'abord, puis le reste de la distribution.
+  const seen = new Set(xray?.onScreen ?? []);
+  const castShown = [...(xray?.onScreen ?? []), ...(meta.cast ?? []).map((_, i) => i).filter((i) => !seen.has(i))].slice(0, Math.max(14, seen.size));
+  const xrayNote = !meta.xray || !xrayAvailable ? t('xray.note') : !xray || xray.state === 'working' ? t('xray.working') : xray.state === 'failed' ? t('xray.failed') : seen.size ? t('xray.found').replace('{n}', String(seen.size)) : xray.faces ? t('xray.unknown') : t('xray.nobody');
+
   const marker = (meta.markers ?? []).find((m) => time >= m.start && time < m.end - 1);
   const trackLabel = (list: Track[], labels: string[] | undefined, x: Track, i: number) =>
     // Les libellés du serveur, plus parlants, quand le compte de pistes concorde.
@@ -229,13 +276,38 @@ export function NativeOverlay() {
           <strong>{meta.title}</strong>
           <span>{meta.sub}</span>
         </div>
-        <span class="chip">{meta.quality && meta.quality !== 'original' ? t('native.chipConverted') : t('native.chip')}</span>
+        <span class="chips">
+          {outLabel && (
+            <span class={`chip${out?.format?.startsWith('spdif') ? ' raw' : ''}`} data-audio-out={out?.format}>
+              {outLabel}
+            </span>
+          )}
+          <span class="chip">{meta.quality && meta.quality !== 'original' ? t('native.chipConverted') : t('native.chip')}</span>
+        </span>
       </div>
+
+      {/* À la pause : qui joue dans ce film. Un clic quitte la lecture (position gardée) pour la fiche de la personne. */}
+      {paused && !menu && !!meta.cast?.length && (
+        <div class="pause-cast">
+          <h3 data-xray={xray?.state ?? 'off'}>
+            {seen.size ? t('xray.onScreen') : t('item.cast')} <small>{xrayNote}</small>
+          </h3>
+          <div class="pause-cast-row">
+            {castShown.map((i) => [meta.cast![i], i] as const).map(([c, i]) => (
+              <button key={`${c.name}${i}`} class={`pause-cast-card${seen.has(i) ? ' on-screen' : ''}`} disabled={!c.key} onClick={() => c.key && n.action(`person:${c.key}`)}>
+                <span class="cast-face">{c.thumb ? <img referrerpolicy="no-referrer" src={c.thumb} alt="" /> : <b>{c.name.slice(0, 1)}</b>}</span>
+                <strong>{c.name}</strong>
+                {c.role && <small>{c.role}</small>}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div class="player-bottom">
         <div class="seek">
           <span>{formatClock(shownTime)}</span>
-          <div class="seek-track">
+          <SeekPreview duration={duration} thumb={n.thumb ? (time) => n.thumb!(time) : undefined}>
             <input
               type="range"
               aria-label="Position"
@@ -255,7 +327,7 @@ export function NativeOverlay() {
               (meta.markers ?? []).map((m) => (
                 <span key={m.type + m.start} class={`seek-mark ${m.type}`} data-label={m.type === 'intro' ? 'Intro' : t('player.credits')} style={{ left: `${(m.start / duration) * 100}%`, width: `${(Math.max(0, m.end - m.start) / duration) * 100}%` }} />
               ))}
-          </div>
+          </SeekPreview>
           <span>-{formatClock(Math.max(0, duration - shownTime))}</span>
         </div>
         <div class="controls">

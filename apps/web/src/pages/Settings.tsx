@@ -2,11 +2,12 @@ import { QUALITIES } from '@multiplex/core';
 import type { ComponentChildren } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
 import { t } from '../i18n';
-import { DEFAULTS, THEMES, load, sanitize, settings, update, type Settings } from '../settings';
+import { DEFAULTS, THEMES, load, sanitize, setCouch, settings, update, type Settings } from '../settings';
 import { native, nativeAvailable } from '../native';
 import { auth, home, logout, server, switchServer } from '../store';
 import { Icon } from '../ui';
 import { UpdateSettings, canUpdate } from './Update';
+import { ShareToggle } from './Activity';
 import type { KnownHub } from './Browse';
 
 function Row({ label, children }: { label: string; children: ComponentChildren }) {
@@ -164,6 +165,9 @@ export function SettingsPage() {
             )}
           </span>
         </Row>
+        <Row label={t('couch.setting')}>
+          <input type="checkbox" checked={s.couch} onChange={(e) => setCouch(e.currentTarget.checked)} />
+        </Row>
         <Range k="cardSize" label={t('set.cardSize')} min={100} max={260} step={10} unit=" px" />
         <Range k="radius" label={t('set.radius')} min={0} max={24} unit=" px" />
         <Range k="uiScale" label={t('set.uiScale')} min={80} max={160} step={5} unit=" %" />
@@ -203,6 +207,9 @@ export function SettingsPage() {
         <Toggle k="autoNext" label={t('set.autoNext')} />
         {!!native?.segments && <Toggle k="communityMarkers" label={t('set.communityMarkers')} />}
         {!!native?.segments && <p class="muted">{t('set.communityMarkersHelp')}</p>}
+        {!!native?.thumb && s.nativePlayer && <Toggle k="seekPreview" label={t('set.seekPreview')} />}
+        {!!native?.xray && s.nativePlayer && <Toggle k="xray" label={t('set.xray')} />}
+        {!!native?.xray && s.nativePlayer && s.xray && <p class="muted">{t('set.xrayHelp')}</p>}
         <Toggle k="autoSkipIntro" label={t('set.autoSkipIntro')} />
         <Toggle k="autoSkipCredits" label={t('set.autoSkipCredits')} />
         <Range k="seekStep" label={t('set.seekStep')} min={5} max={60} step={5} unit=" s" />
@@ -258,6 +265,7 @@ export function SettingsPage() {
           {auth.value && ' · '}
           {t('set.server')} : {server.value?.name}
         </p>
+        <ShareToggle />
         {home.value.length > 1 && <Toggle k="askProfile" label={t('home.ask')} />}
         <div class="actions">
           {home.value.length > 1 && (

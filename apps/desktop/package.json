@@ -1,12 +1,12 @@
 {
   "name": "@multiplex/desktop",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": true,
   "description": "Coque de bureau MultiPlex (Windows, macOS, Linux)",
   "main": "main.cjs",
   "scripts": {
     "start": "electron .",
-    "typecheck": "node --check main.cjs && node --check mpv.cjs && node --check updater.cjs && node --check preload.cjs && node --check display.cjs",
+    "typecheck": "node --check main.cjs && node --check mpv.cjs && node --check updater.cjs && node --check preload.cjs && node --check display.cjs && node --check thumbs.cjs",
     "dist": "electron-builder"
   },
   "devDependencies": {
@@ -29,6 +29,7 @@
       "updater.cjs",
       "preload.cjs",
       "display.cjs",
+      "thumbs.cjs",
       "display-mode.ps1",
       "mpv-input.conf",
       "package.json",
@@ -38,6 +39,15 @@
       {
         "from": "../web/dist",
         "to": "web"
+      },
+      {
+        "from": "../web/node_modules/@vladmandic/face-api/model",
+        "to": "xray",
+        "filter": [
+          "ssd_mobilenetv1_model*",
+          "face_landmark_68_model*",
+          "face_recognition_model*"
+        ]
       },
       {
         "from": "vendor/mpv",
