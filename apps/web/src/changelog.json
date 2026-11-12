@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.1.10",
+    "fr": [
+      "Barre du haut : elle tient toujours à l’écran. En mode TV ou avec Windows à 150–200 %, les réglages et le profil ne sortent plus à droite, et la barre ne recouvre plus le bouton Retour.",
+      "Télécommande : on ne reste plus bloqué sur une liste déroulante (le thème, dans les réglages) ; les flèches passent à l’élément suivant et OK ouvre la liste. Même chose pour le champ « CSS personnalisé »."
+    ],
+    "en": [
+      "Top bar: it always fits on screen. In TV mode or with Windows at 150–200%, settings and profile no longer fall off the right edge, and the bar no longer covers the Back button.",
+      "Remote control: you no longer get stuck on a drop-down list (the theme, in settings); arrows move to the next item and OK opens the list. Same for the “Custom CSS” field."
+    ]
+  },
+  {
     "version": "0.1.9",
     "fr": [
       "Lecteur en mode TV : les commandes s’adaptent à la taille de l’écran, même quand Windows agrandit l’affichage (150 %, 200 %…). Plus de titre sur deux lignes ni d’éléments qui se chevauchent.",
