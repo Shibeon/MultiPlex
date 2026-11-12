@@ -17,6 +17,7 @@ import {
   videoCodecString,
   pickConnection,
   planPlayback,
+  request,
   rankConnections,
   srtToVtt,
   techBadges,
@@ -68,6 +69,19 @@ describe('connexions', () => {
       globalThis.fetch = real;
     }
     expect(seen).toEqual(['https://local/identity?X-Plex-Token=a%20b']);
+  });
+
+  it("un délai dépassé donne un message lisible, sans le jeton", async () => {
+    const real = globalThis.fetch;
+    globalThis.fetch = ((_url: string, init: RequestInit) =>
+      new Promise((_, reject) => init.signal?.addEventListener('abort', () => reject(init.signal!.reason)))) as typeof fetch;
+    try {
+      await expect(request('https://srv:32400/video/:/transcode/universal/decision?X-Plex-Token=secret', { timeout: 20 })).rejects.toThrow(
+        "Le serveur n'a pas répondu en 0 s (/video/:/transcode/universal/decision)",
+      );
+    } finally {
+      globalThis.fetch = real;
+    }
   });
 
   it('renvoie null si rien ne répond', async () => {

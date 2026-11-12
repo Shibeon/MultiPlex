@@ -25,6 +25,22 @@ function canDecodeHevc(): boolean {
   }
 }
 
+/** Par où passe la vidéo : réseau local, Internet, ou relais Plex (limité à quelques Mbps). */
+function connectionLabel(uri: string | undefined): string {
+  if (!uri) return '?';
+  try {
+    const u = new URL(uri);
+    const ip = /^(\d+)-(\d+)-\d+-\d+\./.exec(u.hostname);
+    const a = ip ? Number(ip[1]) : NaN;
+    const b = ip ? Number(ip[2]) : NaN;
+    const local = /^(localhost|127\.|10\.|192\.168\.)/.test(u.hostname) || a === 10 || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31);
+    if (local) return 'réseau local';
+    return u.port === '8443' ? 'relais Plex (débit limité)' : 'Internet';
+  } catch {
+    return '?';
+  }
+}
+
 const versionLabel = (m: Media) =>
   [m.videoResolution && (/^\d+$/.test(m.videoResolution) ? `${m.videoResolution}p` : m.videoResolution.toUpperCase()), m.videoCodec?.toUpperCase(), m.bitrate && `${(m.bitrate / 1000).toFixed(1)} Mbps`, m.container?.toUpperCase()]
     .filter(Boolean)
@@ -135,7 +151,20 @@ export function Player({ id }: { id: string }) {
       const HlsLib = p.mode === 'hls' ? (await import('hls.js')).default : null;
       if (mine !== gen.current) return;
       if (HlsLib?.isSupported()) {
-        const h = new HlsLib({ startPosition: at, maxBufferLength: 30 });
+        // Réglages pour les gros fichiers (4K d'origine copiée, 50 à 100 Mbps) : par défaut, hls.js
+        // plafonne l'avance à 60 Mo (6 s à 80 Mbps, d'où des arrêts) et garde tout ce qui a été lu,
+        // jusqu'à saturer la mémoire que Chrome accorde à la vidéo. Le serveur, lui, peut mettre plus
+        // de 10 s à préparer le début d'un très gros fichier : on l'attend au lieu de recommencer.
+        const h = new HlsLib({
+          startPosition: at,
+          maxBufferLength: 40,
+          maxMaxBufferLength: 90,
+          maxBufferSize: 120 * 1000 * 1000,
+          backBufferLength: 20,
+          startFragPrefetch: true,
+          manifestLoadingTimeOut: 30_000,
+          fragLoadingTimeOut: 40_000,
+        });
         hls.current = h;
         h.on(HlsLib.Events.SUBTITLE_TRACKS_UPDATED, () => {
           h.subtitleDisplay = p.subtitle === 'segmented';
@@ -336,6 +365,7 @@ export function Player({ id }: { id: string }) {
       `Écran : ${hdrScreen ? 'HDR' : 'SDR'}${hdr && !hdrScreen ? (pl.video === 'transcode' ? ' — HDR converti par le serveur' : ' — HDR adapté par le navigateur (image sombre ? voir Réglages → Lecture, ou l’application de bureau)') : ''}`,
       q ? `Images perdues : ${q.droppedVideoFrames} / ${q.totalVideoFrames}` : '',
       `Tampon : ${ahead.toFixed(1)} s · vitesse ×${el.playbackRate}`,
+      `Connexion : ${connectionLabel((srv as { uri?: string }).uri)}${hls.current?.bandwidthEstimate ? ` · débit mesuré ${(hls.current.bandwidthEstimate / 1e6).toFixed(0)} Mbps` : ''}`,
     ].filter(Boolean);
   };
   useEffect(() => {

@@ -39,8 +39,8 @@ export class PlexServer implements MediaServer {
     return `${this.uri}${path}${path.includes('?') ? '&' : '?'}${q}`;
   }
 
-  private async mc<T>(path: string, params?: Params): Promise<T> {
-    const j = await getJson<{ MediaContainer: T }>(this.url(path, params));
+  private async mc<T>(path: string, params?: Params, timeout?: number): Promise<T> {
+    const j = await getJson<{ MediaContainer: T }>(this.url(path, params), { timeout });
     return j.MediaContainer;
   }
 
@@ -115,7 +115,9 @@ export class PlexServer implements MediaServer {
       // Des sous-titres externes sont chargés à part par le lecteur : inutile de les demander au serveur.
       const asked = d.subtitle === 'sidecar' ? { ...opts, subtitleStreamId: undefined } : opts;
       const params = transcodeParams(item, asked, session, this.client, hevc, legacy);
-      const res = await this.mc<Raw>('/video/:/transcode/universal/decision', params);
+      // Sur un gros fichier (sous-titres intégrés à extraire, session précédente encore en
+      // cours d'arrêt), le serveur peut mettre bien plus de 15 s à décider : on l'attend.
+      const res = await this.mc<Raw>('/video/:/transcode/universal/decision', params, 60_000);
       if ((res.generalDecisionCode ?? 1000) >= 2000) {
         throw new Error(res.generalDecisionText || 'Le serveur ne peut pas convertir cet élément');
       }
