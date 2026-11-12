@@ -104,10 +104,30 @@ export function initNav(): void {
       back();
       return;
     }
+    // Liste déroulante fermée : OK l'ouvre (les flèches, elles, passent à l'élément voisin).
+    if (tag === 'SELECT' && e.key === 'Enter') {
+      try {
+        (el as HTMLSelectElement).showPicker();
+        e.preventDefault();
+      } catch {
+        /* navigateur sans showPicker : comportement par défaut */
+      }
+      return;
+    }
     const dir = DIRS[e.key];
     if (!dir) return;
-    // On laisse au champ ses propres flèches : curseur du texte, valeur d'un curseur ou d'une liste.
-    if (tag === 'TEXTAREA' || tag === 'SELECT') return;
+    // On laisse au champ ses propres flèches : curseur du texte, valeur d'un curseur.
+    // Pas pour une liste déroulante fermée : haut / bas y changeaient la valeur, si bien qu'à la
+    // télécommande on restait bloqué sur la première liste d'une page (le thème, dans les réglages),
+    // en le modifiant à chaque appui. On la quitte donc comme n'importe quel bouton ; OK l'ouvre,
+    // et une fois ouverte, ce sont ses propres flèches qui choisissent.
+    // Zone de texte : les flèches déplacent le curseur, sauf haut sur la première ligne et bas sur
+    // la dernière, qui en sortent (sans quoi on y restait enfermé à la télécommande).
+    if (tag === 'TEXTAREA') {
+      const t = el as HTMLTextAreaElement;
+      const leaves = (dir[1] < 0 && !t.value.slice(0, t.selectionStart).includes('\n')) || (dir[1] > 0 && !t.value.slice(t.selectionEnd).includes('\n'));
+      if (!leaves) return;
+    }
     if (typing && dir[0]) return;
     if (tag === 'INPUT' && (el as HTMLInputElement).type === 'range' && dir[0]) return;
     if (moveFocus(dir[0], dir[1])) e.preventDefault();
