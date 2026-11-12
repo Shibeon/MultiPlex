@@ -6,6 +6,7 @@ import { DEFAULTS, THEMES, load, sanitize, settings, update, type Settings } fro
 import { nativeAvailable } from '../native';
 import { auth, logout, server, switchServer } from '../store';
 import { Icon } from '../ui';
+import { UpdateSettings, canUpdate } from './Update';
 import type { KnownHub } from './Browse';
 
 function Row({ label, children }: { label: string; children: ComponentChildren }) {
@@ -203,6 +204,14 @@ export function SettingsPage() {
           </p>
         )}
       </section>
+
+      {canUpdate && (
+        <section>
+          <h2>{t('upd.title')}</h2>
+          <UpdateSettings />
+          <Toggle k="autoUpdate" label={t('upd.auto')} />
+        </section>
+      )}
 
       <section>
         <h2>{t('set.account')}</h2>

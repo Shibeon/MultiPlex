@@ -26,4 +26,13 @@ contextBridge.exposeInMainWorld('multiplexNative', {
   onMeta: subscribe('overlay:meta', ([meta]) => [meta]),
   /** Fenêtre de contrôles : retour, plein écran, épisode suivant. */
   action: (name) => ipcRenderer.send('overlay:action', String(name)),
+
+  // --- Mise à jour de l'application ---
+  updates: {
+    state: () => ipcRenderer.invoke('update:state'),
+    check: () => ipcRenderer.invoke('update:check'),
+    download: () => ipcRenderer.invoke('update:download'),
+    install: () => ipcRenderer.invoke('update:install'),
+    on: subscribe('update:event', ([state]) => [state]),
+  },
 });

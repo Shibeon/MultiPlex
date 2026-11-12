@@ -85,7 +85,26 @@ L'interface ne dépend que du contrat `MediaServer` : ajouter un autre backend r
 
 Les paquets TV et mobiles embarquent exactement le même build web : navigation à la télécommande, touches Retour et touches multimédia y sont déjà gérées.
 
-Une fois le dépôt poussé sur GitHub, `.github/workflows/build.yml` compile à chaque envoi le site, les dossiers TV, les applications Windows / macOS / Linux et l'APK Android, et les publie comme artefacts.
+Une fois le dépôt poussé sur GitHub, `.github/workflows/build.yml` lance les tests à chaque envoi ; les applications Windows / macOS / Linux et l’APK Android sont compilés sur une étiquette de version ou à la demande.
+
+## Mises à jour automatiques
+
+L'application de bureau vérifie au démarrage, puis toutes les six heures, si une version plus récente a été publiée sur GitHub. Elle l'annonce par un bandeau ; rien n'est téléchargé ni installé sans accord (« Mettre à jour », puis « Redémarrer »). La vérification peut être désactivée dans Réglages → Mises à jour.
+
+Publier une version :
+
+1. Monter le numéro de version dans `apps/desktop/package.json`.
+2. Poser l'étiquette correspondante et l'envoyer : `git tag v0.2.0 && git push origin v0.2.0`.
+3. Le workflow compile les applications Windows, macOS et Linux et les publie comme version GitHub, avec le fichier que lit la mise à jour automatique.
+
+Les versions doivent être lisibles sans authentification : une application installée ne peut pas interroger un dépôt privé. Deux possibilités :
+
+- rendre ce dépôt public ;
+- ou garder le code privé et publier les versions dans un dépôt public à part, en définissant la variable `RELEASES_REPO` (« proprietaire/depot ») et le secret `RELEASES_TOKEN` dans les réglages du dépôt.
+
+L'application installée lit l'adresse des versions dans le fichier `app-update.yml` que la compilation y dépose : une compilation locale sans cette configuration ne propose simplement aucune mise à jour.
+
+Limites : l'installeur Windows n'est pas signé (Windows affiche un avertissement à l'installation) ; sur macOS, la mise à jour automatique exige une application signée ; la version portable, l'APK Android et les paquets TV ne se mettent pas à jour seuls.
 
 ## Feuille de route
 

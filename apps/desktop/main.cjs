@@ -4,6 +4,7 @@ const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { MpvPlayer } = require('./mpv.cjs');
+const { setupUpdater } = require('./updater.cjs');
 
 // Empaquetée, l'app embarque le build web dans ses ressources.
 const INDEX = app.isPackaged
@@ -23,7 +24,7 @@ if (HIDDEN) app.commandLine.appendSwitch('disable-features', 'CalculateNativeWin
 
 // Les tests automatiques passent l'app en mode démo : ils travaillent dans un profil
 // temporaire à part, pour ne jamais toucher à la session ni aux réglages de l'utilisateur.
-if (arg('smoke') || arg('smoke-native')) app.setPath('userData', path.join(app.getPath('temp'), 'multiplex-smoke-profile'));
+if (arg('smoke') || arg('smoke-native') || process.argv.includes('--smoke-update')) app.setPath('userData', path.join(app.getPath('temp'), 'multiplex-smoke-profile'));
 
 /** Fenêtre principale, lecteur natif et fenêtre de contrôles superposée. */
 let main = null;
@@ -223,6 +224,38 @@ function createWindow() {
     });
   }
 
+  // Test de la mise à jour : `--smoke-update --smoke-out=rapport.json` simule une version
+  // disponible et suit le bandeau de l'interface jusqu'à « Redémarrer ».
+  if (process.argv.includes('--smoke-update')) {
+    let loads = 0;
+    const js = (code) => win.webContents.executeJavaScript(code);
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const banner = () => js("(() => { const b = document.querySelector('.update-banner'); return b ? { text: b.querySelector('span').textContent.trim(), buttons: [...b.querySelectorAll('.btn')].map((x) => x.textContent.trim()) } : null; })()");
+    win.webContents.on('did-finish-load', async () => {
+      if (++loads === 1) return void (await js("localStorage.setItem('mp.demo','true'); location.reload()"));
+      const report = {};
+      try {
+        await wait(3500);
+        report.available = await banner();
+        await js("document.querySelector('.update-banner .btn.primary')?.click()");
+        await wait(400);
+        report.downloading = await banner();
+        await wait(1500);
+        report.ready = await banner();
+        await js("location.hash = '#/settings'");
+        await wait(800);
+        report.settingsRow = await js("[...document.querySelectorAll('.set-row')].map((r) => r.textContent.trim()).find((x) => /Version/.test(x))");
+        await js("document.querySelector('.update-banner .btn.primary')?.click()");
+        await wait(500);
+        report.afterInstall = await banner();
+      } catch (e) {
+        report.error = String(e);
+      }
+      fs.writeFileSync(arg('smoke-out'), JSON.stringify(report, null, 2));
+      app.exit(report.error ? 3 : 0);
+    });
+  }
+
   // Test du lecteur natif : `--smoke-native=rapport.json` passe en mode démo, lance
   // une lecture par l'interface, pilote les contrôles superposés comme un utilisateur,
   // puis écrit ce que mpv a réellement fait. Avec `--smoke-hidden`, rien n'apparaît à l'écran.
@@ -302,6 +335,10 @@ function createWindow() {
 
 app.whenReady().then(() => {
   createWindow();
+  // Mise à jour automatique (inactive pendant les tests, sauf simulation demandée).
+  if (process.argv.includes('--smoke-update')) setupUpdater((state) => sendTo(main, 'update:event', state), { simulate: true });
+  else if (!arg('smoke') && !arg('smoke-native') && !arg('smoke-eval')) setupUpdater((state) => sendTo(main, 'update:event', state));
+  else setupUpdater(() => {}, {});
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });

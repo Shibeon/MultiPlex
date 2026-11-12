@@ -58,6 +58,8 @@ export interface Settings {
   hdrServerOnSdr: boolean;
   /** Application de bureau : lire avec le lecteur natif (mpv) plutôt qu'avec celui du navigateur. */
   nativePlayer: boolean;
+  /** Application de bureau : signaler les nouvelles versions. */
+  autoUpdate: boolean;
   /** Lecteur natif : transmettre l'audio brut (Dolby, DTS, Atmos) à un ampli. */
   passthrough: boolean;
 }
@@ -91,6 +93,7 @@ export const DEFAULTS: Settings = {
   seekStep: 10,
   hdrServerOnSdr: false,
   nativePlayer: true,
+  autoUpdate: true,
   passthrough: false,
 };
 

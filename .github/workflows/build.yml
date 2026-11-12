@@ -1,13 +1,31 @@
 name: build
 
+# À chaque envoi : vérification des types, tests et paquets web / TV.
+# Sur une étiquette `v1.2.3`, ou à la demande (onglet Actions → « Run workflow ») :
+# compilation des applications Windows, macOS, Linux et de l'APK Android. Ces
+# compilations ne tournent pas à chaque envoi : sur un dépôt privé, les minutes
+# de calcul sont comptées, et celles de macOS coûtent dix fois plus cher.
+# Sur une étiquette, les applications de bureau sont en plus publiées comme
+# version GitHub, que l'application installée propose en mise à jour.
+#
+# Où les versions sont publiées :
+#   - par défaut, dans ce dépôt (qui doit alors être public pour que les
+#     applications installées puissent les lire) ;
+#   - ou dans un dépôt public à part, en définissant la variable RELEASES_REPO
+#     (« proprietaire/depot ») et le secret RELEASES_TOKEN (jeton pouvant y écrire).
+
 on:
   push:
     branches: [main]
     tags: ['v*']
   pull_request:
+  workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
+
+env:
+  RELEASES_REPO: ${{ vars.RELEASES_REPO || github.repository }}
 
 jobs:
   web:
@@ -34,6 +52,7 @@ jobs:
 
   desktop:
     needs: web
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:
@@ -47,9 +66,35 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm desktop:dist
+      - run: pnpm fetch:mpv
+      - run: pnpm build
+
+      - name: Vérifier que l'étiquette correspond à la version de l'application
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          version=$(node -p "require('./apps/desktop/package.json').version")
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "L'étiquette $GITHUB_REF_NAME ne correspond pas à la version $version de apps/desktop/package.json" >&2
+            exit 1
+          fi
+
+      # Hors étiquette : simple compilation. Sur une étiquette : publication de la version,
+      # avec le fichier « latest » que lit la mise à jour automatique.
+      - name: Compiler l'application
+        shell: bash
+        working-directory: apps/desktop
+        run: |
+          owner="${RELEASES_REPO%%/*}"
+          repo="${RELEASES_REPO##*/}"
+          publish=never
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then publish=always; fi
+          pnpm exec electron-builder --publish "$publish" \
+            -c.publish.provider=github -c.publish.owner="$owner" -c.publish.repo="$repo" -c.publish.releaseType=release
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN || github.token }}
+
       - uses: actions/upload-artifact@v4
         with:
           name: desktop-${{ matrix.os }}
@@ -61,6 +106,7 @@ jobs:
 
   android:
     needs: web
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

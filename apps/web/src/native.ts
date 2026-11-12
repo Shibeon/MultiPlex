@@ -37,7 +37,26 @@ export interface NativeMeta {
 export type NativeCommand = 'toggle' | 'pause' | 'seek' | 'seekBy' | 'volume' | 'mute' | 'speed' | 'aid' | 'sid' | 'stats' | 'key';
 export type NativeEvent = 'state' | 'ended' | 'error' | 'next' | 'quality';
 
+/** État de la mise à jour de l'application de bureau. */
+export interface UpdateState {
+  status: 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'none' | 'error';
+  /** Version installée. */
+  current: string;
+  /** Version proposée. */
+  version?: string;
+  percent?: number;
+  message?: string;
+}
+
 export interface NativeApi {
+  /** Mise à jour automatique ; absent des versions de l'app qui ne la connaissent pas. */
+  updates?: {
+    state(): Promise<UpdateState>;
+    check(): Promise<unknown>;
+    download(): Promise<unknown>;
+    install(): Promise<unknown>;
+    on(listener: (state: UpdateState) => void): () => void;
+  };
   available(): Promise<boolean>;
   play(opts: NativePlayOptions): Promise<unknown>;
   stop(): Promise<void>;

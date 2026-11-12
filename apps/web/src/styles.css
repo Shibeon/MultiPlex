@@ -555,3 +555,10 @@ video::cue { font-family: inherit; }
   animation: fx-apparition 9s ease-in-out infinite;
 }
 @keyframes fx-apparition { 50% { transform: translate(-50%, calc(-50% - 14px)); } }
+
+/* ---------- mise à jour de l'application ---------- */
+.update-banner { position: fixed; left: 50%; bottom: 1.4rem; z-index: 30; transform: translateX(-50%); display: flex; align-items: center; flex-wrap: wrap; gap: 0.7rem; max-width: min(42rem, calc(100vw - 2rem)); padding: 0.6rem 0.7rem 0.6rem 1.2rem; border-radius: 99px; background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5), inset 0 0 0 1px color-mix(in srgb, var(--text) 12%, transparent); animation: update-in 0.4s cubic-bezier(0.2, 1.2, 0.4, 1); }
+.update-banner .progress { position: static; flex: 1 1 8rem; height: 5px; border-radius: 99px; overflow: hidden; background: var(--surface-2); }
+@keyframes update-in { from { transform: translate(-50%, 150%); } }
+.reduce-motion .update-banner { animation: none; }
+@media (max-width: 760px) { .update-banner { bottom: 5.5rem; border-radius: 18px; } }
