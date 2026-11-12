@@ -39,8 +39,8 @@ export interface NativeMeta {
   qualities?: { id: string; label: string }[];
 }
 
-export type NativeCommand = 'toggle' | 'pause' | 'seek' | 'seekBy' | 'volume' | 'mute' | 'speed' | 'aid' | 'sid' | 'stats' | 'key';
-export type NativeEvent = 'state' | 'ended' | 'error' | 'next' | 'prev' | 'quality' | 'notice';
+export type NativeCommand = 'toggle' | 'pause' | 'seek' | 'seekBy' | 'volume' | 'mute' | 'speed' | 'aid' | 'sid' | 'stats' | 'key' | 'audioDevice';
+export type NativeEvent = 'state' | 'ended' | 'error' | 'next' | 'prev' | 'quality' | 'notice' | 'audioDevice';
 
 /** État de la mise à jour de l'application de bureau. */
 export interface UpdateState {

@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.1.3",
+    "fr": [
+      "Lecteur natif : choix de la sortie audio pendant la lecture (casque, écran, ampli), sans interrompre la vidéo."
+    ],
+    "en": [
+      "Native player: choose the audio output during playback (headphones, monitor, receiver) without interrupting the video."
+    ]
+  },
+  {
     "version": "0.1.2",
     "fr": [
       "Activité des amis ouverte à tous : ce que vos amis Plex ont regardé récemment, avec un réglage pour ne pas partager ce que vous regardez.",
@@ -24,12 +33,22 @@
   },
   {
     "version": "0.1.1",
-    "fr": ["Versions macOS et Linux.", "Mise à jour automatique vérifiée de bout en bout."],
-    "en": ["macOS and Linux builds.", "Auto-update verified end to end."]
+    "fr": [
+      "Versions macOS et Linux.",
+      "Mise à jour automatique vérifiée de bout en bout."
+    ],
+    "en": [
+      "macOS and Linux builds.",
+      "Auto-update verified end to end."
+    ]
   },
   {
     "version": "0.1.0",
-    "fr": ["Première version : lecteur natif, thèmes, liste de suivi, mise à jour automatique."],
-    "en": ["First release: native player, themes, watchlist, auto-update."]
+    "fr": [
+      "Première version : lecteur natif, thèmes, liste de suivi, mise à jour automatique."
+    ],
+    "en": [
+      "First release: native player, themes, watchlist, auto-update."
+    ]
   }
 ]

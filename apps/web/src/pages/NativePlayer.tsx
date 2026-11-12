@@ -4,6 +4,7 @@ import { t } from '../i18n';
 import { native } from '../native';
 import { back, go, route } from '../router';
 import { withCommunityMarkers } from '../markers';
+import { update } from '../settings';
 import { settings } from '../settings';
 import { invalidate, server } from '../store';
 import { Spinner, labels } from '../ui';
@@ -144,6 +145,9 @@ export function NativePlayer({ id }: { id: string }) {
         playNext();
       } else if (type === 'prev') {
         if (prevRef.current) go(`/play/${prevRef.current.ratingKey}?t=0`, true);
+      } else if (type === 'audioDevice') {
+        // Sortie audio changée depuis les contrôles : on la garde pour la suite.
+        update({ audioDevice: String(data.id ?? '') });
       } else if (type === 'quality') {
         // Changement de qualité depuis les contrôles : on reprend au même endroit.
         const wanted = String(data.id ?? '');

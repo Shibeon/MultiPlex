@@ -4,7 +4,7 @@ import { native, type NativeMeta } from '../native';
 import { settings } from '../settings';
 import { Icon } from '../ui';
 
-type Menu = null | 'audio' | 'sub' | 'speed' | 'chapter' | 'quality';
+type Menu = null | 'audio' | 'sub' | 'speed' | 'chapter' | 'quality' | 'output';
 
 interface Track {
   id: number;
@@ -41,6 +41,14 @@ export function NativeOverlay() {
   const stalls = useRef<number[]>([]);
   const [slow, setSlow] = useState(false);
   const second = useRef(-1);
+  /** Sorties audio de la machine, relues à chaque ouverture du menu (casque branché entre-temps…). */
+  const [outputs, setOutputs] = useState<{ id: string; label: string }[]>([]);
+  useEffect(() => {
+    if (menu !== null && menu !== 'output') return;
+    n.audioDevices?.()
+      .then(setOutputs)
+      .catch(() => {});
+  }, [menu === 'output']);
 
   useEffect(() => {
     n.overlayInit().then(({ meta: m, state }) => {
@@ -161,7 +169,9 @@ export function NativeOverlay() {
           ]
         : menu === 'speed'
           ? SPEEDS.map((v) => ({ key: `v${v}`, label: v === 1 ? 'Normale' : `×${v}`, on: Math.abs(v - speed) < 0.01, run: () => void n.command('speed', v) }))
-          : menu === 'quality'
+          : menu === 'output'
+            ? [{ id: '', label: t('set.audioAuto') }, ...outputs].map((d) => ({ key: `o${d.id}`, label: d.label, on: (d.id || 'auto') === String(s['audio-device'] ?? 'auto'), run: () => void n.command('audioDevice', d.id) }))
+            : menu === 'quality'
             ? (meta.qualities ?? []).map((q) => ({ key: `q${q.id}`, label: q.label, on: q.id === (meta.quality ?? 'original'), run: () => n.action(`quality:${q.id}`) }))
             : menu === 'chapter'
             ? chapters.map((c, i) => ({
@@ -278,6 +288,7 @@ export function NativeOverlay() {
           {chapters.length > 1 && menuButton('chapter', t('player.chapters'))}
           {audio.length > 1 && menuButton('audio', t('player.audio'))}
           {subs.length > 0 && menuButton('sub', t('player.subs'))}
+          {outputs.length > 0 && menuButton('output', t('player.output'))}
           {!!meta.qualities?.length && menuButton('quality', meta.quality && meta.quality !== 'original' ? (meta.qualities.find((q) => q.id === meta.quality)?.label.split(' · ')[0] ?? t('player.quality')) : t('player.quality'))}
           {menuButton('speed', speed !== 1 ? `×${speed}` : t('player.speed'))}
           <button class="btn icon-btn" aria-label={t('player.stats')} title={t('player.stats')} onClick={() => void n.command('stats')}>

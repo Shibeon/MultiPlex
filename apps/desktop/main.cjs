@@ -205,7 +205,17 @@ ipcMain.handle('mpv:stop', () => {
   matcher?.release();
   return player?.stop();
 });
-ipcMain.handle('mpv:command', (_e, name, value) => player?.command(String(name), value));
+ipcMain.handle('mpv:command', async (_e, name, value) => {
+  if (name === 'audioDevice') {
+    // Changement de sortie audio en cours de lecture : une sortie connue, ou celle du système.
+    const id = value ? await knownAudioDevice(value) : 'auto';
+    if (!id || !player) return undefined;
+    // La page principale retient ce choix pour les lectures suivantes.
+    sendTo(main, 'mpv:event', 'audioDevice', { id: id === 'auto' ? '' : id });
+    return player.send(['set_property', 'audio-device', id]);
+  }
+  return player?.command(String(name), value);
+});
 ipcMain.handle('mpv:info', () => player?.info());
 
 // --- Fenêtre de contrôles ---
@@ -438,6 +448,13 @@ function createWindow() {
         await ui("[...document.querySelectorAll('.player-menu button')].find((b) => b.textContent.includes('720p'))?.click()");
         await wait(7000);
         report.afterQuality = { time: (await player.info())?.['time-pos'], overlay: !!overlay, chip: overlay ? await ui("document.querySelector('.chip')?.textContent") : null, label: overlay ? await ui("document.querySelector('.controls .btn[data-menu=\"quality\"]')?.textContent") : null };
+        // Sortie audio, par le menu.
+        await click('.controls .btn[data-menu="output"]');
+        await wait(400);
+        report.outputMenu = await ui("[...document.querySelectorAll('.player-menu button')].map((b) => b.textContent.trim())");
+        await ui("[...document.querySelectorAll('.player-menu button')][1]?.click()");
+        await wait(1500);
+        report.output = { device: player.state['audio-device'], ao: await player.send(['get_property', 'current-ao']), time: (await player.info())?.['time-pos'], saved: await js("JSON.parse(localStorage.getItem('mp.settings') || '{}').audioDevice") };
         // Muet, par le bouton.
         await click('.controls .btn[data-act="mute"]');
         await wait(500);
