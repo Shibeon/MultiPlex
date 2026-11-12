@@ -5,8 +5,10 @@ name: build
 # compilation des applications Windows, macOS, Linux et de l'APK Android. Ces
 # compilations ne tournent pas à chaque envoi : sur un dépôt privé, les minutes
 # de calcul sont comptées, et celles de macOS coûtent dix fois plus cher.
-# Sur une étiquette, les applications de bureau sont en plus publiées comme
-# version GitHub, que l'application installée propose en mise à jour.
+# Sur une étiquette, ou à la demande avec la case « Publier la version » cochée,
+# les applications de bureau sont en plus publiées comme version GitHub, que
+# l'application installée propose en mise à jour ; l'étiquette `v…` est alors
+# créée ici si elle manque (utile quand on ne peut pas l'envoyer soi-même).
 #
 # Les versions sont publiées dans un dépôt public à part, pour que le code puisse
 # rester privé : son adresse est dans apps/desktop/package.json (build.publish).
@@ -18,6 +20,11 @@ on:
     tags: ['v*']
   pull_request:
   workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publier la version (celle de apps/desktop/package.json) pour la mise à jour automatique"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -53,6 +60,8 @@ jobs:
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
+    env:
+      PUBLISH: ${{ startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish) }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -75,7 +84,7 @@ jobs:
           fi
 
       - name: Vérifier que le jeton de publication est défini
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: env.PUBLISH == 'true'
         shell: bash
         run: |
           if [ -z "$GH_TOKEN" ]; then
@@ -92,7 +101,7 @@ jobs:
         working-directory: apps/desktop
         run: |
           publish=never
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then publish=always; fi
+          if [[ "$PUBLISH" == true ]]; then publish=always; fi
           # Les nouveautés de la version accompagnent la publication (affichées par l'app installée).
           node ../../scripts/release-notes.mjs
           pnpm exec electron-builder --publish "$publish" -c.releaseInfo.releaseNotesFile=release-notes.txt
@@ -108,6 +117,24 @@ jobs:
             apps/desktop/release/*.dmg
             apps/desktop/release/*.AppImage
             apps/desktop/release/*.deb
+
+  # Publication lancée à la main : l'étiquette de la version est posée sur le commit publié.
+  # (Une étiquette envoyée par ce jeton ne relance pas le build.)
+  tag:
+    needs: desktop
+    if: github.event_name == 'workflow_dispatch' && inputs.publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Poser l'étiquette de la version
+        run: |
+          tag="v$(node -p "require('./apps/desktop/package.json').version")"
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
+            echo "L'étiquette $tag existe déjà."
+          else
+            git tag "$tag" "$GITHUB_SHA"
+            git push origin "$tag"
+          fi
 
   android:
     needs: web
