@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { formatClock, t } from '../i18n';
 import { native, type NativeMeta } from '../native';
 import { moveFocus } from '../nav';
-import { settings } from '../settings';
+import { setCouch, settings } from '../settings';
 import { cancelXray, runXray, xrayAvailable } from '../xray';
-import { Icon, SeekPreview } from '../ui';
+import { CouchBanner, Icon, SeekPreview } from '../ui';
 
 type Menu = null | 'audio' | 'sub' | 'speed' | 'chapter' | 'quality' | 'output';
 
@@ -34,6 +34,9 @@ const clockOf = (d: Date) => d.toLocaleTimeString([], { hour: '2-digit', minute:
  * posée par-dessus la vidéo de mpv : elle ne lit rien elle-même, elle reflète
  * l'état de mpv et lui envoie des ordres.
  */
+/** L'envoi vers un téléviseur existe dans cette version de l'application. */
+const castAvailable = !!native?.cast;
+
 export function NativeOverlay() {
   const n = native!;
   const [meta, setMeta] = useState<NativeMeta>({});
@@ -237,8 +240,12 @@ export function NativeOverlay() {
   }, [meta.xray, meta.cast]);
   // Les personnes reconnues d'abord, puis le reste de la distribution.
   const seen = new Set(xray?.onScreen ?? []);
-  const castShown = [...(xray?.onScreen ?? []), ...(meta.cast ?? []).map((_, i) => i).filter((i) => !seen.has(i))].slice(0, Math.max(14, seen.size));
-  const xrayNote = !meta.xray || !xrayAvailable ? t('xray.note') : !xray || xray.state === 'working' ? t('xray.working') : xray.state === 'failed' ? t('xray.failed') : seen.size ? t('xray.found').replace('{n}', String(seen.size)) : xray.faces ? t('xray.unknown') : t('xray.nobody');
+  // Reconnaissance active : elle travaille sans rien afficher, puis seules les personnes
+  // reconnues à l'écran apparaissent. Sans elle : la distribution, comme avant.
+  const xrayOn = !!meta.xray && xrayAvailable;
+  const castShown = xrayOn ? [...seen] : (meta.cast ?? []).map((_, i) => i).slice(0, 14);
+  const showCast = xrayOn ? xray?.state === 'done' && seen.size > 0 : true;
+  const xrayNote = t('xray.note');
 
   const marker = (meta.markers ?? []).find((m) => time >= m.start && time < m.end - 1);
   const trackLabel = (list: Track[], labels: string[] | undefined, x: Track, i: number) =>
@@ -278,6 +285,7 @@ export function NativeOverlay() {
   return (
     <div
       class={`player overlay${shown ? ' show-ui' : ''}${couch ? ' couch-player' : ''}`}
+      data-couch={couch ? 'on' : 'off'}
       onMouseMove={wake}
       onClick={(e) => {
         // Clic sur l'image elle-même : pause ; sur un menu ouvert : on le referme.
@@ -332,10 +340,10 @@ export function NativeOverlay() {
       </div>
 
       {/* À la pause : qui joue dans ce film. Un clic quitte la lecture (position gardée) pour la fiche de la personne. */}
-      {paused && !menu && !!meta.cast?.length && (
-        <div class="pause-cast">
+      {paused && !menu && !!meta.cast?.length && showCast && (
+        <div class={`pause-cast${xrayOn ? ' found' : ''}`}>
           <h3 data-xray={xray?.state ?? 'off'}>
-            {seen.size ? t('xray.onScreen') : t('item.cast')} <small>{xrayNote}</small>
+            {xrayOn ? t('xray.onScreen') : t('item.cast')} {!xrayOn && <small>{xrayNote}</small>}
           </h3>
           <div class="pause-cast-row">
             {castShown.map((i) => [meta.cast![i], i] as const).map(([c, i]) => (
@@ -346,6 +354,20 @@ export function NativeOverlay() {
               </button>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Regarder ensemble : qui est là, et ce que les autres viennent de faire. */}
+      {meta.together && (
+        <div class="player-together">
+          <span class="pill">
+            <Icon name="together" size={16} /> {meta.together.names.length ? meta.together.names.join(', ') : t('tog.alone')}
+          </span>
+          {meta.together.notice && meta.together.at && Date.now() - meta.together.at < 4000 && (
+            <span class="pill notice" key={meta.together.at}>
+              {meta.together.notice}
+            </span>
+          )}
         </div>
       )}
 
@@ -421,6 +443,14 @@ export function NativeOverlay() {
           <button class="btn icon-btn" aria-label={t('player.stats')} title={t('player.stats')} onClick={() => void n.command('stats')}>
             <Icon name="info" />
           </button>
+          {castAvailable && (
+            <button class="btn icon-btn" data-act="cast" aria-label={t('cast.title')} title={t('cast.title')} onClick={() => n.action('cast')}>
+              <Icon name="cast" />
+            </button>
+          )}
+          <button class="btn icon-btn" data-act="couch" aria-label={t('couch.title')} title={`${t('couch.title')} (F10)`} aria-pressed={couch} onClick={() => setCouch(!couch)}>
+            <Icon name="tv" />
+          </button>
           <button class="btn icon-btn" aria-label={t('player.fullscreen')} onClick={() => n.action('fullscreen')}>
             <Icon name="full" />
           </button>
@@ -444,6 +474,7 @@ export function NativeOverlay() {
           </div>
         )}
       </div>
+      <CouchBanner />
     </div>
   );
 }

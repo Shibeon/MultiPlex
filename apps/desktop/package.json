@@ -1,12 +1,12 @@
 {
   "name": "@multiplex/desktop",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "private": true,
   "description": "Coque de bureau MultiPlex (Windows, macOS, Linux)",
   "main": "main.cjs",
   "scripts": {
     "start": "electron .",
-    "typecheck": "node --check main.cjs && node --check mpv.cjs && node --check updater.cjs && node --check preload.cjs && node --check display.cjs && node --check thumbs.cjs",
+    "typecheck": "node --check main.cjs && node --check mpv.cjs && node --check updater.cjs && node --check preload.cjs && node --check display.cjs && node --check thumbs.cjs && node --check offline.cjs && node --check cast.cjs",
     "dist": "electron-builder"
   },
   "devDependencies": {
@@ -30,6 +30,8 @@
       "preload.cjs",
       "display.cjs",
       "thumbs.cjs",
+      "offline.cjs",
+      "cast.cjs",
       "display-mode.ps1",
       "mpv-input.conf",
       "package.json",

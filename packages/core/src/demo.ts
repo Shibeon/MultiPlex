@@ -252,6 +252,23 @@ export class DemoServer implements MediaServer {
     return this.db.get(ratingKey)?.type === 'movie' ? ratingKey : undefined;
   }
 
+  async related(ratingKey: string, lang = 'fr'): Promise<Hub[]> {
+    const m = this.db.get(ratingKey);
+    if (!m) return [];
+    const same = [...this.db.values()].filter((x) => x.type === m.type && x.ratingKey !== ratingKey).slice(0, 12);
+    if (!same.length) return [];
+    const title = m.type === 'show' ? (lang === 'en' ? 'Related shows' : 'Séries associées') : lang === 'en' ? 'Related movies' : 'Films associés';
+    return [{ title, hubIdentifier: `${m.type}.similar`, type: m.type, size: same.length, Metadata: same } as Hub];
+  }
+
+  async continueWatching(): Promise<Metadata[]> {
+    return [...this.db.values()].filter((m) => !!m.viewOffset);
+  }
+
+  async forDevice(url: string): Promise<string> {
+    return url;
+  }
+
   async removeFromContinueWatching(ratingKey: string): Promise<void> {
     const m = this.db.get(ratingKey);
     if (m) m.viewOffset = undefined;

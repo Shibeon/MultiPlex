@@ -292,8 +292,17 @@ export interface MediaServer {
   rate(ratingKey: string, rating: number | null): Promise<void>;
   /** Bande-annonce d'un film ou d'une série (ratingKey du clip), s'il y en a une. */
   trailer(ratingKey: string): Promise<string | undefined>;
+  /** Titres de « Continuer à regarder », tels que le serveur les propose. */
+  continueWatching(): Promise<Metadata[]>;
+  /** Rangées « associés » d'un film ou d'une série (similaires, plus avec tel acteur…), titrées dans la langue demandée. */
+  related(ratingKey: string, lang?: string): Promise<Hub[]>;
   /** Retire un titre de « Continuer à regarder » sans toucher à son état vu / non vu. */
   removeFromContinueWatching(ratingKey: string): Promise<void>;
+  /**
+   * Adresse à confier à un autre appareil (téléviseur) : le jeton du compte y est remplacé par
+   * un jeton temporaire délivré par le serveur, valable seulement pour lui.
+   */
+  forDevice(url: string): Promise<string>;
   /** Listes de lecture vidéo de l'utilisateur (hors listes intelligentes). */
   playlists(): Promise<Metadata[]>;
   playlistItems(playlistId: string): Promise<Metadata[]>;

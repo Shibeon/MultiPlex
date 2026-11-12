@@ -11,6 +11,10 @@ import { enqueue, resolvePlayable, upNext, clearQueue } from './queue';
 import { go } from './router';
 import { discover, invalidate, server, useData } from './store';
 import { Icon, isWatched, labels } from './ui';
+import { canDownload as downloadable, startDownload } from './downloads';
+import { canKeepOffline, keepOffline, offlineEntry } from './offline';
+import { openCast } from './cast';
+import { canCast } from './castui';
 
 interface MenuTarget {
   kind: 'item' | 'discover';
@@ -56,12 +60,6 @@ async function copy(text: string): Promise<void> {
 /** Lien public vers la fiche d'un titre dans le catalogue Plex (ouvrable sans MultiPlex). */
 function shareLink(did: string): string {
   return `https://app.plex.tv/desktop/#!/provider/tv.plex.provider.discover/details?key=${encodeURIComponent(`/library/metadata/${did}`)}`;
-}
-
-function fileName(m: Metadata): string {
-  const part = m.Media?.[0]?.Part?.[0];
-  const base = part?.file?.split(/[\\/]/).pop();
-  return base || `${labels(m).title}.${part?.container ?? m.Media?.[0]?.container ?? 'mkv'}`;
 }
 
 function Entry({ icon, label, onClick, disabled, children }: { icon?: string; label: string; onClick?: () => void; disabled?: boolean; children?: ComponentChildren }) {
@@ -134,6 +132,9 @@ function Menu({ at }: { at: MenuTarget }) {
   const onList = at.kind === 'discover' ? online.data?.watchlisted : listed.data;
   const canTrailer = at.kind === 'item' && !!m && ['movie', 'show'].includes(m.type);
   const trailer = useData(canTrailer ? `${srv.id}:trailer:${at.id}` : null, () => srv.trailer(at.id).catch(() => undefined));
+  // « Retirer de Continuer à regarder » seulement si le titre y est vraiment (la liste est rechargée après chaque action).
+  const resumable = useData(at.kind === 'item' ? `${srv.id}:continue` : null, () => srv.continueWatching().catch(() => []));
+  const inContinue = !!resumable.data?.some((x) => x.ratingKey === at.id);
 
   const close = () => (target.value = null);
   const done = (text: string, action?: { label: string; run: () => void }) => {
@@ -193,8 +194,7 @@ function Menu({ at }: { at: MenuTarget }) {
   const playable = !!m && ['movie', 'episode', 'show', 'season'].includes(m.type);
   const watched = !!m && isWatched(m);
   const partly = !!m && (m.leafCount !== undefined ? (m.viewedLeafCount ?? 0) > 0 : !!m.viewCount);
-  const part = m?.Media?.[0]?.Part?.[0];
-  const canDownload = !!native?.download && !!part?.key && (m?.type === 'movie' || m?.type === 'episode');
+  const canDownload = downloadable(m);
 
   const queue = async (front: boolean) => {
     close();
@@ -242,6 +242,16 @@ function Menu({ at }: { at: MenuTarget }) {
           <Entry icon="queue" label={t('menu.addQueue')} onClick={() => void queue(false)} />
         </>
       )}
+      {at.kind === 'item' && playable && canCast(m) && (
+        <Entry
+          icon="cast"
+          label={t('menu.cast')}
+          onClick={() => {
+            close();
+            openCast(m!, (m!.viewOffset ?? 0) / 1000);
+          }}
+        />
+      )}
       {canTrailer && trailer.data !== null && (
         <Entry
           icon="movie"
@@ -270,15 +280,38 @@ function Menu({ at }: { at: MenuTarget }) {
           <div class="menu-sep" />
           {!watched && <Entry icon="check" label={t('menu.watched')} onClick={() => run(() => srv.scrobble(at.id, true), t('menu.markedWatched'))} />}
           {partly && <Entry icon="eye" label={t('menu.unwatched')} onClick={() => run(() => srv.scrobble(at.id, false), t('menu.markedUnwatched'))} />}
-          {(at.fromContinue || !!m?.viewOffset) && <Entry icon="close" label={t('menu.removeContinue')} onClick={() => run(() => srv.removeFromContinueWatching(at.id), t('menu.removedContinue'))} />}
+          {inContinue && <Entry icon="close" label={t('menu.removeContinue')} onClick={() => run(() => srv.removeFromContinueWatching(at.id), t('menu.removedContinue'))} />}
+          {canKeepOffline(m) && at.kind === 'item' && (() => {
+            const kept = m!.type === 'movie' || m!.type === 'episode' ? offlineEntry(srv.id, m!.ratingKey) : undefined;
+            return kept?.state === 'ready' ? (
+              <Entry icon="check" label={t('off.available')} onClick={() => (close(), go('/offline'))} />
+            ) : (
+              <Entry
+                icon="download"
+                label={kept?.state === 'downloading' ? t('off.inProgress') : m!.type === 'season' ? t('off.keepSeason') : m!.type === 'show' ? t('off.keepShow') : t('off.keep')}
+                disabled={kept?.state === 'downloading'}
+                onClick={() => {
+                  close();
+                  say(t('off.adding'));
+                  void keepOffline(srv, m!).then(
+                    (c) => say(c.failed && !c.added ? t('menu.failed') : t('off.added').replace('{n}', String(c.added + c.already)), { label: t('nav.offline'), run: () => go('/offline') }),
+                    () => say(t('menu.failed')),
+                  );
+                }}
+              />
+            );
+          })()}
           {canDownload && (
             <Entry
               icon="download"
               label={t('menu.download')}
               onClick={() => {
-                const req = srv.fileRequest(part!.key);
                 close();
-                void native!.download!(req.url, req.headers, fileName(m!)).then((ok) => !ok && say(t('menu.failed')));
+                say(t('dl.choose'));
+                void startDownload(srv, m!).then(
+                  (ok) => !ok && say(t('menu.failed')),
+                  () => say(t('menu.failed')),
+                );
               }}
             />
           )}
@@ -391,8 +424,7 @@ export function ItemMenuHost() {
     };
     addEventListener('contextmenu', open);
     const off = native?.onDownload?.((ev) => {
-      if (ev.state === 'started') say(t('menu.downloading').replace('{name}', ev.name));
-      else if (ev.state === 'completed') say(t('menu.downloaded').replace('{name}', ev.name), ev.path ? { label: t('menu.showFile'), run: () => native!.showFile?.(ev.path!) } : undefined);
+      if (ev.state === 'completed') say(t('menu.downloaded').replace('{name}', ev.name), ev.path ? { label: t('menu.showFile'), run: () => native!.showFile?.(ev.path!) } : undefined);
       else if (ev.state === 'interrupted') say(t('menu.downloadFailed'));
     });
     return () => {

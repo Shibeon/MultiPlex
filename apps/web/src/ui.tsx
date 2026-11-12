@@ -3,7 +3,7 @@ import type { ComponentChildren, JSX } from 'preact';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { t } from './i18n';
 import { openItemMenu } from './menu';
-import { cardWidth } from './settings';
+import { cardWidth, settings } from './settings';
 import { server } from './store';
 
 const ICONS: Record<string, string> = {
@@ -24,6 +24,9 @@ const ICONS: Record<string, string> = {
   check: 'M9 16.2l-3.5-3.6L4 14l5 5 11-11-1.5-1.4z',
   next: 'M5 4l10 8-10 8zm11 0h3v16h-3z',
   prev: 'M19 4L9 12l10 8zM5 4h3v16H5z',
+  cast: 'M3 4h18a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-7v-2h6V6H4v3H2V5a1 1 0 0 1 1-1zM2 11a9 9 0 0 1 9 9H9a7 7 0 0 0-7-7zm0 4a5 5 0 0 1 5 5H5a3 3 0 0 0-3-3zm0 4a1 1 0 0 1 1 1H2z',
+  history: 'M13 3a9 9 0 1 1-8.5 12h2.1A7 7 0 1 0 6 9.3L8.5 12H2V5.5l2.6 2.6A9 9 0 0 1 13 3zm-1 5h2v4.6l3.4 2-1 1.7L12 13.7z',
+  together: 'M8 4a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7zm8.5 1a3 3 0 1 1 0 6 3 3 0 0 1 0-6zM8 12.5c3.6 0 6 1.9 6 4.5v2H2v-2c0-2.6 2.4-4.5 6-4.5zm8.5.5c2.9 0 5.5 1.5 5.5 4v2h-6v-2c0-1.5-.6-2.9-1.7-3.9.7-.1 1.4-.1 2.2-.1z',
   tv: 'M3 5h18a1 1 0 011 1v11a1 1 0 01-1 1h-6l1.5 2.5h-9L9 18H3a1 1 0 01-1-1V6a1 1 0 011-1zm1 2v9h16V7z',
   lock: 'M7 10V7a5 5 0 0110 0v3h1a1 1 0 011 1v9a1 1 0 01-1 1H6a1 1 0 01-1-1v-9a1 1 0 011-1zm2 0h6V7a3 3 0 00-6 0z',
   full: 'M4 4h6v2H6v4H4zm10 0h6v6h-2V6h-4zM4 14h2v4h4v2H4zm14 0h2v6h-6v-2h4z',
@@ -400,6 +403,32 @@ export function VirtualGrid({ total, minWidth, extra, gap = 16, onRange, render 
       <div class="vgrid" style={{ transform: `translateY(${v.first * rowH}px)`, gridTemplateColumns: `repeat(${v.cols}, 1fr)`, gap: `${gap}px` }}>
         {cells}
       </div>
+    </div>
+  );
+}
+
+/** Annonce l'entrée dans le mode TV ou la sortie, quelques secondes, au centre de l'écran. */
+export function CouchBanner() {
+  const couch = settings.value.couch;
+  const [shown, setShown] = useState<boolean | null>(null);
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    setShown(couch);
+    const timer = window.setTimeout(() => setShown(null), 2600);
+    return () => clearTimeout(timer);
+  }, [couch]);
+  if (shown === null) return null;
+  return (
+    <div class={`couch-banner ${shown ? 'on' : 'off'}`} role="status" aria-live="polite" key={String(shown)}>
+      <span class="couch-banner-icon">
+        <Icon name="tv" size={34} />
+      </span>
+      <strong>{t(shown ? 'couch.on' : 'couch.off')}</strong>
+      <span class="couch-banner-hint">{t(shown ? 'couch.hintOn' : 'couch.hintOff')}</span>
     </div>
   );
 }

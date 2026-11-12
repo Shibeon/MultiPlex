@@ -1,3 +1,4 @@
+import { RelaySetting } from '../togetherui';
 import { QUALITIES } from '@multiplex/core';
 import type { ComponentChildren } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
@@ -174,6 +175,10 @@ export function SettingsPage() {
         <Toggle k="showTitles" label={t('set.showTitles')} />
         <Toggle k="backdrops" label={t('set.backdrops')} />
         <Toggle k="reduceMotion" label={t('set.reduceMotion')} />
+        <Toggle k="searchHistory" label={t('set.searchHistory')} />
+        <Row label={t('tog.relaySetting')}>
+          <RelaySetting />
+        </Row>
         <Row label={t('set.lang')}>
           <select value={s.lang} onChange={(e) => update({ lang: e.currentTarget.value as Settings['lang'] })}>
             <option value="fr">Français</option>

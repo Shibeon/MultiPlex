@@ -61,6 +61,7 @@ const routes: Record<string, (q: URLSearchParams) => unknown> = {
   '/:/scrobble': () => ({}),
   '/library/metadata/10/extras': () => ({ Metadata: [{ ratingKey: '91', type: 'clip', extraType: 5, title: 'Coulisses' }, { ratingKey: '92', type: 'clip', extraType: 1, subtype: 'trailer', title: 'Bande-annonce' }] }),
   '/actions/removeFromContinueWatching': () => ({}),
+  '/hubs/continueWatching': () => ({ Hub: [{ hubIdentifier: 'continueWatching', title: 'Continuer', type: 'mixed', Metadata: [movie] }] }),
   '/playlists': () => ({ Metadata: [{ ratingKey: '300', type: 'playlist', title: 'Soirée' }, { ratingKey: '301', type: 'playlist', title: 'Récents', smart: 1 }] }),
   '/playlists/300/items': () => ({ Metadata: [movie] }),
   '/:/unscrobble': () => ({}),
@@ -117,6 +118,7 @@ const yes = () => true;
 describe('PlexServer contre un faux PMS', () => {
   it('menu d’un titre : bande-annonce, continuer à regarder, listes de lecture', async () => {
     expect(await srv.trailer('10')).toBe('92');
+    expect((await srv.continueWatching()).map((m) => m.ratingKey)).toEqual(['10']);
     await srv.removeFromContinueWatching('10');
     expect([last().method, last().path, last().q.get('ratingKey')]).toEqual(['PUT', '/actions/removeFromContinueWatching', '10']);
     expect((await srv.playlists()).map((p) => p.title)).toEqual(['Soirée']);

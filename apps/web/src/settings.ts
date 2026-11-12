@@ -76,6 +76,10 @@ export interface Settings {
   couch: boolean;
   /** Lecteur natif : à la pause, reconnaître les acteurs présents à l'image (calcul local). */
   xray: boolean;
+  /** Garder les recherches récentes sur cet appareil. */
+  searchHistory: boolean;
+  /** Adresse du relais « Regarder ensemble » (hébergé soi-même, par exemple sur un NAS). */
+  togetherRelay: string;
 }
 
 export const DEFAULTS: Settings = {
@@ -116,6 +120,8 @@ export const DEFAULTS: Settings = {
   seekPreview: true,
   couch: false,
   xray: true,
+  searchHistory: true,
+  togetherRelay: '',
 };
 
 const KEY = 'mp.settings';
@@ -182,8 +188,33 @@ export function cardWidth(): number {
   return Math.round(settings.value.cardSize * (viewport.value.tv ? 0.72 : 1) * (settings.value.couch ? COUCH_SCALE : 1));
 }
 
+/**
+ * Passage animé d'une interface à l'autre : l'image actuelle se fige, le changement (taille du
+ * texte, plein écran) se fait derrière, puis la nouvelle interface arrive par un zoom fondu.
+ * Sans prise en charge (ou avec « réduire les animations »), le changement est immédiat.
+ */
+function couchTransition(on: boolean, apply: () => void): void {
+  const root = document.documentElement;
+  root.dataset.couchSwitch = on ? 'in' : 'out';
+  const start = (document as Document & { startViewTransition?(cb: () => Promise<void>): { finished: Promise<void> } }).startViewTransition;
+  if (!start || matchMedia('(prefers-reduced-motion: reduce)').matches || document.visibilityState !== 'visible') {
+    apply();
+    return;
+  }
+  const vt = start.call(document, async () => {
+    apply();
+    // Le temps que la fenêtre passe en plein écran (ou en sorte) sous l'image figée.
+    await new Promise((r) => setTimeout(r, 160));
+  });
+  void vt.finished.finally(() => delete root.dataset.couchSwitch);
+}
+
 /** Entre dans le mode TV ou en sort ; en y entrant, la fenêtre passe en plein écran. */
 export function setCouch(on: boolean): void {
+  couchTransition(on, () => applyCouch(on));
+}
+
+function applyCouch(on: boolean): void {
   update({ couch: on });
   const native = (window as unknown as { multiplexNative?: { setFullscreen?(on: boolean): void } }).multiplexNative;
   if (native?.setFullscreen) native.setFullscreen(on);
@@ -219,7 +250,10 @@ export function initSettings(): void {
     if (e.key !== KEY || !e.newValue || e.newValue === lastSaved) return;
     try {
       lastSaved = e.newValue;
-      settings.value = { ...settings.value, ...(JSON.parse(e.newValue) as Partial<Settings>) };
+      const next = { ...settings.value, ...(JSON.parse(e.newValue) as Partial<Settings>) };
+      // Mode TV basculé depuis l'autre fenêtre : même transition qu'ici.
+      if (next.couch !== settings.value.couch) couchTransition(next.couch, () => (settings.value = next));
+      else settings.value = next;
     } catch {
       /* valeur illisible : on garde la nôtre */
     }

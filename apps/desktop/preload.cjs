@@ -37,9 +37,30 @@ contextBridge.exposeInMainWorld('multiplexNative', {
   },
   /** Télécharge le fichier d'un titre (adresse du serveur, en-têtes Plex, nom proposé). */
   download: (url, headers, name) => ipcRenderer.invoke('file:download', String(url), headers, String(name ?? '')),
+  /** Bibliothèque hors ligne : les titres sont désignés par leur identifiant, jamais par un chemin. */
+  offline: {
+    info: () => ipcRenderer.invoke('offline:info'),
+    chooseDir: () => ipcRenderer.invoke('offline:chooseDir'),
+    add: (payload) => ipcRenderer.invoke('offline:add', payload),
+    remove: (id) => ipcRenderer.invoke('offline:remove', String(id)),
+    progress: (id, viewOffset, watched) => ipcRenderer.send('offline:progress', String(id), Number(viewOffset) || 0, !!watched),
+    synced: (ids) => ipcRenderer.send('offline:synced', ids),
+    play: (id, opts) => ipcRenderer.invoke('offline:play', String(id), opts),
+    onChanged: subscribe('offline:changed', () => []),
+  },
+  /** Annuler, suspendre ou reprendre un téléchargement en cours. */
+  downloadAction: (id, action) => ipcRenderer.send('file:downloadAction', Number(id), String(action)),
   /** Montre un fichier téléchargé dans l'explorateur. */
   showFile: (file) => ipcRenderer.send('file:show', String(file)),
   onDownload: subscribe('download:event', ([state]) => [state]),
+  /** Envoi vers un téléviseur (Google Cast) : appareils désignés par leur identifiant. */
+  cast: {
+    scan: () => ipcRenderer.invoke('cast:scan'),
+    start: (deviceId, media) => ipcRenderer.invoke('cast:start', String(deviceId), media),
+    control: (action, value) => ipcRenderer.send('cast:control', String(action), value),
+    stop: () => ipcRenderer.invoke('cast:stop'),
+    onStatus: subscribe('cast:status', ([s]) => [s]),
+  },
   /** Met la fenêtre principale en plein écran, ou l'en sort. */
   setFullscreen: (on) => ipcRenderer.send('window:fullscreen', !!on),
   /** Aperçu en image à une position (secondes) : adresse « data: » ou null. */

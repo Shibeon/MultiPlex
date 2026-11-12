@@ -13,6 +13,8 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        // Modules natifs de l'application, enregistrés avant le démarrage du pont.
+        registerPlugin(CastPlugin.class);
         super.onCreate(savedInstanceState);
         // Android 15+ affiche les applications bord à bord : on réserve la place
         // des barres système et des encoches pour que l'interface ne passe pas dessous.

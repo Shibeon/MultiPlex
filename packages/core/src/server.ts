@@ -217,6 +217,25 @@ export class PlexServer implements MediaServer {
     return extras.find((e) => e.extraType === 1 || e.subtype === 'trailer')?.ratingKey;
   }
 
+  async continueWatching(): Promise<Metadata[]> {
+    const mc = await this.mc<{ Hub?: Hub[]; Metadata?: Metadata[] }>('/hubs/continueWatching', { count: 100 });
+    return mc.Metadata ?? mc.Hub?.flatMap((h) => h.Metadata ?? []) ?? [];
+  }
+
+  async forDevice(url: string): Promise<string> {
+    const mc = await this.mc<{ token?: string }>('/security/token', { type: 'delegation', scope: 'all' });
+    if (!mc.token || !/^[w-]{8,200}$/.test(mc.token)) throw new Error('Jeton temporaire refusé par le serveur');
+    const u = new URL(url);
+    if (u.searchParams.has('X-Plex-Token')) u.searchParams.set('X-Plex-Token', mc.token);
+    return u.toString();
+  }
+
+  async related(ratingKey: string, lang = 'fr'): Promise<Hub[]> {
+    const hubs = (await this.mc<{ Hub?: Hub[] }>(`/library/metadata/${ratingKey}/related`, { count: 20, 'X-Plex-Language': lang })).Hub ?? [];
+    // Coquille du serveur en français (« Séries asssociées »).
+    return hubs.filter((h) => h.Metadata?.length).map((h) => ({ ...h, title: h.title.replace(/asssoci/g, 'associ') }));
+  }
+
   async removeFromContinueWatching(ratingKey: string): Promise<void> {
     await request(this.url('/actions/removeFromContinueWatching', { ratingKey }), { method: 'PUT' });
   }

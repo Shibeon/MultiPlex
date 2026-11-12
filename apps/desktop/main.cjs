@@ -1,9 +1,11 @@
 // Coque de bureau : affiche le build web dans une fenêtre native et lui
 // fournit un lecteur natif (mpv). Lancer `pnpm desktop` à la racine.
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { MpvPlayer, listAudioDevices, findMpv } = require('./mpv.cjs');
+const { OfflineLibrary } = require('./offline.cjs');
+const { discover: castDiscover, CastSession } = require('./cast.cjs');
 const { Thumbnailer } = require('./thumbs.cjs');
 const { setupUpdater } = require('./updater.cjs');
 const { RefreshMatcher } = require('./display.cjs');
@@ -26,7 +28,12 @@ if (HIDDEN) app.commandLine.appendSwitch('disable-features', 'CalculateNativeWin
 
 // Les tests automatiques passent l'app en mode démo : ils travaillent dans un profil
 // temporaire à part, pour ne jamais toucher à la session ni aux réglages de l'utilisateur.
-if (arg('smoke') || arg('smoke-native') || arg('smoke-passthrough') ||arg('smoke-update-check') || process.argv.includes('--smoke-update')) app.setPath('userData', path.join(app.getPath('temp'), 'multiplex-smoke-profile'));
+// --smoke-fresh : profil vierge à chaque lancement (premier démarrage, sans serveur).
+if (process.argv.includes('--smoke-fresh')) {
+  const fresh = path.join(app.getPath('temp'), 'multiplex-smoke-fresh');
+  fs.rmSync(fresh, { recursive: true, force: true });
+  app.setPath('userData', fresh);
+} else if (process.argv.includes('--smoke-isolated') || arg('smoke') || arg('smoke-native') || arg('smoke-passthrough') ||arg('smoke-update-check') || process.argv.includes('--smoke-update')) app.setPath('userData', path.join(app.getPath('temp'), 'multiplex-smoke-profile'));
 
 /** Fenêtre principale, lecteur natif et fenêtre de contrôles superposée. */
 let main = null;
@@ -264,24 +271,70 @@ ipcMain.on('xray:cancel', () => sendTo(xrayWin, 'xray:cancel'));
 
 // --- Télécharger le fichier d'un titre (menu « Télécharger ») ---
 // Le fichier d'origine, tel qu'il est sur le serveur ; Windows demande où l'enregistrer.
-// Le jeton voyage en en-tête. La progression s'affiche sur l'icône de la barre des tâches.
-const downloadNames = new Map();
+// Le jeton voyage en en-tête. Chaque téléchargement est suivi (progression, débit) et
+// annulable depuis la page ; la progression globale s'affiche aussi sur l'icône de la barre des tâches.
+const pendingDownloads = new Map(); // adresse → { id, name }
+const downloads = new Map(); // id → DownloadItem
+let downloadSeq = 0;
 let downloadsWired = false;
+function taskbarProgress() {
+  if (!main || main.isDestroyed()) return;
+  let got = 0;
+  let total = 0;
+  for (const item of downloads.values()) {
+    if (item.getState() !== 'progressing') continue;
+    got += item.getReceivedBytes();
+    total += item.getTotalBytes();
+  }
+  main.setProgressBar(downloads.size ? (total ? got / total : 2) : -1);
+}
 function wireDownloads(win) {
   if (downloadsWired) return;
   downloadsWired = true;
   win.webContents.session.on('will-download', (_e, item) => {
-    const name = downloadNames.get(item.getURL()) ?? item.getFilename();
-    downloadNames.delete(item.getURL());
-    item.setSaveDialogOptions({ defaultPath: path.join(app.getPath('downloads'), name) });
-    sendTo(main, 'download:event', { state: 'started', name });
-    item.on('updated', () => {
-      const total = item.getTotalBytes();
-      if (main && !main.isDestroyed()) main.setProgressBar(total ? item.getReceivedBytes() / total : 2);
+    const known = pendingDownloads.get(item.getURL());
+    pendingDownloads.delete(item.getURL());
+    const id = known?.id ?? ++downloadSeq;
+    const name = known?.name ?? item.getFilename();
+    const send = (state, extra = {}) => sendTo(main, 'download:event', { id, state, name, title: known?.title, offline: !!known?.offlineId, offlineId: known?.offlineId, received: item.getReceivedBytes(), total: item.getTotalBytes(), ...extra });
+    // Hors ligne : le fichier va directement dans la bibliothèque, sans fenêtre « Enregistrer sous ».
+    if (known?.savePath) item.setSavePath(known.savePath);
+    else if (HIDDEN && arg('smoke-download-dir')) item.setSavePath(path.join(arg('smoke-download-dir'), name));
+    else item.setSaveDialogOptions({ defaultPath: path.join(app.getPath('downloads'), name) });
+    item.offlineId = known?.offlineId;
+    downloads.set(id, item);
+    // Pause et reprise ne déclenchent pas toujours « updated » : la page est prévenue directement.
+    item.notify = () => send(item.isPaused() ? 'paused' : 'progressing');
+    // « waiting » tant que l'emplacement n'est pas choisi ; ensuite la progression, au plus deux fois par seconde.
+    send('waiting');
+    let last = 0;
+    let lastBytes = 0;
+    item.on('updated', (_ev, state) => {
+      const now = Date.now();
+      if (now - last < 500 && state === 'progressing') return;
+      const bytes = item.getReceivedBytes();
+      const rate = last ? ((bytes - lastBytes) * 1000) / (now - last) : 0;
+      last = now;
+      lastBytes = bytes;
+      send(state === 'interrupted' ? 'stalled' : item.isPaused() ? 'paused' : 'progressing', { rate: Math.max(0, Math.round(rate)), path: item.getSavePath() || undefined });
+      taskbarProgress();
+      // Hors ligne : un fichier qui ne peut pas reprendre seul passe en échec (bouton « Réessayer »).
+      if (state === 'interrupted' && item.offlineId && !item.canResume()) {
+        offlineLib().update(item.offlineId, { state: 'failed' });
+        sendTo(main, 'offline:changed');
+      }
     });
     item.once('done', (_ev, state) => {
-      if (main && !main.isDestroyed()) main.setProgressBar(-1);
-      sendTo(main, 'download:event', { state, name, path: state === 'completed' ? item.getSavePath() : undefined });
+      downloads.delete(id);
+      taskbarProgress();
+      if (item.offlineId) {
+        const lib = offlineLib();
+        if (state === 'completed') lib.update(item.offlineId, { state: 'ready', size: item.getTotalBytes() || item.getReceivedBytes() });
+        else if (state === 'cancelled') lib.remove(item.offlineId);
+        else lib.update(item.offlineId, { state: 'failed' });
+        sendTo(main, 'offline:changed');
+      }
+      send(state, { path: state === 'completed' ? item.getSavePath() : undefined });
     });
   });
 }
@@ -290,17 +343,30 @@ ipcMain.handle('file:download', (_e, url, headers, name) => {
   try {
     u = new URL(String(url));
   } catch {
-    return false;
+    return 0;
   }
   // Uniquement le fichier d'un titre du serveur, jamais une adresse quelconque.
-  if (!['http:', 'https:'].includes(u.protocol) || !u.pathname.startsWith('/library/parts/') || !main) return false;
+  if (!['http:', 'https:'].includes(u.protocol) || !u.pathname.startsWith('/library/parts/') || !main) return 0;
   u.searchParams.set('download', '1');
   const clean = {};
   for (const [k, v] of Object.entries(headers ?? {})) if (/^X-Plex-[A-Za-z-]+$/.test(k)) clean[k] = String(v);
   wireDownloads(main);
-  downloadNames.set(u.toString(), String(name || '').replace(/[\\/:*?"<>|]/g, '_').slice(0, 180) || path.basename(u.pathname));
+  const id = ++downloadSeq;
+  pendingDownloads.set(u.toString(), { id, name: String(name || '').replace(/[\\/:*?"<>|]/g, '_').slice(0, 180) || path.basename(u.pathname) });
   main.webContents.downloadURL(u.toString(), { headers: clean });
-  return true;
+  return id;
+});
+ipcMain.on('file:downloadAction', (_e, id, action) => {
+  const item = downloads.get(Number(id));
+  if (!item) return;
+  if (action === 'cancel') item.cancel();
+  else if (action === 'pause') {
+    item.pause();
+    item.notify?.();
+  } else if (action === 'resume' && item.canResume()) {
+    item.resume();
+    item.notify?.();
+  }
 });
 ipcMain.on('file:show', (_e, file) => {
   if (typeof file === 'string' && path.isAbsolute(file) && fs.existsSync(file)) shell.showItemInFolder(file);
@@ -340,28 +406,163 @@ ipcMain.handle('mpv:play', async (_e, opts) => {
   const headers = Object.entries(opts.headers && typeof opts.headers === 'object' ? opts.headers : {})
     .filter(([k, v]) => /^X-Plex-[A-Za-z-]{1,40}$/.test(k) && typeof v === 'string' && /^[\x20-\x7E]{1,200}$/.test(v))
     .map(([k, v]) => `${k}: ${v}`);
+  return startPlayback(opts.url, headers, (Array.isArray(opts.subFiles) ? opts.subFiles : []).filter(web).slice(0, 8), opts);
+});
+
+async function startPlayback(url, headers, subFiles, opts) {
   meta = {};
   clearTimeout(fsTimer);
   matchOn = !!opts.matchRefresh || (HIDDEN && !!arg('smoke-native'));
   if (HIDDEN && arg('smoke-native')) opts.seekPreview = true;
   if (!matchOn) matcher?.release();
   const result = await player.play({
-    url: opts.url,
+    url,
     headers,
     title: String(opts.title ?? '').slice(0, 200),
     start: Number(opts.start) || 0,
     aid: Number.isInteger(opts.aid) ? opts.aid : undefined,
     sid: Number.isInteger(opts.sid) ? opts.sid : undefined,
-    subFiles: (Array.isArray(opts.subFiles) ? opts.subFiles : []).filter(web).slice(0, 8),
+    subFiles,
     passthrough: !!opts.passthrough,
     audioDevice: await knownAudioDevice(opts.audioDevice),
     buffered: !!opts.buffered,
   });
   // Aperçus : seulement pour le fichier d'origine (un flux converti ne se parcourt pas librement).
-  if (opts.seekPreview && !opts.buffered) void thumbs.start(opts.url, headers);
+  if (opts.seekPreview && !opts.buffered) void thumbs.start(url, headers);
   else thumbs.stop();
   openOverlay();
   return result;
+}
+
+// --- Bibliothèque hors ligne ---
+let offline = null;
+const offlineLib = () => (offline ??= new OfflineLibrary(app, HIDDEN ? arg('smoke-offline-dir') : undefined));
+const serverUrl = (u, origin) => {
+  try {
+    const x = new URL(String(u));
+    return ['http:', 'https:'].includes(x.protocol) && (!origin || x.origin === origin) ? x : null;
+  } catch {
+    return null;
+  }
+};
+ipcMain.handle('offline:info', () => offlineLib().info());
+ipcMain.handle('offline:chooseDir', async () => {
+  const r = await dialog.showOpenDialog(main, { properties: ['openDirectory', 'createDirectory'], defaultPath: offlineLib().dir });
+  if (r.canceled || !r.filePaths[0]) return { ok: false };
+  try {
+    offlineLib().setDir(r.filePaths[0]);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: String(e.message) };
+  }
+});
+ipcMain.handle('offline:add', async (_e, p) => {
+  const file = serverUrl(p?.url);
+  if (!file || !file.pathname.startsWith('/library/parts/') || !main) return { ok: false };
+  const headers = {};
+  for (const [k, v] of Object.entries(p.headers ?? {})) if (/^X-Plex-[A-Za-z-]+$/.test(k) && /^[\x20-\x7E]{1,200}$/.test(String(v))) headers[k] = String(v);
+  const lib = offlineLib();
+  const existing = lib.get(lib.idOf(p));
+  if (existing && (existing.state === 'ready' || existing.state === 'downloading')) return { ok: true, id: existing.id, already: true };
+  let entry;
+  try {
+    entry = lib.prepare(p);
+  } catch (e) {
+    return { ok: false, error: String(e.message) };
+  }
+  // Affiche, fond, sous-titres externes : uniquement depuis le même serveur que le fichier.
+  const extras = [];
+  for (const img of (Array.isArray(p.images) ? p.images : []).slice(0, 2)) {
+    const u = serverUrl(img?.url, file.origin);
+    if (u && (img.kind === 'poster' || img.kind === 'art')) extras.push(lib.fetchExtra(entry, u, headers, `${img.kind}.jpg`).then((name) => name && (entry[img.kind] = name)));
+  }
+  (Array.isArray(p.subs) ? p.subs : []).slice(0, 8).forEach((s, i) => {
+    const u = serverUrl(s?.url, file.origin);
+    const ext = /^[a-z0-9]{2,5}$/i.test(String(s?.ext)) ? s.ext : 'srt';
+    if (u) extras.push(lib.fetchExtra(entry, u, headers, `${entry.file.replace(/\.[^.]+$/, '')}.${i + 1}.${ext}`).then((name) => name && entry.subs.push({ file: name, label: String(s.label ?? '').slice(0, 120), index: i })));
+  });
+  await Promise.all(extras);
+  entry.subs.sort((a, b) => a.index - b.index);
+  lib.save();
+  file.searchParams.set('download', '1');
+  wireDownloads(main);
+  const id = ++downloadSeq;
+  pendingDownloads.set(file.toString(), { id, name: entry.file, title: [entry.title, entry.sub].filter(Boolean).join(' — '), offlineId: entry.id, savePath: path.join(lib.dir, entry.folder, entry.file) });
+  main.webContents.downloadURL(file.toString(), { headers });
+  sendTo(main, 'offline:changed');
+  return { ok: true, id: entry.id };
+});
+ipcMain.handle('offline:remove', (_e, id) => {
+  for (const item of downloads.values()) if (item.offlineId === id) item.cancel();
+  offlineLib().remove(String(id));
+  sendTo(main, 'offline:changed');
+  return true;
+});
+ipcMain.on('offline:progress', (_e, id, viewOffset, watched) => {
+  const e = offlineLib().get(String(id));
+  if (!e) return;
+  offlineLib().update(e.id, { viewOffset: Math.max(0, Number(viewOffset) || 0), watched: !!watched, dirty: true });
+});
+ipcMain.on('offline:synced', (_e, ids) => {
+  const lib = offlineLib();
+  for (const id of Array.isArray(ids) ? ids : []) if (lib.get(String(id))) lib.get(String(id)).dirty = false;
+  lib.save();
+});
+ipcMain.handle('offline:play', async (_e, id, opts) => {
+  const p = offlineLib().playable(String(id));
+  if (!player || !p) throw new Error('Fichier hors ligne introuvable');
+  return startPlayback(p.file, [], p.subFiles, { ...(opts && typeof opts === 'object' ? opts : {}), buffered: false });
+});
+
+// --- Envoi vers un téléviseur (Google Cast) ---
+// La page choisit un appareil parmi ceux trouvés ici ; elle ne fournit jamais d'adresse.
+let castDevices = [];
+let cast = null;
+ipcMain.handle('cast:scan', async () => {
+  castDevices = await castDiscover(2500);
+  // Tests : un récepteur factice local, jamais un vrai appareil.
+  const fake = HIDDEN && arg('smoke-cast-device');
+  if (fake) castDevices.unshift({ id: 'smoke', name: 'Récepteur de test', model: 'test', host: '127.0.0.1', port: Number(fake) || 8009 });
+  return castDevices.map(({ id, name, model }) => ({ id, name, model }));
+});
+ipcMain.handle('cast:start', async (_e, deviceId, media) => {
+  const device = castDevices.find((d) => d.id === String(deviceId));
+  const url = serverUrl(media?.url);
+  if (!device || !url) return { ok: false, error: 'invalid' };
+  const image = media.image ? serverUrl(media.image, url.origin) : null;
+  const previous = cast;
+  cast = null;
+  await previous?.stop();
+  const s = new CastSession(device);
+  cast = s;
+  s.on('status', (st) => cast === s && sendTo(main, 'cast:status', { ...st, device: device.name }));
+  s.on('closed', (reason) => {
+    if (cast !== s) return;
+    cast = null;
+    sendTo(main, 'cast:status', { state: 'closed', reason, device: device.name });
+  });
+  try {
+    await s.connect();
+    await s.load({
+      url: url.toString(),
+      contentType: media.contentType === 'video/mp4' ? 'video/mp4' : 'application/x-mpegURL',
+      title: String(media.title ?? '').slice(0, 200),
+      sub: String(media.sub ?? '').slice(0, 200),
+      kind: media.kind === 'episode' ? 'episode' : 'movie',
+      image: image?.toString(),
+      start: Math.max(0, Number(media.start) || 0),
+      duration: Math.max(0, Number(media.duration) || 0),
+    });
+    return { ok: true };
+  } catch (e) {
+    s.close('error');
+    return { ok: false, error: String(e?.message ?? e) };
+  }
+});
+ipcMain.on('cast:control', (_e, action, value) => cast?.control(String(action), value));
+ipcMain.handle('cast:stop', async () => {
+  await cast?.stop();
+  return true;
 });
 ipcMain.handle('mpv:stop', () => {
   playbackOver();
@@ -396,7 +597,7 @@ ipcMain.on('window:fullscreen', (e, on) => {
 });
 ipcMain.on('overlay:action', (_e, name) => {
   const person = typeof name === 'string' && /^person:[0-9a-f]{16,40}$/i.test(name) ? name.slice(7) : '';
-  if (name === 'back' || person) {
+  if (name === 'back' || name === 'cast' || person) {
     // Arrêt demandé par les contrôles : la page principale doit l'apprendre pour
     // enregistrer la position et revenir à la fiche.
     const time = player?.state['time-pos'] ?? 0;
@@ -405,7 +606,7 @@ ipcMain.on('overlay:action', (_e, name) => {
     thumbs.stop();
     matcher?.release();
     void player?.stop();
-    sendTo(main, 'mpv:event', 'ended', { time, eof: false, goto: person ? `/person/${person}` : undefined });
+    sendTo(main, 'mpv:event', 'ended', { time, eof: false, cast: name === 'cast', goto: person ? `/person/${person}` : undefined });
   } else if (name === 'fullscreen') {
     togglePlaybackFullscreen();
   } else if (typeof name === 'string' && /^quality:[a-z0-9]{1,12}$/.test(name)) {

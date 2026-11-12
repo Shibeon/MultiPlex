@@ -25,6 +25,7 @@ import {
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { go } from './router';
 import { load, save, settings } from './settings';
+import { refreshOffline, syncOffline } from './offline';
 
 function browserName(): string {
   const ua = navigator.userAgent;
@@ -61,7 +62,8 @@ interface SavedServer {
   token: string;
 }
 
-export type Status = 'boot' | 'login' | 'servers' | 'connecting' | 'ready';
+/** offline : serveur injoignable, seule la bibliothèque téléchargée est proposée. */
+export type Status = 'boot' | 'login' | 'servers' | 'connecting' | 'ready' | 'offline';
 
 export const status = signal<Status>('boot');
 export const auth = signal<Auth | null>(load<Auth>('mp.auth'));
@@ -125,6 +127,19 @@ async function use(srv: MediaServer): Promise<void> {
   server.value = srv;
   status.value = 'ready';
   loadHome(srv);
+  // Ce qui a été regardé hors ligne repart vers ce serveur.
+  if (!(srv instanceof DemoServer)) void syncOffline(srv).catch(() => {});
+}
+
+/** Vrai s'il y a des titres téléchargés à proposer quand le serveur ne répond pas. */
+async function hasOffline(): Promise<boolean> {
+  return !!(await refreshOffline())?.entries.length;
+}
+
+/** Depuis le mode hors ligne : nouvel essai de connexion. */
+export async function retryOnline(): Promise<void> {
+  status.value = 'connecting';
+  await boot();
 }
 
 export async function connectManual(uri: string, token: string): Promise<void> {
@@ -182,10 +197,16 @@ export async function boot(): Promise<void> {
       await use(new PlexServer(saved.id, saved.name, saved.uri, saved.token, client));
       return;
     } catch {
-      /* adresse périmée : on retombe sur la découverte */
+      // Pas de réseau, ou serveur éteint : s'il y a des titres téléchargés, on les propose aussitôt.
+      if (!navigator.onLine && (await hasOffline())) {
+        status.value = 'offline';
+        return;
+      }
+      /* sinon, adresse périmée : on retombe sur la découverte */
     }
   }
   await chooseServer();
+  if (status.value !== 'ready' && (await hasOffline()) && !resources.value.length) status.value = 'offline';
 }
 
 export async function startDemo(): Promise<void> {

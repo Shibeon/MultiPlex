@@ -8,6 +8,8 @@ import { settings } from '../settings';
 import { invalidate, server } from '../store';
 import { dequeue, upNext } from '../queue';
 import { Icon, Spinner, labels, SeekPreview } from '../ui';
+import { castApi, castEnabled, openCast } from '../cast';
+import { attachPlayer } from '../together';
 
 type Menu = null | 'audio' | 'sub' | 'quality' | 'speed' | 'chapter' | 'version';
 
@@ -251,6 +253,64 @@ export function Player({ id }: { id: string }) {
   const leave = () => back();
   const playNext = () => next && go(`/play/${next.ratingKey}?t=0`, true);
 
+  // Envoi vers un téléviseur depuis le navigateur : Chromecast (Chrome, Edge, Chrome Android) et
+  // AirPlay (Safari) via la « lecture à distance » du navigateur, qui affiche son propre choix
+  // d'appareil. Le bouton n'apparaît que si le navigateur trouve un appareil pour cette vidéo.
+  const [remote, setRemote] = useState({ ok: false, on: false });
+  useEffect(() => {
+    type Remote = EventTarget & { state: string; watchAvailability(cb: (a: boolean) => void): Promise<number>; cancelWatchAvailability(id?: number): Promise<void> };
+    const el = video.current as (HTMLVideoElement & { remote?: Remote }) | null;
+    if (!el || castApi) return;
+    const r = el.remote;
+    let watch: number | undefined;
+    r?.watchAvailability((ok) => setRemote((s) => ({ ...s, ok }))).then(
+      (id) => (watch = id),
+      () => {
+        /* flux non transmissible (lecture via MediaSource, par exemple) : pas de bouton */
+      },
+    );
+    const state = () => setRemote((s) => ({ ...s, on: r?.state === 'connected' }));
+    for (const ev of ['connect', 'connecting', 'disconnect']) r?.addEventListener(ev, state);
+    // Safari plus ancien : AirPlay par son propre événement.
+    const air = (e: Event) => setRemote((s) => ({ ...s, ok: (e as Event & { availability?: string }).availability === 'available' }));
+    el.addEventListener('webkitplaybacktargetavailabilitychanged', air);
+    return () => {
+      if (watch !== undefined) void r?.cancelWatchAvailability(watch).catch(() => {});
+      for (const ev of ['connect', 'connecting', 'disconnect']) r?.removeEventListener(ev, state);
+      el.removeEventListener('webkitplaybacktargetavailabilitychanged', air);
+    };
+  }, []);
+  const castHere = () => {
+    const el = v() as HTMLVideoElement & { remote?: { prompt(): Promise<void> }; webkitShowPlaybackTargetPicker?: () => void };
+    // Application de bureau ou Chrome : notre envoi, depuis la position actuelle.
+    if (castEnabled.value && itemRef.current) {
+      el.pause();
+      const it = itemRef.current;
+      const at = el.currentTime;
+      back();
+      openCast(it, at);
+    } else if (el.remote?.prompt) void el.remote.prompt().catch(() => {});
+    else el.webkitShowPlaybackTargetPicker?.();
+  };
+
+  // Regarder ensemble : la séance suit ce lecteur.
+  useEffect(() => {
+    const el = video.current;
+    if (!item || !el) return;
+    return attachPlayer(
+      {
+        time: () => el.currentTime,
+        paused: () => el.paused,
+        ready: () => el.readyState >= 2 && el.currentTime > 0,
+        play: () => void el.play().catch(() => {}),
+        pause: () => el.pause(),
+        seek: (at) => (el.currentTime = at),
+        rate: (r) => (el.playbackRate = r),
+      },
+      item,
+    );
+  }, [item?.ratingKey]);
+
   const pip = () => {
     const el = v() as HTMLVideoElement & { requestPictureInPicture?: () => Promise<unknown> };
     if (document.pictureInPictureElement) void document.exitPictureInPicture();
@@ -438,6 +498,7 @@ export function Player({ id }: { id: string }) {
         ref={video}
         playsInline
         autoPlay
+        x-webkit-airplay="allow"
         onClick={toggle}
         onDblClick={fullscreen}
         onPlay={() => (patch({ playing: true }), report('playing'), wake())}
@@ -541,6 +602,11 @@ export function Player({ id }: { id: string }) {
           <button class={`btn icon-btn${stats ? ' on' : ''}`} aria-label={t('player.stats')} aria-pressed={!!stats} title={t('player.stats')} onClick={() => setStats(stats ? null : readStats())}>
             <Icon name="info" />
           </button>
+          {(remote.ok || castEnabled.value) && (
+            <button class={`btn icon-btn${remote.on ? ' on' : ''}`} aria-label={t('cast.title')} aria-pressed={remote.on} title={t('cast.title')} onClick={castHere}>
+              <Icon name="cast" />
+            </button>
+          )}
           {document.pictureInPictureEnabled && (
             <button class="btn icon-btn" aria-label={t('player.pip')} title={t('player.pip')} onClick={pip}>
               <Icon name="pip" />

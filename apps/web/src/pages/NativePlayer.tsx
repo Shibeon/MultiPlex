@@ -1,3 +1,7 @@
+import { castPick } from '../cast';
+import { effect } from '@preact/signals';
+import { attachPlayer, peers, together } from '../together';
+import { noticeText } from '../togetherui';
 import { QUALITIES, randomId, streamsOf, type Metadata, type Stream } from '@multiplex/core';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { t } from '../i18n';
@@ -44,6 +48,32 @@ export function NativePlayer({ id }: { id: string }) {
   /** Session de conversion en cours côté serveur, à arrêter quand on la quitte. */
   const transcode = useRef('');
   const quality = useRef(settings.value.quality);
+
+  // Regarder ensemble : la séance suit ce lecteur (position, pause, sauts, petite vitesse).
+  useEffect(() => {
+    if (!item) return;
+    return attachPlayer(
+      {
+        time: () => live.current.time,
+        paused: () => live.current.paused,
+        ready: () => live.current.duration > 0 && live.current.time > 0,
+        play: () => void native!.command('pause', false),
+        pause: () => void native!.command('pause', true),
+        seek: (at) => void native!.command('seek', at),
+        rate: (r) => void native!.command('speed', r),
+      },
+      item,
+    );
+  }, [item?.ratingKey]);
+  // Participants et dernières actions, affichés par-dessus la vidéo.
+  useEffect(
+    () =>
+      effect(() => {
+        const s = together.value;
+        native!.setMeta({ together: s ? { names: peers.value.map((p) => p.name), notice: s.notice ? noticeText(s.notice) : undefined, at: s.notice?.at } : undefined });
+      }),
+    [],
+  );
 
   const report = (kind: 'playing' | 'paused' | 'stopped', time = live.current.time) => {
     const it = itemRef.current;
@@ -167,7 +197,11 @@ export function NativePlayer({ id }: { id: string }) {
         report('stopped', time);
         stopTranscode();
         invalidate(`${srv.id}:`);
-        if (data.eof && nextRef.current && (settings.value.autoNext || nextRef.current.type === 'queued')) playNext();
+        if (data.cast && itemRef.current) {
+          // Lecture envoyée vers un téléviseur : retour à la fiche, choix de l'appareil, même position.
+          castPick.value = { item: itemRef.current, start: time };
+          go(`/item/${itemRef.current.ratingKey}`, true);
+        } else if (data.eof && nextRef.current && (settings.value.autoNext || nextRef.current.type === 'queued')) playNext();
         // Fiche d'une personne demandée depuis la distribution affichée à la pause.
         else if (typeof data.goto === 'string' && /^\/person\/[0-9a-f]+$/i.test(data.goto)) {
           const it = itemRef.current;

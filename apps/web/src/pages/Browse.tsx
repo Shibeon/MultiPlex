@@ -5,6 +5,7 @@ import { go, route } from '../router';
 import { cardWidth, load, save, settings } from '../settings';
 import { libraries, server, useData } from '../store';
 import { DiscoverResults } from './Discover';
+import { clearSearches, forgetSearch, rememberSearch, searchHistory } from '../searchHistory';
 import { Card, ErrorBox, HubRow, Icon, Spinner, VirtualGrid, artSize, labels } from '../ui';
 
 export interface KnownHub {
@@ -234,9 +235,72 @@ export function SearchPage() {
   }, [text]);
 
   const { data, error, loading } = useData(query ? `${srv.id}:search:${query}` : null, () => srv.search(query));
+
+  // Une recherche entre dans l'historique quand on la valide (Entrée), quand on ouvre un de ses
+  // résultats, ou quand on quitte la page après qu'elle a trouvé quelque chose.
+  const found = useRef('');
+  found.current = query && data?.length ? query : '';
+  useEffect(() => () => found.current && rememberSearch(found.current), []);
+
+  const typed = text.trim().toLowerCase();
+  const recent = searchHistory.value.filter((q) => q.toLowerCase() !== typed && q.toLowerCase().includes(typed)).slice(0, typed ? 5 : 12);
+  const pickRecent = (q: string) => {
+    setText(q);
+    rememberSearch(q);
+    input.current?.focus();
+  };
   return (
-    <div class="page">
-      <input ref={input} class="search-input" type="search" placeholder={t('search.placeholder')} aria-label={t('nav.search')} value={text} onInput={(e) => setText(e.currentTarget.value)} />
+    <div
+      class="page"
+      onClickCapture={(e) => {
+        if (query && (e.target as HTMLElement).closest?.('a[href^="#/"]')) rememberSearch(query);
+      }}
+    >
+      <input
+        ref={input}
+        class="search-input"
+        type="search"
+        placeholder={t('search.placeholder')}
+        aria-label={t('nav.search')}
+        value={text}
+        onInput={(e) => setText(e.currentTarget.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') rememberSearch(text);
+          // Flèche bas : vers les recherches récentes, puis les résultats.
+          if (e.key === 'ArrowDown') {
+            const next = document.querySelector<HTMLElement>('.recent-search button, .page .card');
+            if (next) {
+              e.preventDefault();
+              next.focus();
+            }
+          }
+        }}
+      />
+      {recent.length > 0 && (
+        <div class={`recent-searches${typed ? ' compact' : ''}`} aria-label={t('search.recent')}>
+          {!typed && (
+            <div class="recent-head">
+              <h2>{t('search.recent')}</h2>
+              <button class="link" onClick={() => clearSearches()}>
+                {t('search.clear')}
+              </button>
+            </div>
+          )}
+          <ul>
+            {recent.map((q) => (
+              <li key={q} class="recent-search">
+                <button onClick={() => pickRecent(q)}>
+                  <Icon name="history" size={16} />
+                  {q}
+                </button>
+                <button class="recent-forget" aria-label={t('search.forget').replace('{q}', q)} title={t('search.forget').replace('{q}', q)} onClick={() => forgetSearch(q)}>
+                  <Icon name="close" size={14} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {error && <ErrorBox error={error} />}
       {query && loading && !data && <Spinner />}
       {query && data?.length === 0 && <p class="muted">{t('search.none')}</p>}

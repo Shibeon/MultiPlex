@@ -27,6 +27,8 @@ export interface NativePlayOptions {
 
 /** Ce que la page principale sait du titre en cours et transmet à la fenêtre de contrôles. */
 export interface NativeMeta {
+  /** Regarder ensemble : participants et dernière action annoncée. */
+  together?: { names: string[]; notice?: string; at?: number };
   title?: string;
   sub?: string;
   /** Marqueurs d'intro et de générique, en secondes. */
@@ -76,9 +78,15 @@ export interface NativeApi {
   audioDevices?(): Promise<{ id: string; label: string }[]>;
   platform?: string;
   /** Application de bureau : télécharge le fichier d'un titre ; Windows demande où l'enregistrer. */
-  download?(url: string, headers: Record<string, string>, name: string): Promise<boolean>;
+  /** Renvoie le numéro du téléchargement (0 = refusé). */
+  download?(url: string, headers: Record<string, string>, name: string): Promise<number>;
+  downloadAction?(id: number, action: 'cancel' | 'pause' | 'resume'): void;
+  /** Bibliothèque hors ligne (application de bureau ; contrat que d'autres plateformes pourront remplir). */
+  offline?: OfflineApi;
   showFile?(file: string): void;
-  onDownload?(listener: (e: { state: string; name: string; path?: string }) => void): () => void;
+  /** Envoi vers un téléviseur (Google Cast) ; absent hors de l'application de bureau. */
+  cast?: CastApi;
+  onDownload?(listener: (e: DownloadEvent) => void): () => void;
   /** « Qui est à l'écran ? » : ce que l'application fournit à la reconnaissance de visages. */
   xray?: {
     model(name: string): Promise<Uint8Array | null>;
@@ -106,7 +114,81 @@ export interface NativeApi {
   setMeta(meta: NativeMeta): void;
   overlayInit(): Promise<{ meta: NativeMeta; state: Record<string, unknown> }>;
   onMeta(listener: (meta: NativeMeta) => void): () => void;
-  action(name: 'back' | 'fullscreen' | 'next' | 'prev' | `quality:${string}` | `person:${string}`): void;
+  action(name: 'back' | 'cast' | 'fullscreen' | 'next' | 'prev' | `quality:${string}` | `person:${string}`): void;
+}
+
+/** Un titre gardé pour le hors ligne. */
+export interface OfflineEntry {
+  id: string;
+  serverId: string;
+  ratingKey: string;
+  type: 'movie' | 'episode';
+  title: string;
+  sub: string;
+  show?: { ratingKey: string; title: string };
+  season?: number;
+  episode?: number;
+  /** Fiche du titre telle qu'au téléchargement (pistes, repères, résumé…). */
+  meta: import('@multiplex/core').Metadata;
+  /** Adresses file: des images enregistrées. */
+  poster?: string;
+  art?: string;
+  subs: { file: string; label: string; index: number }[];
+  state: 'downloading' | 'ready' | 'failed';
+  size: number;
+  addedAt: number;
+  /** Position en millisecondes. */
+  viewOffset: number;
+  watched: boolean;
+  /** Position ou état à renvoyer au serveur. */
+  dirty: boolean;
+  /** Le fichier a disparu du disque. */
+  missing?: boolean;
+}
+
+export interface OfflineInfo {
+  dir: string;
+  free?: number;
+  used: number;
+  entries: OfflineEntry[];
+}
+
+export interface OfflineApi {
+  info(): Promise<OfflineInfo>;
+  chooseDir(): Promise<{ ok: boolean; error?: string }>;
+  add(payload: {
+    serverId: string;
+    ratingKey: string;
+    url: string;
+    headers: Record<string, string>;
+    fileName: string;
+    title: string;
+    sub: string;
+    meta: import('@multiplex/core').Metadata;
+    images: { kind: 'poster' | 'art'; url: string }[];
+    subs: { url: string; label: string; ext: string }[];
+  }): Promise<{ ok: boolean; id?: string; already?: boolean; error?: string }>;
+  remove(id: string): Promise<boolean>;
+  progress(id: string, viewOffset: number, watched: boolean): void;
+  synced(ids: string[]): void;
+  play(id: string, opts: Omit<NativePlayOptions, 'url' | 'headers' | 'subFiles'>): Promise<unknown>;
+  onChanged(listener: () => void): () => void;
+}
+
+export interface DownloadEvent {
+  id: number;
+  /** waiting : emplacement pas encore choisi ; stalled : coupure, reprise possible. */
+  state: 'waiting' | 'progressing' | 'paused' | 'stalled' | 'completed' | 'cancelled' | 'interrupted';
+  name: string;
+  received: number;
+  total: number;
+  /** Octets par seconde. */
+  rate?: number;
+  path?: string;
+  /** Titre lisible (téléchargements hors ligne). */
+  title?: string;
+  offline?: boolean;
+  offlineId?: string;
 }
 
 export const native = (window as unknown as { multiplexNative?: NativeApi }).multiplexNative;
@@ -124,4 +206,45 @@ if (!isOverlayWindow && !isXrayWindow) {
     ?.available()
     .then((ok) => (nativeAvailable.value = ok))
     .catch(() => {});
+}
+
+export interface CastDevice {
+  id: string;
+  name: string;
+  model: string;
+}
+
+export interface CastStatus {
+  state: 'connecting' | 'playing' | 'paused' | 'buffering' | 'idle' | 'closed';
+  time: number;
+  duration: number;
+  volume: number;
+  muted: boolean;
+  ended?: boolean;
+  error?: string;
+  reason?: string;
+  device: string;
+}
+
+export interface CastMedia {
+  url: string;
+  contentType: 'video/mp4' | 'application/x-mpegURL';
+  title: string;
+  sub?: string;
+  kind: string;
+  image?: string;
+  start: number;
+  duration: number;
+}
+
+export interface CastApi {
+  /** Le navigateur affiche lui-même la liste des appareils (pas de recherche de notre côté). */
+  browserPicker?: boolean;
+  /** Vérification au démarrage (Android : services Google présents ou non). */
+  available?(): Promise<boolean>;
+  scan(): Promise<CastDevice[]>;
+  start(deviceId: string, media: CastMedia): Promise<{ ok: boolean; error?: string }>;
+  control(action: 'play' | 'pause' | 'seek' | 'volume' | 'mute', value?: number | boolean): void;
+  stop(): Promise<boolean>;
+  onStatus(listener: (s: CastStatus) => void): () => void;
 }

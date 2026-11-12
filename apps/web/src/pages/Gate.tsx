@@ -1,3 +1,5 @@
+import { offlineInfo } from '../offline';
+import { go } from '../router';
 import { HttpError, checkPin, createPin, pinAuthUrl, type PlexPin } from '@multiplex/core';
 import type { ComponentChildren } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
@@ -159,6 +161,11 @@ export function ServerPicker() {
       <button class="btn" onClick={() => void startDemo()}>
         {t('login.demo')}
       </button>
+      {!!offlineInfo.value?.entries.length && (
+        <button class="btn" onClick={() => ((status.value = 'offline'), go('/offline'))}>
+          {t('off.open')}
+        </button>
+      )}
       {auth.value && (
         <button class="link" onClick={logout}>
           {t('set.logout')} ({auth.value.user.username || auth.value.user.title})

@@ -1,3 +1,4 @@
+import { togetherOpen } from '../togetherui';
 import { HttpError, type ActiveSession, type FriendActivity } from '@multiplex/core';
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import { formatClock, t } from '../i18n';
@@ -298,6 +299,9 @@ export function ActivityPage() {
       <header class="page-head">
         <h1>{t('live.title')}</h1>
         <span class="muted">{t('live.friendsLead')}</span>
+        <button class="btn" onClick={() => (togetherOpen.value = {})}>
+          <Icon name="together" size={18} /> {t('tog.title')}
+        </button>
       </header>
       <ShareToggle />
       <LiveNow />

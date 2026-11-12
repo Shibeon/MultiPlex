@@ -5,8 +5,11 @@ import { formatDuration, t } from '../i18n';
 import { go } from '../router';
 import { settings } from '../settings';
 import { invalidate, server, useData } from '../store';
-import { Card, ErrorBox, Icon, Ratings, Spinner, StarRating, TechBadges, artSize, isWatched } from '../ui';
+import { Card, ErrorBox, HubRow, Icon, Ratings, Spinner, StarRating, TechBadges, artSize, isWatched } from '../ui';
 import { ServerWatchlistButton } from './Discover';
+import { OfflineButton } from './Offline';
+import { CastButton } from '../castui';
+import { TogetherButton } from '../togetherui';
 import { CastRow, PeopleLinks } from './Person';
 
 function EpisodeRow({ ep }: { ep: Metadata }) {
@@ -140,6 +143,9 @@ export function Details({ id }: { id: string }) {
               </button>
             )}
             <ServerWatchlistButton item={item} />
+            <OfflineButton item={item} />
+            {playable && <CastButton item={item} start={(item.viewOffset ?? 0) / 1000} />}
+            {(item.type === 'movie' || item.type === 'episode') && <TogetherButton item={item} />}
           </div>
           {item.summary && <p class="summary">{item.summary}</p>}
           <dl class="credits">
@@ -171,6 +177,7 @@ export function Details({ id }: { id: string }) {
         </div>
       </div>
       <CastRow people={item.Role} title={t('item.cast')} />
+      {(item.type === 'movie' || item.type === 'show') && <RelatedRows item={item} />}
       {hasKids && (
         <section class="children">
           <h2>{item.type === 'season' ? t('item.episodes') : item.type === 'show' ? t('item.seasons') : ''}</h2>
@@ -184,5 +191,20 @@ export function Details({ id }: { id: string }) {
         </section>
       )}
     </div>
+  );
+}
+
+/** Comme dans Plex : titres associés, puis « Plus avec » les têtes d'affiche. */
+function RelatedRows({ item }: { item: Metadata }) {
+  const srv = server.value!;
+  const lang = settings.value.lang;
+  const { data } = useData(`${srv.id}:related:${item.ratingKey}:${lang}`, () => srv.related(item.ratingKey, lang));
+  if (!data?.length) return null;
+  return (
+    <section class="related">
+      {data.map((h) => (
+        <HubRow key={h.hubIdentifier} hub={h} />
+      ))}
+    </section>
   );
 }
