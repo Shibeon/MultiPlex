@@ -8,11 +8,13 @@ import { NativePlayer } from './pages/NativePlayer';
 import { Player } from './pages/Player';
 import { PersonPage, ResumePill, resumeAfter } from './pages/Person';
 import { ProfilesPage } from './pages/Profiles';
+import { PlaylistPage, PlaylistsPage } from './pages/Playlists';
+import { ItemMenuHost } from './menu';
 import { nativeAvailable } from './native';
 import { SettingsPage } from './pages/Settings';
 import { ThemesPage } from './pages/Themes';
 import { UpdateBanner, WhatsNew } from './pages/Update';
-import { route } from './router';
+import { back, route } from './router';
 import { setCouch, settings } from './settings';
 import { auth, discover, home, libraries, server, status } from './store';
 import { Icon } from './ui';
@@ -39,6 +41,21 @@ function ProfileLink() {
   );
 }
 
+/** Pages où l'on arrive depuis une autre : elles ont un bouton Retour. Les pages de la navigation n'en ont pas. */
+const DEEP = new Set(['item', 'discover', 'person', 'playlist', 'themes', 'profiles']);
+
+function BackBar() {
+  const [kind, id] = route.value.parts;
+  if (!DEEP.has(kind) || (kind === 'playlist' && !id)) return null;
+  return (
+    <div class="page-back-bar">
+      <button class="btn page-back" onClick={back} title={`${t('common.back')} (Retour arrière)`}>
+        <Icon name="back" size={20} /> {t('common.back')}
+      </button>
+    </div>
+  );
+}
+
 function Page() {
   const [kind, id] = route.value.parts;
   // `key` : chaque élément repart d'un état neuf.
@@ -52,6 +69,8 @@ function Page() {
   if (kind === 'themes') return <ThemesPage />;
   if (kind === 'profiles') return <ProfilesPage />;
   if (kind === 'person' && id) return <PersonPage key={id} id={id} />;
+  if (kind === 'playlists' || (kind === 'playlist' && !id)) return <PlaylistsPage />;
+  if (kind === 'playlist' && id) return <PlaylistPage key={id} id={id} title={route.value.query.get('n') ?? ''} />;
   return <Home />;
 }
 
@@ -75,6 +94,7 @@ export function App() {
         <NavLink href="#/" icon="home" label={t('nav.home')} />
         {discover.value && <NavLink href="#/watchlist" icon="bookmark" label={t('nav.watchlist')} />}
         <NavLink href="#/activity" icon="live" label={t('nav.live')} />
+        <NavLink href="#/playlist" icon="list" label={t('nav.playlists')} />
         <div class="nav-sep" />
         {libraries.value.map((l) => (
           <NavLink key={l.key} href={`#/library/${l.key}`} icon={l.type} label={l.title} />
@@ -90,11 +110,13 @@ export function App() {
       </nav>
       <div class="theme-art" aria-hidden="true" />
       <main class="content">
+        <BackBar />
         <Page />
       </main>
       <ResumePill />
       <UpdateBanner />
       <WhatsNew />
+      <ItemMenuHost />
     </div>
   );
 }

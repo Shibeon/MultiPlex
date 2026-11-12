@@ -69,6 +69,13 @@ export function focusPage(): void {
 
 export function initNav(): void {
   addEventListener('keydown', () => (usingKeys = true), true);
+  // Boutons « précédent » et « suivant » sur le côté des souris.
+  addEventListener('mouseup', (e) => {
+    if (e.button === 3) back();
+    else if (e.button === 4) history.forward();
+    else return;
+    e.preventDefault();
+  });
   addEventListener('pointerdown', () => (usingKeys = false), true);
   // Les pages chargent leurs données de façon asynchrone : on réessaie brièvement.
   addEventListener('hashchange', () => [80, 400, 1200].forEach((ms) => setTimeout(focusPage, ms)));

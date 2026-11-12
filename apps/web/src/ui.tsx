@@ -2,6 +2,7 @@ import { imdbIdOf, ratingBadges, techBadges, type Hub, type Metadata } from '@mu
 import type { ComponentChildren, JSX } from 'preact';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { t } from './i18n';
+import { openItemMenu } from './menu';
 import { cardWidth } from './settings';
 import { server } from './store';
 
@@ -30,6 +31,13 @@ const ICONS: Record<string, string> = {
   down: 'M12 17l-7-7 1.5-1.5L12 14l5.5-5.5L19 10z',
   eye: 'M12 5c5 0 9 4 10 7-1 3-5 7-10 7S3 15 2 12c1-3 5-7 10-7zm0 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8z',
   volume: 'M4 9h4l5-4v14l-5-4H4zm12.5 3a4 4 0 0 0-2-3.5v7a4 4 0 0 0 2-3.5z',
+  more: 'M12 5.5a1.75 1.75 0 1 1 0 3.5 1.75 1.75 0 0 1 0-3.5zm0 5a1.75 1.75 0 1 1 0 3.5 1.75 1.75 0 0 1 0-3.5zm0 5a1.75 1.75 0 1 1 0 3.5 1.75 1.75 0 0 1 0-3.5z',
+  share: 'M18 3a3 3 0 1 1-2.2 5l-6.9 3.5a3 3 0 0 1 0 1l6.9 3.5a3 3 0 1 1-.9 1.8l-6.9-3.5a3 3 0 1 1 0-4.6l6.9-3.5A3 3 0 0 1 18 3z',
+  queue: 'M3 5h13v2H3zm0 5h13v2H3zm0 5h8v2H3zm12 0v-3l5 4-5 4z',
+  list: 'M4 5h2v2H4zm4 0h12v2H8zM4 11h2v2H4zm4 0h12v2H8zm-4 6h2v2H4zm4 0h12v2H8z',
+  plus: 'M11 4h2v7h7v2h-7v7h-2v-7H4v-2h7z',
+  close: 'M6.4 5L12 10.6 17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6l5.6-5.6L5 6.4z',
+  download: 'M11 3h2v9.2l3.3-3.3 1.4 1.4-5.7 5.7-5.7-5.7 1.4-1.4 3.3 3.3zM4 18h16v2H4z',
   mute: 'M4 9h4l5-4v14l-5-4H4zm11.6 0L17 10.4 18.4 9l1.4 1.4-1.4 1.4 1.4 1.4-1.4 1.4-1.4-1.4-1.4 1.4-1.4-1.4 1.4-1.4-1.4-1.4z',
 };
 
@@ -238,6 +246,25 @@ export function isWatched(item: Metadata): boolean {
   return !!item.viewCount;
 }
 
+/** Bouton « ⋯ » d'une affiche : le même menu que le clic droit. */
+function MoreButton({ item }: { item: Metadata }) {
+  return (
+    <span
+      class="card-more"
+      role="button"
+      aria-label={t('menu.more')}
+      title={t('menu.more')}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openItemMenu(item, e.currentTarget as HTMLElement);
+      }}
+    >
+      <Icon name="more" size={20} />
+    </span>
+  );
+}
+
 export function Card({ item }: { item: Metadata }) {
   const srv = server.value!;
   const w = imgWidth(cardWidth());
@@ -256,6 +283,7 @@ export function Card({ item }: { item: Metadata }) {
             <i style={{ width: `${progress * 100}%` }} />
           </span>
         )}
+        <MoreButton item={item} />
       </div>
       <div class="card-text">
         <div class="card-title">{title}</div>
@@ -281,6 +309,7 @@ export function WideCard({ item }: { item: Metadata }) {
           <strong>{title}</strong>
           <small>{sub}</small>
         </span>
+        <MoreButton item={item} />
         {progress > 0 && (
           <span class="progress">
             <i style={{ width: `${progress * 100}%` }} />

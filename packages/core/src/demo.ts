@@ -245,6 +245,33 @@ export class DemoServer implements MediaServer {
     if (m) m.userRating = rating ?? undefined;
   }
 
+  private lists = new Map<string, { title: string; keys: string[] }>();
+
+  async trailer(ratingKey: string): Promise<string | undefined> {
+    // La démo n'a pas de clips : la bande-annonce est le film lui-même.
+    return this.db.get(ratingKey)?.type === 'movie' ? ratingKey : undefined;
+  }
+
+  async removeFromContinueWatching(ratingKey: string): Promise<void> {
+    const m = this.db.get(ratingKey);
+    if (m) m.viewOffset = undefined;
+  }
+
+  async playlists(): Promise<Metadata[]> {
+    return [...this.lists.entries()].map(([id, l]) => ({ ratingKey: id, type: 'playlist', title: l.title, leafCount: l.keys.length }));
+  }
+
+  async playlistItems(playlistId: string): Promise<Metadata[]> {
+    return (this.lists.get(playlistId)?.keys ?? []).map((k) => this.db.get(k)).filter((m): m is Metadata & { _section: string } => !!m);
+  }
+
+  async addToPlaylist(playlistId: string | null, ratingKey: string, title?: string): Promise<void> {
+    const id = playlistId ?? `pl${this.lists.size + 1}`;
+    const list = this.lists.get(id) ?? { title: title || 'MultiPlex', keys: [] };
+    list.keys.push(ratingKey);
+    this.lists.set(id, list);
+  }
+
   async scrobble(ratingKey: string, watched: boolean): Promise<void> {
     const m = this.db.get(ratingKey);
     if (m) {

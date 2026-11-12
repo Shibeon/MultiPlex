@@ -8,6 +8,7 @@ import { withCommunityMarkers } from '../markers';
 import { update } from '../settings';
 import { settings } from '../settings';
 import { invalidate, server } from '../store';
+import { dequeue, upNext } from '../queue';
 import { Spinner, labels } from '../ui';
 
 const streamLabel = (s: Stream) => s.extendedDisplayTitle ?? s.displayTitle ?? s.title ?? s.language ?? `#${s.id}`;
@@ -166,7 +167,7 @@ export function NativePlayer({ id }: { id: string }) {
         report('stopped', time);
         stopTranscode();
         invalidate(`${srv.id}:`);
-        if (data.eof && nextRef.current && settings.value.autoNext) playNext();
+        if (data.eof && nextRef.current && (settings.value.autoNext || nextRef.current.type === 'queued')) playNext();
         // Fiche d'une personne demandée depuis la distribution affichée à la pause.
         else if (typeof data.goto === 'string' && /^\/person\/[0-9a-f]+$/i.test(data.goto)) {
           const it = itemRef.current;
@@ -202,6 +203,12 @@ export function NativePlayer({ id }: { id: string }) {
             () => {},
           );
         }
+        dequeue(it.ratingKey);
+        const queued = upNext.peek()[0];
+        if (queued) {
+          nextRef.current = { ratingKey: queued.ratingKey, title: queued.title, type: 'queued' };
+          native!.setMeta({ hasNext: true, nextTitle: queued.title });
+        }
         const t0 = route.value.query.get('t');
         await launch(t0 !== null ? Number(t0) || 0 : (it.viewOffset ?? 0) / 1000);
         if (!alive) return;
@@ -214,7 +221,7 @@ export function NativePlayer({ id }: { id: string }) {
             const after = seasons.filter((s) => (s.index ?? 0) > (it.parentIndex ?? 0)).sort((a, b) => (a.index ?? 0) - (b.index ?? 0))[0];
             if (after) following = (await srv.children(after.ratingKey).catch(() => []))[0];
           }
-          if (alive && following) {
+          if (alive && following && !nextRef.current) {
             nextRef.current = following;
             native!.setMeta({ hasNext: true });
           }

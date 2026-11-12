@@ -1,6 +1,6 @@
 import { render } from 'preact';
 import { App } from './app';
-import { isOverlayWindow } from './native';
+import { isOverlayWindow, isXrayWindow } from './native';
 import { initNav } from './nav';
 import { NativeOverlay } from './pages/NativeOverlay';
 import { initSettings } from './settings';
@@ -9,7 +9,10 @@ import './styles.css';
 
 initSettings();
 
-if (isOverlayWindow) {
+if (isXrayWindow) {
+  // Fenêtre invisible : uniquement la reconnaissance de visages, chargée à la demande.
+  void import('./xray').then((x) => x.startXrayWorker());
+} else if (isOverlayWindow) {
   // Fenêtre transparente posée sur la vidéo du lecteur natif : uniquement les commandes,
   // sans connexion au serveur (la fenêtre principale s'en charge).
   document.documentElement.classList.add('overlay-window');

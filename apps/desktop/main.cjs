@@ -204,6 +204,108 @@ ipcMain.handle('xray:photo', async (_e, url) => {
   }
 });
 
+// La reconnaissance tourne dans une fenêtre invisible à part, avec son propre processus :
+// son calcul (jusqu'à plusieurs secondes d'un bloc au premier usage) ne peut plus figer
+// les contrôles du lecteur. Elle est fermée avec la fenêtre principale.
+let xrayWin = null;
+let xrayReady = null;
+let xrayJob = 0;
+const xrayJobs = new Map();
+function xrayWorker() {
+  if (xrayWin && !xrayWin.isDestroyed()) return xrayReady;
+  if (!main || main.isDestroyed()) return Promise.reject(new Error('pas de fenêtre'));
+  const win = new BrowserWindow({
+    parent: main,
+    show: false,
+    skipTaskbar: true,
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, preload, backgroundThrottling: false },
+  });
+  xrayWin = win;
+  xrayReady = new Promise((resolve) => {
+    const ready = (e) => {
+      if (e.sender !== win.webContents) return;
+      ipcMain.removeListener('xray:ready', ready);
+      resolve();
+    };
+    ipcMain.on('xray:ready', ready);
+  });
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.webContents.on('will-navigate', (e) => e.preventDefault());
+  win.webContents.on('render-process-gone', () => !win.isDestroyed() && win.destroy());
+  win.on('closed', () => {
+    if (xrayWin === win) xrayWin = null;
+    for (const done of xrayJobs.values()) done(null);
+    xrayJobs.clear();
+  });
+  win.loadFile(INDEX, { hash: '/xray-worker' });
+  return xrayReady;
+}
+ipcMain.handle('xray:run', async (_e, kind, cast) => {
+  if (!['who', 'warm'].includes(kind) || !Array.isArray(cast)) return null;
+  const clean = cast.slice(0, 60).map((p) => ({ key: typeof p?.key === 'string' ? p.key : undefined, name: String(p?.name ?? ''), thumb: typeof p?.thumb === 'string' ? p.thumb : undefined }));
+  try {
+    await xrayWorker();
+  } catch {
+    return null;
+  }
+  const id = ++xrayJob;
+  return new Promise((resolve) => {
+    xrayJobs.set(id, resolve);
+    sendTo(xrayWin, 'xray:job', id, kind, clean);
+  });
+});
+ipcMain.on('xray:result', (e, id, result) => {
+  if (!xrayWin || e.sender !== xrayWin.webContents) return;
+  const done = xrayJobs.get(id);
+  xrayJobs.delete(id);
+  done?.(result ?? null);
+});
+ipcMain.on('xray:cancel', () => sendTo(xrayWin, 'xray:cancel'));
+
+// --- Télécharger le fichier d'un titre (menu « Télécharger ») ---
+// Le fichier d'origine, tel qu'il est sur le serveur ; Windows demande où l'enregistrer.
+// Le jeton voyage en en-tête. La progression s'affiche sur l'icône de la barre des tâches.
+const downloadNames = new Map();
+let downloadsWired = false;
+function wireDownloads(win) {
+  if (downloadsWired) return;
+  downloadsWired = true;
+  win.webContents.session.on('will-download', (_e, item) => {
+    const name = downloadNames.get(item.getURL()) ?? item.getFilename();
+    downloadNames.delete(item.getURL());
+    item.setSaveDialogOptions({ defaultPath: path.join(app.getPath('downloads'), name) });
+    sendTo(main, 'download:event', { state: 'started', name });
+    item.on('updated', () => {
+      const total = item.getTotalBytes();
+      if (main && !main.isDestroyed()) main.setProgressBar(total ? item.getReceivedBytes() / total : 2);
+    });
+    item.once('done', (_ev, state) => {
+      if (main && !main.isDestroyed()) main.setProgressBar(-1);
+      sendTo(main, 'download:event', { state, name, path: state === 'completed' ? item.getSavePath() : undefined });
+    });
+  });
+}
+ipcMain.handle('file:download', (_e, url, headers, name) => {
+  let u;
+  try {
+    u = new URL(String(url));
+  } catch {
+    return false;
+  }
+  // Uniquement le fichier d'un titre du serveur, jamais une adresse quelconque.
+  if (!['http:', 'https:'].includes(u.protocol) || !u.pathname.startsWith('/library/parts/') || !main) return false;
+  u.searchParams.set('download', '1');
+  const clean = {};
+  for (const [k, v] of Object.entries(headers ?? {})) if (/^X-Plex-[A-Za-z-]+$/.test(k)) clean[k] = String(v);
+  wireDownloads(main);
+  downloadNames.set(u.toString(), String(name || '').replace(/[\\/:*?"<>|]/g, '_').slice(0, 180) || path.basename(u.pathname));
+  main.webContents.downloadURL(u.toString(), { headers: clean });
+  return true;
+});
+ipcMain.on('file:show', (_e, file) => {
+  if (typeof file === 'string' && path.isAbsolute(file) && fs.existsSync(file)) shell.showItemInFolder(file);
+});
+
 // Repères d'intro communautaires (IntroDB). La page ne peut pas interroger ce service
 // elle-même (il refuse les navigateurs) ; seuls un identifiant IMDb et un numéro
 // d'épisode partent, rien du compte ni du serveur.
@@ -492,6 +594,8 @@ function createWindow() {
     win.webContents.on('did-finish-load', async () => {
       if (++loads === 1) {
         // Un épisode de démonstration : il a un marqueur d'intro et un épisode suivant.
+        // `--smoke-couch` : le même parcours, lecteur en mode TV (profil d'essai uniquement).
+        if (process.argv.includes('--smoke-couch')) await js("localStorage.setItem('mp.settings', JSON.stringify({ ...JSON.parse(localStorage.getItem('mp.settings') || '{}'), couch: true }))");
         await js("localStorage.setItem('mp.demo','true'); location.hash = '#/play/243?t=8'; location.reload()");
         return;
       }
@@ -507,6 +611,25 @@ function createWindow() {
           await wait(400);
           fs.writeFileSync(arg('smoke-shot'), (await overlay.webContents.capturePage()).toPNG());
           report.videoShot = await player.send(['screenshot-to-file', arg('smoke-shot').replace(/\.png$/, '-video.jpg'), 'video']);
+        }
+        // Mode TV : pilotage aux flèches, comme avec une télécommande.
+        if (process.argv.includes('--smoke-couch')) {
+          const key = async (keyCode) => {
+            overlay.webContents.sendInputEvent({ type: 'keyDown', keyCode });
+            overlay.webContents.sendInputEvent({ type: 'keyUp', keyCode });
+            await wait(250);
+            return ui("document.activeElement?.dataset?.act || document.activeElement?.dataset?.menu || document.activeElement?.getAttribute('aria-label') || document.activeElement?.tagName");
+          };
+          const before = (await player.info())['time-pos'];
+          await key('Right');
+          const afterRight = (await player.info())['time-pos'];
+          report.couch = {
+            layout: await ui("({ couch: document.querySelector('.player')?.classList.contains('couch-player'), clock: document.querySelector('.couch-clock')?.textContent, play: Math.round(document.querySelector('[data-act=\"toggle\"]').getBoundingClientRect().width), title: getComputedStyle(document.querySelector('.player-title strong')).fontSize })"),
+            rightSeeks: Math.round(afterRight - before),
+            focus: [await key('Up'), await key('Right'), await key('Right'), await key('Left'), await key('Left'), await key('Down'), await key('Up'), await key('Up')],
+          };
+          if (arg('smoke-shot')) fs.writeFileSync(arg('smoke-shot').replace(/\.png$/, '-couch.png'), (await overlay.webContents.capturePage()).toPNG());
+          await ui('document.activeElement?.blur()');
         }
         // Passer l'intro, par le bouton.
         report.skipClicked = await click('.skip');

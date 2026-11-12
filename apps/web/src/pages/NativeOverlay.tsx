@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { formatClock, t } from '../i18n';
 import { native, type NativeMeta } from '../native';
+import { moveFocus } from '../nav';
 import { settings } from '../settings';
-import { warmUp, whoIsOnScreen, xrayAvailable } from '../xray';
+import { cancelXray, runXray, xrayAvailable } from '../xray';
 import { Icon, SeekPreview } from '../ui';
 
 type Menu = null | 'audio' | 'sub' | 'speed' | 'chapter' | 'quality' | 'output';
@@ -23,6 +24,10 @@ interface Chapter {
 
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 const HIDE_AFTER_MS = 3000;
+/** En mode TV, les contrôles restent un peu plus longtemps : on les lit de loin. */
+const HIDE_AFTER_COUCH_MS = 5000;
+
+const clockOf = (d: Date) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
 /**
  * Commandes du lecteur natif. Cette page s'affiche dans une fenêtre transparente
@@ -95,13 +100,24 @@ export function NativeOverlay() {
   const wake = () => {
     setVisible(true);
     clearTimeout(hideTimer.current);
-    hideTimer.current = window.setTimeout(() => setVisible(false), HIDE_AFTER_MS);
+    hideTimer.current = window.setTimeout(() => setVisible(false), settings.value.couch ? HIDE_AFTER_COUCH_MS : HIDE_AFTER_MS);
   };
   useEffect(() => {
     wake();
     return () => clearTimeout(hideTimer.current);
   }, []);
   const shown = visible || paused || !!menu || scrub !== null;
+  const couch = settings.value.couch;
+
+  // Mode TV : quand les contrôles disparaissent, le focus les quitte aussi, pour que les flèches
+  // reviennent à l'avance / au retour rapide.
+  useEffect(() => {
+    if (!shown && couch) (document.activeElement as HTMLElement | null)?.blur?.();
+  }, [shown, couch]);
+  // Un menu ouvert à la télécommande : le focus va sur le choix en cours.
+  useEffect(() => {
+    if (menu && couch) document.querySelector<HTMLElement>('.player-menu button.on, .player-menu button')?.focus();
+  }, [menu, couch]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -109,6 +125,28 @@ export function NativeOverlay() {
       const step = settings.value.seekStep;
       const onControl = (e.target as HTMLElement).closest?.('button,input');
       wake();
+      // Mode TV, piloté comme une télécommande : flèches pour aller d'un bouton à l'autre quand
+      // les contrôles ont le focus ; sinon gauche / droite avancent ou reculent, et haut, bas ou OK
+      // font apparaître les contrôles, le focus sur Lecture.
+      if (settings.value.couch && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Enter'].includes(e.key)) {
+        const DIR: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+        if (onControl) {
+          if (e.key === 'Enter') return;
+          // Sur la barre de progression, gauche / droite la déplacent.
+          if (onControl.tagName === 'INPUT' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) return;
+          e.preventDefault();
+          const [dx, dy] = DIR[e.key];
+          moveFocus(dx, dy);
+          return;
+        }
+        e.preventDefault();
+        // OK pendant l'intro ou le générique : on les passe, comme le propose le bouton à l'écran.
+        const skip = document.querySelector<HTMLElement>('.skip');
+        if (e.key === 'Enter' && skip) return void skip.click();
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') void n.command('seekBy', e.key === 'ArrowLeft' ? -step : step);
+        else document.querySelector<HTMLElement>('[data-act="toggle"]')?.focus();
+        return;
+      }
       switch (e.key) {
         case 'Escape':
         case 'Backspace':
@@ -170,8 +208,8 @@ export function NativeOverlay() {
     const cast = meta.cast;
     const timer = setTimeout(() => {
       setXray({ at: pausedAt, state: 'working', faces: 0, onScreen: [] });
-      whoIsOnScreen(cast, () => alive).then(
-        (r) => alive && r && setXray({ at: pausedAt, state: 'done', ...r }),
+      runXray('who', cast).then(
+        (r) => alive && setXray(r ? { at: pausedAt, state: 'done', ...r } : { at: pausedAt, state: 'failed', faces: 0, onScreen: [] }),
         (e: unknown) => {
           // Trace pour le diagnostic : l'interface, elle, retombe sur la distribution complète.
           console.warn('[xray]', e);
@@ -183,6 +221,7 @@ export function NativeOverlay() {
     return () => {
       alive = false;
       clearTimeout(timer);
+      cancelXray();
     };
   }, [pausedAt, meta.xray, meta.cast]);
   // Préparation en tâche de fond, quelques secondes après le début de la lecture.
@@ -190,7 +229,7 @@ export function NativeOverlay() {
     if (!meta.xray || !xrayAvailable || !meta.cast?.length) return;
     let alive = true;
     const cast = meta.cast;
-    const timer = setTimeout(() => void warmUp(cast, () => alive).catch(() => {}), 6000);
+    const timer = setTimeout(() => alive && void runXray('warm', cast).catch(() => {}), 6000);
     return () => {
       alive = false;
       clearTimeout(timer);
@@ -238,7 +277,7 @@ export function NativeOverlay() {
 
   return (
     <div
-      class={`player overlay${shown ? ' show-ui' : ''}`}
+      class={`player overlay${shown ? ' show-ui' : ''}${couch ? ' couch-player' : ''}`}
       onMouseMove={wake}
       onClick={(e) => {
         // Clic sur l'image elle-même : pause ; sur un menu ouvert : on le referme.
@@ -276,6 +315,12 @@ export function NativeOverlay() {
           <strong>{meta.title}</strong>
           <span>{meta.sub}</span>
         </div>
+        {couch && (
+          <div class="couch-clock" aria-hidden="true">
+            <b>{clockOf(new Date())}</b>
+            {duration > 0 && <small>{t('couch.ends').replace('{t}', clockOf(new Date(Date.now() + ((duration - time) * 1000) / (speed || 1))))}</small>}
+          </div>
+        )}
         <span class="chips">
           {outLabel && (
             <span class={`chip${out?.format?.startsWith('spdif') ? ' raw' : ''}`} data-audio-out={out?.format}>
@@ -344,16 +389,26 @@ export function NativeOverlay() {
           >
             <Icon name="prev" size={20} />
           </button>
+          {couch && (
+            <button class="btn icon-btn jump" data-act="back10" aria-label={t('player.back10')} title={t('player.back10')} onClick={() => void n.command('seekBy', -10)}>
+              −10
+            </button>
+          )}
           <button class="btn icon-btn play" data-act="toggle" aria-label={paused ? t('item.play') : 'Pause'} onClick={() => void n.command('toggle')}>
             <Icon name={paused ? 'play' : 'pause'} size={26} />
           </button>
+          {couch && (
+            <button class="btn icon-btn jump" data-act="fwd30" aria-label={t('player.fwd30')} title={t('player.fwd30')} onClick={() => void n.command('seekBy', 30)}>
+              +30
+            </button>
+          )}
           <button class="btn icon-btn" data-act="mute" aria-label="Volume" aria-pressed={muted} onClick={() => void n.command('mute')}>
             <Icon name={muted || volume === 0 ? 'mute' : 'volume'} />
           </button>
           <input class="volume" type="range" aria-label="Volume" min={0} max={100} step={1} value={muted ? 0 : Math.min(100, volume)} style={{ '--fill': `${muted ? 0 : Math.min(100, volume)}%` }} onInput={(e) => void n.command('volume', Number(e.currentTarget.value))} />
           {meta.hasNext && (
-            <button class="btn" data-act="next" onClick={() => n.action('next')}>
-              <Icon name="next" size={18} /> {t('player.next')}
+            <button class="btn" data-act="next" title={meta.nextTitle} onClick={() => n.action('next')}>
+              <Icon name="next" size={18} /> {meta.nextTitle ? t('player.upNext') : t('player.next')}
             </button>
           )}
           <span class="spacer" />

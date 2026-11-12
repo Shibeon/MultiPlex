@@ -114,6 +114,8 @@ export async function switchProfile(uuid: string, pin?: string): Promise<void> {
 }
 
 const cache = new Map<string, unknown>();
+/** Change à chaque invalidation : les données affichées sont alors rechargées. */
+const epoch = signal(0);
 
 async function use(srv: MediaServer): Promise<void> {
   cache.clear();
@@ -214,6 +216,7 @@ export function logout(): void {
 /** Oublie les données en cache dont la clé commence par `prefix`. */
 export function invalidate(prefix = ''): void {
   for (const k of [...cache.keys()]) if (k.startsWith(prefix)) cache.delete(k);
+  epoch.value++;
 }
 
 /**
@@ -224,6 +227,7 @@ export function useData<T>(key: string | null, fetcher: () => Promise<T>): { dat
   const [tick, setTick] = useState(0);
   const [, render] = useState(0);
   const st = useRef<{ key: string | null; data?: T; error?: Error; loading: boolean }>({ key: null, loading: false });
+  const version = epoch.value;
   if (st.current.key !== key) st.current = { key, data: key ? (cache.get(key) as T | undefined) : undefined, loading: !!key };
   useEffect(() => {
     if (!key) return;
@@ -246,6 +250,6 @@ export function useData<T>(key: string | null, fetcher: () => Promise<T>): { dat
     return () => {
       alive = false;
     };
-  }, [key, tick]);
+  }, [key, tick, version]);
   return { ...st.current, reload: () => setTick((n) => n + 1) };
 }

@@ -88,6 +88,10 @@ export interface Part {
   id: number;
   key: string;
   container?: string;
+  /** Chemin du fichier sur le serveur. */
+  file?: string;
+  /** Taille en octets. */
+  size?: number;
   Stream?: Stream[];
 }
 
@@ -97,6 +101,9 @@ export interface Media {
   videoCodec?: string;
   audioCodec?: string;
   videoResolution?: string;
+  width?: number;
+  height?: number;
+  videoFrameRate?: string;
   bitrate?: number;
   audioChannels?: number;
   Part: Part[];
@@ -145,6 +152,8 @@ export interface Metadata {
   grandparentRatingKey?: string;
   grandparentTitle?: string;
   grandparentThumb?: string;
+  /** Identifiant Plex universel de la série (épisodes). */
+  grandparentGuid?: string;
   contentRating?: string;
   rating?: number;
   audienceRating?: number;
@@ -168,6 +177,14 @@ export interface Metadata {
   Director?: Tag[];
   Writer?: Tag[];
   Producer?: Tag[];
+  /** Listes de lecture : nombre d'éléments, liste « intelligente ». */
+  smart?: boolean | number;
+  playlistType?: string;
+  /** Mosaïque d'affiches d'une liste de lecture. */
+  composite?: string;
+  /** Date de mise à jour (secondes), sert aussi pour les liens de téléchargement. */
+  updatedAt?: number;
+  addedAt?: number;
 }
 
 export interface Hub {
@@ -273,6 +290,15 @@ export interface MediaServer {
   personMedia(key: string): Promise<Metadata[]>;
   /** Note personnelle sur 10 ; null pour la retirer. */
   rate(ratingKey: string, rating: number | null): Promise<void>;
+  /** Bande-annonce d'un film ou d'une série (ratingKey du clip), s'il y en a une. */
+  trailer(ratingKey: string): Promise<string | undefined>;
+  /** Retire un titre de « Continuer à regarder » sans toucher à son état vu / non vu. */
+  removeFromContinueWatching(ratingKey: string): Promise<void>;
+  /** Listes de lecture vidéo de l'utilisateur (hors listes intelligentes). */
+  playlists(): Promise<Metadata[]>;
+  playlistItems(playlistId: string): Promise<Metadata[]>;
+  /** Ajoute un élément à une liste existante, ou en crée une (`playlistId` null) portant `title`. */
+  addToPlaylist(playlistId: string | null, ratingKey: string, title?: string): Promise<void>;
   /** Lectures en cours. Réservé au propriétaire du serveur : sinon l'appel échoue en 401/403. */
   sessions(): Promise<ActiveSession[]>;
 }

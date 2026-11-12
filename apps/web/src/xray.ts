@@ -107,8 +107,46 @@ export async function warmUp(cast: XrayPerson[], alive: () => boolean): Promise<
   }
 }
 
+/**
+ * Fenêtre invisible de reconnaissance : exécute les travaux demandés par les contrôles du
+ * lecteur, l'un après l'autre. Une reprise de lecture abandonne ceux en cours.
+ */
+export function startXrayWorker(): void {
+  const w = native?.xrayWorker;
+  if (!w) return;
+  let generation = 0;
+  let chain: Promise<unknown> = Promise.resolve();
+  w.onCancel(() => generation++);
+  w.onJob((id, kind, cast) => {
+    const mine = generation;
+    const alive = () => mine === generation;
+    chain = chain.then(async () => {
+      try {
+        if (!alive()) return w.result(id, null);
+        if (kind === 'warm') {
+          await warmUp(cast, alive);
+          w.result(id, null);
+        } else w.result(id, await whoIsOnScreen(cast, alive));
+      } catch (e) {
+        console.warn('[xray]', e);
+        w.result(id, null);
+      }
+    });
+  });
+  w.ready();
+}
+
+/** Contrôles du lecteur : confie le calcul à la fenêtre dédiée (jamais dans la leur). */
+export function runXray(kind: 'who' | 'warm', cast: XrayPerson[]): Promise<XrayResult | null> {
+  return native?.xray?.run ? native.xray.run(kind, cast.map((p) => ({ key: p.key, name: p.name, thumb: p.thumb }))) : Promise.resolve(null);
+}
+
+export function cancelXray(): void {
+  native?.xray?.cancel?.();
+}
+
 /** Vrai si cette application sait faire la reconnaissance (application de bureau). */
-export const xrayAvailable = !!native?.xray;
+export const xrayAvailable = !!native?.xray?.run;
 
 /**
  * Cherche dans l'image en pause les personnes de la distribution.

@@ -145,7 +145,7 @@ input[type='color'] { padding: 0; width: 3em; height: 2em; }
   background-size: cover; background-position: center 20%; opacity: 0.28;
   -webkit-mask-image: linear-gradient(#000 30%, transparent); mask-image: linear-gradient(#000 30%, transparent);
 }
-.details-main, .children { position: relative; z-index: 1; }
+.details-main, .children, .details > .cast { position: relative; z-index: 1; }
 .details-main { display: flex; gap: 2rem; align-items: flex-start; }
 .details-poster { width: min(16rem, 30vw); aspect-ratio: 2 / 3; object-fit: cover; border-radius: var(--radius); box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5); }
 .details-info { flex: 1; min-width: 0; max-width: 52rem; }
@@ -566,7 +566,7 @@ video::cue { font-family: inherit; }
 /* ---------- fiches : le texte reste lisible quel que soit le fond ---------- */
 /* Un voile sombre du côté du texte, entre l'image de fond et le contenu. */
 .details::after { content: ''; position: absolute; inset: 0 0 auto 0; height: min(85vh, 48rem); z-index: 0; pointer-events: none; background: linear-gradient(to right, color-mix(in srgb, var(--bg) 94%, transparent) 0%, color-mix(in srgb, var(--bg) 80%, transparent) 42%, color-mix(in srgb, var(--bg) 20%, transparent) 82%), linear-gradient(to top, var(--bg) 0%, transparent 40%); }
-.details-main, .children { z-index: 1; }
+.details-main, .children, .details > .cast { z-index: 1; }
 .details-info { text-shadow: 0 1px 10px color-mix(in srgb, var(--bg) 85%, transparent); }
 .details-info .tagline, .details-info .facts, .details-info .credits { color: color-mix(in srgb, var(--text) 82%, transparent); }
 .details-info .facts { font-weight: 500; }
@@ -795,3 +795,96 @@ button.cast-card { border: 0; background: none; cursor: pointer; font: inherit; 
 
 .pause-cast-card.on-screen { background: rgba(30, 30, 36, 0.92); box-shadow: inset 0 0 0 2px var(--accent); }
 .pause-cast-card.on-screen .cast-face { box-shadow: 0 0 0 2px var(--accent); }
+
+/* ---------- menu d'un titre (clic droit, bouton « ⋯ ») ---------- */
+.card-more { position: absolute; top: 0.4rem; right: 0.4rem; z-index: 2; display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: 50%; background: rgba(10, 10, 14, 0.72); color: #fff; opacity: 0; transition: opacity var(--speed), background var(--speed); cursor: pointer; }
+.card:hover .card-more, .card:focus-visible .card-more, .card-more:focus-visible { opacity: 1; }
+.card-more:hover { background: var(--accent); color: #000; }
+@media (hover: none) { .card-more { opacity: 1; } }
+.menu { position: fixed; z-index: 300; min-width: 15rem; max-width: 20rem; padding: 0.35rem; border-radius: calc(var(--radius) * 0.9); background: var(--surface); box-shadow: 0 18px 60px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.06); animation: menu-in 0.12s ease-out; }
+@keyframes menu-in { from { opacity: 0; transform: translateY(-4px); } }
+.menu-title { padding: 0.45rem 0.7rem 0.35rem; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.04em; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.menu-entry { display: flex; align-items: center; gap: 0.6rem; width: 100%; padding: 0.55rem 0.7rem; border: 0; border-radius: calc(var(--radius) * 0.6); background: none; color: var(--text); font: inherit; font-size: 0.92rem; text-align: left; cursor: pointer; }
+.menu-entry:hover:not([disabled]), .menu-entry:focus-visible { background: var(--surface-2); outline: none; }
+.menu-entry[disabled] { opacity: 0.45; cursor: default; }
+.menu-icon { display: grid; place-items: center; width: 1.2rem; color: var(--muted); }
+.menu-label { flex: 1; }
+.menu-chevron { color: var(--muted); font-size: 1.1rem; line-height: 1; }
+.menu-sep { height: 1px; margin: 0.3rem 0.4rem; background: var(--surface-2); }
+.menu-note { display: block; padding: 0.5rem 0.7rem; color: var(--muted); font-size: 0.85rem; }
+.menu-sub-host { position: relative; }
+.menu-sub-place { position: absolute; top: -0.35rem; left: 100%; padding-left: 0.3rem; }
+.menu-sub-place.flip { left: auto; right: 100%; padding: 0 0.3rem 0 0; }
+.menu.sub { position: static; max-height: 60vh; overflow: auto; }
+.menu-new { display: flex; gap: 0.4rem; padding: 0.35rem; }
+.menu-new input { flex: 1; min-width: 0; }
+.toast { position: fixed; left: 50%; bottom: 1.5rem; z-index: 310; transform: translateX(-50%); display: flex; align-items: center; gap: 0.9rem; max-width: min(92vw, 36rem); padding: 0.7rem 0.8rem 0.7rem 1.1rem; border-radius: var(--radius); background: var(--surface-2); box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55); animation: menu-in 0.15s ease-out; }
+.info-dialog { width: min(100%, 44rem); }
+.info-dialog section { display: grid; gap: 0.5rem; }
+.info-list { display: grid; gap: 0.3rem; margin: 0; }
+.info-list div { display: grid; grid-template-columns: 9rem 1fr; gap: 0.8rem; }
+.info-list dt { color: var(--muted); }
+.info-list dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.info-list code { font-size: 0.82rem; }
+.info-streams { margin: 0; padding-left: 1.1rem; display: grid; gap: 0.25rem; font-size: 0.9rem; }
+.info-streams b { display: inline-block; min-width: 5.5rem; font-weight: 600; color: var(--muted); }
+/* ---------- listes de lecture ---------- */
+.playlist-grid { display: grid; gap: 1.2rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr)); }
+.playlist-tile { display: grid; gap: 0.3rem; color: inherit; text-decoration: none; }
+.playlist-art { display: grid; place-items: center; aspect-ratio: 16 / 9; border-radius: var(--radius); overflow: hidden; background: var(--surface-2); color: var(--muted); transition: transform var(--speed); }
+.playlist-art img { width: 100%; height: 100%; object-fit: cover; }
+.playlist-tile:hover .playlist-art, .playlist-tile:focus-visible .playlist-art { transform: scale(1.03); }
+
+/* ---------- lecteur en mode TV : lisible à trois mètres, piloté aux flèches ---------- */
+.player.overlay.couch-player .player-top { padding: 2.2rem 3.5rem 6rem; align-items: flex-start; }
+.player.overlay.couch-player .player-top > .btn { display: none; }
+.player.overlay.couch-player .player-title strong { font-size: 2.6rem; line-height: 1.1; }
+.player.overlay.couch-player .player-title span { font-size: 1.35rem; margin-top: 0.3rem; }
+.couch-clock { display: grid; justify-items: end; gap: 0.15rem; font-variant-numeric: tabular-nums; text-shadow: 0 1px 12px rgba(0, 0, 0, 0.7); }
+.couch-clock b { font-size: 2.2rem; font-weight: 600; line-height: 1; }
+.couch-clock small { font-size: 1.05rem; opacity: 0.8; }
+.player.overlay.couch-player .chips { position: absolute; top: 7.6rem; right: 3.5rem; display: flex; gap: 0.5rem; }
+.player.overlay.couch-player .chip { font-size: 0.95rem; }
+.player.overlay.couch-player .player-bottom { padding: 8rem 3.5rem 2.6rem; }
+.player.overlay.couch-player .seek { gap: 1.4rem; font-size: 1.5rem; font-weight: 600; }
+.player.overlay.couch-player input[type='range'] { height: 2.4rem; }
+.player.overlay.couch-player input[type='range']::-webkit-slider-runnable-track { height: 12px; }
+.player.overlay.couch-player input[type='range']::-webkit-slider-thumb { width: 30px; height: 30px; margin-top: -9px; opacity: 1; }
+.player.overlay.couch-player input[type='range']:focus-visible { outline: none; }
+.player.overlay.couch-player input[type='range']:focus-visible::-webkit-slider-runnable-track { box-shadow: 0 0 0 4px var(--accent); }
+.player.overlay.couch-player input[type='range']:focus-visible::-webkit-slider-thumb { margin-top: -9px; box-shadow: 0 0 0 6px var(--accent); }
+.player.overlay.couch-player .seek-mark { height: 12px; }
+/* Première ligne : le transport, centré et grand ; la seconde : pistes, sous-titres, réglages. */
+.player.overlay.couch-player .controls { justify-content: center; gap: 1.2rem; margin-top: 1.6rem; }
+.player.overlay.couch-player .controls .spacer { flex: 0 0 100%; height: 0.4rem; }
+.player.overlay.couch-player .controls .volume { display: none; }
+.player.overlay.couch-player .btn { font-size: 1.2rem; padding: 0.75em 1.4em; }
+.player.overlay.couch-player .btn.icon-btn { padding: 0.85em; }
+.player.overlay.couch-player .btn .icon { width: 30px; height: 30px; }
+.player.overlay.couch-player .btn.jump { min-width: 4.4rem; font-size: 1.15rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.player.overlay.couch-player .btn.play { padding: 1.25em; }
+.player.overlay.couch-player .btn.play .icon { width: 46px; height: 46px; }
+.player.overlay.couch-player .btn:focus-visible { outline: none; transform: scale(1.12); background: #fff; color: #000; box-shadow: 0 0 0 4px var(--accent), 0 0 40px color-mix(in srgb, var(--accent) 60%, transparent); }
+.player.overlay.couch-player .player-menu { left: 50%; right: auto; bottom: 100%; transform: translateX(-50%); min-width: 26rem; max-height: 60vh; overflow: auto; margin-bottom: 1rem; padding: 0.8rem; }
+.player.overlay.couch-player .player-menu button { font-size: 1.35rem; padding: 0.8em 1.2em; }
+.player.overlay.couch-player .player-menu button:focus-visible { outline: none; background: #fff; color: #000; }
+.player.overlay.couch-player .skip { bottom: 20.5rem; right: 3.5rem; font-size: 1.5rem; padding: 0.9em 1.8em; }
+.player.overlay.couch-player .skip:focus-visible { outline: 4px solid var(--accent); outline-offset: 4px; }
+.player.overlay.couch-player .pause-cast { bottom: 19rem; padding: 0 3.5rem; }
+.player.overlay.couch-player .pause-cast h3 { font-size: 1.1rem; }
+.player.overlay.couch-player .pause-cast-card { flex-basis: 9rem; padding: 0.8rem 0.4rem; }
+.player.overlay.couch-player .pause-cast-card .cast-face { width: 6rem; height: 6rem; }
+.player.overlay.couch-player .pause-cast-card strong { font-size: 1rem; }
+.player.overlay.couch-player .pause-cast-card small { font-size: 0.85rem; }
+.player.overlay.couch-player .pause-cast-card:focus-visible { outline: none; transform: scale(1.08); box-shadow: 0 0 0 4px var(--accent); }
+.player.overlay.couch-player .seek-preview img { width: 22rem; }
+.player.overlay.couch-player .seek-preview span { font-size: 1.4rem; }
+
+/* ---------- bouton Retour des pages secondaires ---------- */
+/* Barre de hauteur nulle : le bouton flotte en haut à gauche sans décaler la page. */
+.page-back-bar { position: sticky; top: 0; z-index: 30; height: 0; }
+.page-back { position: absolute; top: 1.5rem; left: clamp(1rem, 3vw, 2.5rem); display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.55em 1.1em 0.55em 0.8em; border-radius: 99px; background: color-mix(in srgb, var(--surface) 82%, transparent); backdrop-filter: blur(10px); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35), inset 0 0 0 1px rgba(255, 255, 255, 0.08); }
+.page-back:hover, .page-back:focus-visible { background: var(--surface-2); }
+/* Navigation latérale : pas de bandeau libre en haut, le bouton prend sa place dans la page. */
+.shell.side .page-back-bar { position: static; height: auto; padding: 1rem clamp(1rem, 3vw, 2.5rem) 0; }
+.shell.side .page-back { position: static; }

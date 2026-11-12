@@ -1,4 +1,5 @@
-import type { MediaServer, Metadata } from '@multiplex/core';
+import type { Metadata } from '@multiplex/core';
+import { resolvePlayable } from '../queue';
 import { useState } from 'preact/hooks';
 import { formatDuration, t } from '../i18n';
 import { go } from '../router';
@@ -7,18 +8,6 @@ import { invalidate, server, useData } from '../store';
 import { Card, ErrorBox, Icon, Ratings, Spinner, StarRating, TechBadges, artSize, isWatched } from '../ui';
 import { ServerWatchlistButton } from './Discover';
 import { CastRow, PeopleLinks } from './Person';
-
-/** Pour une série ou une saison : le premier épisode pas encore vu. */
-async function resolvePlayable(srv: MediaServer, item: Metadata): Promise<Metadata | undefined> {
-  if (item.type === 'movie' || item.type === 'episode') return item;
-  const kids = await srv.children(item.ratingKey);
-  if (item.type === 'season') return kids.find((e) => !e.viewCount) ?? kids[0];
-  if (item.type === 'show') {
-    const season = kids.find((s) => (s.index ?? 0) > 0 && !isWatched(s)) ?? kids.find((s) => (s.index ?? 0) > 0) ?? kids[0];
-    return season && resolvePlayable(srv, season);
-  }
-  return undefined;
-}
 
 function EpisodeRow({ ep }: { ep: Metadata }) {
   const srv = server.value!;
@@ -78,7 +67,7 @@ export function Details({ id }: { id: string }) {
   };
 
   const playable = ['movie', 'episode', 'show', 'season'].includes(item.type);
-  const title = item.type === 'episode' ? item.title : item.type === 'season' ? `${item.parentTitle} — ${item.title}` : item.title;
+  const title = item.title;
   const poster = item.type === 'episode' ? item.grandparentThumb : (item.thumb ?? item.parentThumb);
   const facts = [
     item.type === 'episode' && `S${item.parentIndex} · E${item.index}`,
@@ -94,6 +83,11 @@ export function Details({ id }: { id: string }) {
       <div class="details-main">
         {poster && <img class="details-poster" src={srv.image(poster, 600, 900)} alt="" />}
         <div class="details-info">
+          {item.type === 'season' && item.parentRatingKey && (
+            <a class="crumb" href={`#/item/${item.parentRatingKey}`}>
+              {item.parentTitle}
+            </a>
+          )}
           {item.type === 'episode' && item.grandparentRatingKey && (
             <a class="crumb" href={`#/item/${item.grandparentRatingKey}`}>
               {item.grandparentTitle}

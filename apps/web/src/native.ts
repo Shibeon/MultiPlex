@@ -32,6 +32,8 @@ export interface NativeMeta {
   /** Marqueurs d'intro et de générique, en secondes. */
   markers?: { type: string; start: number; end: number }[];
   hasNext?: boolean;
+  /** Titre suivant pris dans la file d'attente (sinon : épisode suivant). */
+  nextTitle?: string;
   hasPrev?: boolean;
   /** Distribution du titre, montrée à la pause. */
   cast?: { key?: string; name: string; role?: string; thumb?: string }[];
@@ -73,11 +75,23 @@ export interface NativeApi {
   /** Sorties audio de la machine ; absent des versions de l'app qui ne le proposent pas. */
   audioDevices?(): Promise<{ id: string; label: string }[]>;
   platform?: string;
+  /** Application de bureau : télécharge le fichier d'un titre ; Windows demande où l'enregistrer. */
+  download?(url: string, headers: Record<string, string>, name: string): Promise<boolean>;
+  showFile?(file: string): void;
+  onDownload?(listener: (e: { state: string; name: string; path?: string }) => void): () => void;
   /** « Qui est à l'écran ? » : ce que l'application fournit à la reconnaissance de visages. */
   xray?: {
     model(name: string): Promise<Uint8Array | null>;
     frame(): Promise<string | null>;
     photo(url: string): Promise<string | null>;
+    run?(kind: 'who' | 'warm', cast: { key?: string; name: string; thumb?: string }[]): Promise<{ faces: number; onScreen: number[] } | null>;
+    cancel?(): void;
+  };
+  xrayWorker?: {
+    ready(): void;
+    onJob(listener: (id: number, kind: 'who' | 'warm', cast: { key?: string; name: string; thumb?: string }[]) => void): () => void;
+    onCancel(listener: () => void): () => void;
+    result(id: number, result: unknown): void;
   };
   /** Aperçu en image à une position (secondes) ; null s'il n'y en a pas. */
   thumb?(time: number): Promise<string | null>;
@@ -99,11 +113,13 @@ export const native = (window as unknown as { multiplexNative?: NativeApi }).mul
 
 /** Cette fenêtre est-elle la couche de contrôles posée par-dessus la vidéo ? */
 export const isOverlayWindow = !!native && location.hash.startsWith('#/overlay');
+/** Fenêtre invisible où tourne la reconnaissance de visages. */
+export const isXrayWindow = !!native && location.hash.startsWith('#/xray-worker');
 
 /** Vrai une fois confirmé que mpv est présent sur la machine. */
 export const nativeAvailable = signal(false);
 
-if (!isOverlayWindow) {
+if (!isOverlayWindow && !isXrayWindow) {
   native
     ?.available()
     .then((ok) => (nativeAvailable.value = ok))

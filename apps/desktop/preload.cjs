@@ -23,7 +23,23 @@ contextBridge.exposeInMainWorld('multiplexNative', {
     model: (name) => ipcRenderer.invoke('xray:model', String(name)),
     frame: () => ipcRenderer.invoke('xray:frame'),
     photo: (url) => ipcRenderer.invoke('xray:photo', String(url)),
+    /** Lance la reconnaissance dans la fenêtre invisible dédiée : 'who' (image en pause) ou 'warm' (préparation). */
+    run: (kind, cast) => ipcRenderer.invoke('xray:run', String(kind), cast),
+    /** Abandonne les calculs en cours (reprise de la lecture). */
+    cancel: () => ipcRenderer.send('xray:cancel'),
   },
+  /** Fenêtre invisible de reconnaissance : reçoit les travaux et rend les résultats. */
+  xrayWorker: {
+    ready: () => ipcRenderer.send('xray:ready'),
+    onJob: subscribe('xray:job', ([id, kind, cast]) => [id, kind, cast]),
+    onCancel: subscribe('xray:cancel', () => []),
+    result: (id, result) => ipcRenderer.send('xray:result', id, result),
+  },
+  /** Télécharge le fichier d'un titre (adresse du serveur, en-têtes Plex, nom proposé). */
+  download: (url, headers, name) => ipcRenderer.invoke('file:download', String(url), headers, String(name ?? '')),
+  /** Montre un fichier téléchargé dans l'explorateur. */
+  showFile: (file) => ipcRenderer.send('file:show', String(file)),
+  onDownload: subscribe('download:event', ([state]) => [state]),
   /** Met la fenêtre principale en plein écran, ou l'en sort. */
   setFullscreen: (on) => ipcRenderer.send('window:fullscreen', !!on),
   /** Aperçu en image à une position (secondes) : adresse « data: » ou null. */

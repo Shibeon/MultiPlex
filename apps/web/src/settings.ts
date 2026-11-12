@@ -213,9 +213,25 @@ export function initSettings(): void {
       setCouch(!settings.value.couch);
     }
   });
+  // Un réglage changé dans une autre fenêtre (lecteur ↔ fenêtre principale) s'applique ici aussitôt.
+  let lastSaved = '';
+  addEventListener('storage', (e) => {
+    if (e.key !== KEY || !e.newValue || e.newValue === lastSaved) return;
+    try {
+      lastSaved = e.newValue;
+      settings.value = { ...settings.value, ...(JSON.parse(e.newValue) as Partial<Settings>) };
+    } catch {
+      /* valeur illisible : on garde la nôtre */
+    }
+  });
   effect(() => {
     const s = settings.value;
-    save(KEY, s);
+    const json = JSON.stringify(s);
+    // Pas de réécriture d'une valeur déjà enregistrée : sinon deux fenêtres se la renverraient sans fin.
+    if (json !== lastSaved) {
+      lastSaved = json;
+      save(KEY, s);
+    }
     const root = document.documentElement;
     const vars: Record<string, string> = {
       ...(THEMES[s.theme] ?? THEMES.cinema).vars,

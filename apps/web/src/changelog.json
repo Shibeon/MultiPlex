@@ -1,5 +1,24 @@
 [
   {
+    "version": "0.1.6",
+    "fr": [
+      "Correctif : les contrôles du lecteur ne se figent plus au début d’un film (la reconnaissance des acteurs tourne désormais à part).",
+      "Clic droit (ou bouton « ⋯ ») sur un titre, comme dans Plex : Ma liste, partager, mettre à la suite, file d’attente, bande-annonce, listes de lecture, vu / non vu, retirer de Continuer à regarder, télécharger, informations.",
+      "Nouvelle page « Listes de lecture », avec « Tout lire ».",
+      "Lecteur en mode TV repensé : grands boutons centrés, −10 / +30, heure et heure de fin, pilotage complet aux flèches, OK pour passer l’intro.",
+      "Bouton Retour sur les fiches et pages secondaires, et boutons latéraux de la souris.",
+      "Correctif : la distribution des fiches est de nouveau cliquable."
+    ],
+    "en": [
+      "Fix: player controls no longer freeze at the start of a film (actor recognition now runs separately).",
+      "Right-click (or “⋯” button) on a title, as in Plex: My list, share, play next, queue, trailer, playlists, watched / unwatched, remove from Continue Watching, download, info.",
+      "New “Playlists” page, with “Play all”.",
+      "TV-mode player redesigned: large centred buttons, −10 / +30, clock and end time, full arrow-key control, OK skips the intro.",
+      "Back button on detail and secondary pages, and mouse side buttons.",
+      "Fix: cast on detail pages is clickable again."
+    ]
+  },
+  {
     "version": "0.1.5",
     "fr": [
       "À la pause, « qui est à l’écran ? » : les acteurs présents à l’image sont reconnus et mis en avant (calcul sur votre appareil, aucune image envoyée ; désactivable).",

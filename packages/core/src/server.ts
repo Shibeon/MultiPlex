@@ -211,6 +211,32 @@ export class PlexServer implements MediaServer {
     );
   }
 
+  async trailer(ratingKey: string): Promise<string | undefined> {
+    const extras = (await this.mc<{ Metadata?: (Metadata & { extraType?: number; subtype?: string })[] }>(`/library/metadata/${ratingKey}/extras`)).Metadata ?? [];
+    // extraType 1 : bande-annonce.
+    return extras.find((e) => e.extraType === 1 || e.subtype === 'trailer')?.ratingKey;
+  }
+
+  async removeFromContinueWatching(ratingKey: string): Promise<void> {
+    await request(this.url('/actions/removeFromContinueWatching', { ratingKey }), { method: 'PUT' });
+  }
+
+  async playlists(): Promise<Metadata[]> {
+    const list = (await this.mc<{ Metadata?: Metadata[] }>('/playlists', { playlistType: 'video' })).Metadata ?? [];
+    return list.filter((p) => !p.smart || p.smart === 0);
+  }
+
+  async playlistItems(playlistId: string): Promise<Metadata[]> {
+    return (await this.mc<{ Metadata?: Metadata[] }>(`/playlists/${encodeURIComponent(playlistId)}/items`)).Metadata ?? [];
+  }
+
+  async addToPlaylist(playlistId: string | null, ratingKey: string, title?: string): Promise<void> {
+    // Adresse d'un élément de ce serveur, telle que Plex l'attend dans une liste de lecture.
+    const uri = `server://${this.id}/com.plexapp.plugins.library/library/metadata/${ratingKey}`;
+    if (playlistId) await request(this.url(`/playlists/${encodeURIComponent(playlistId)}/items`, { uri }), { method: 'PUT' });
+    else await request(this.url('/playlists', { type: 'video', title: title || 'MultiPlex', smart: 0, uri }), { method: 'POST' });
+  }
+
   async scrobble(ratingKey: string, watched: boolean): Promise<void> {
     await request(
       this.url(watched ? '/:/scrobble' : '/:/unscrobble', {

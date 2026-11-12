@@ -6,6 +6,7 @@ import { back, go, route } from '../router';
 import { withCommunityMarkers } from '../markers';
 import { settings } from '../settings';
 import { invalidate, server } from '../store';
+import { dequeue, upNext } from '../queue';
 import { Icon, Spinner, labels, SeekPreview } from '../ui';
 
 type Menu = null | 'audio' | 'sub' | 'quality' | 'speed' | 'chapter' | 'version';
@@ -189,6 +190,9 @@ export function Player({ id }: { id: string }) {
           itemRef.current = full;
           setItem(full);
         });
+        dequeue(it.ratingKey);
+        const queued = upNext.peek()[0];
+        if (queued) setNext({ ratingKey: queued.ratingKey, title: queued.title, type: 'queued' });
         const t0 = route.value.query.get('t');
         void start(t0 !== null ? Number(t0) || 0 : (it.viewOffset ?? 0) / 1000);
         if (it.type === 'episode' && it.parentRatingKey) {
@@ -201,7 +205,7 @@ export function Player({ id }: { id: string }) {
             const after = seasons.filter((s) => (s.index ?? 0) > (it.parentIndex ?? 0)).sort((a, b) => (a.index ?? 0) - (b.index ?? 0))[0];
             if (after) following = (await srv.children(after.ratingKey).catch(() => []))[0];
           }
-          if (alive && following) setNext(following);
+          if (alive && following) setNext((cur) => cur ?? following);
           // Épisode précédent, y compris le dernier de la saison d'avant.
           let previous = i > 0 ? eps[i - 1] : undefined;
           if (!previous && i === 0 && it.grandparentRatingKey) {
@@ -401,7 +405,7 @@ export function Player({ id }: { id: string }) {
 
   const onEnded = () => {
     report('stopped');
-    if (next && settings.value.autoNext) playNext();
+    if (next && (settings.value.autoNext || next.type === 'queued')) playNext();
     else leave();
   };
 
@@ -523,8 +527,8 @@ export function Player({ id }: { id: string }) {
             <Icon name={ui.muted ? 'mute' : 'volume'} />
           </button>
           {next && (
-            <button class="btn" onClick={playNext}>
-              <Icon name="next" size={18} /> {t('player.next')}
+            <button class="btn" onClick={playNext} title={next.type === 'queued' ? next.title : undefined}>
+              <Icon name="next" size={18} /> {next.type === 'queued' ? t('player.upNext') : t('player.next')}
             </button>
           )}
           <span class="spacer" />
