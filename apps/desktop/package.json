@@ -68,6 +68,14 @@
     },
     "asarUnpack": [
       "mpv-input.conf"
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Shibeon",
+        "repo": "MultiPlex-releases",
+        "releaseType": "release"
+      }
     ]
   },
   "dependencies": {

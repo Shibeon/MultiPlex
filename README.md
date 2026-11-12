@@ -97,12 +97,15 @@ Publier une version :
 2. Poser l'étiquette correspondante et l'envoyer : `git tag v0.2.0 && git push origin v0.2.0`.
 3. Le workflow compile les applications Windows, macOS et Linux et les publie comme version GitHub, avec le fichier que lit la mise à jour automatique.
 
-Les versions doivent être lisibles sans authentification : une application installée ne peut pas interroger un dépôt privé. Deux possibilités :
+Les versions doivent être lisibles sans authentification : une application installée ne peut pas interroger un dépôt privé. Le code reste donc dans ce dépôt, et les versions sont publiées dans un dépôt public à part, [Shibeon/MultiPlex-releases](https://github.com/Shibeon/MultiPlex-releases), qui ne contient que les installeurs. Son adresse est dans `apps/desktop/package.json` (`build.publish`).
 
-- rendre ce dépôt public ;
-- ou garder le code privé et publier les versions dans un dépôt public à part, en définissant la variable `RELEASES_REPO` (« proprietaire/depot ») et le secret `RELEASES_TOKEN` dans les réglages du dépôt.
+Mise en place, une seule fois :
 
-L'application installée lit l'adresse des versions dans le fichier `app-update.yml` que la compilation y dépose : une compilation locale sans cette configuration ne propose simplement aucune mise à jour.
+1. Créer le dépôt public `MultiPlex-releases`, **avec un README** (une version ne peut pas être publiée dans un dépôt vide).
+2. Créer un jeton d'accès limité à ce dépôt, avec le droit « Contents : Read and write ».
+3. L'enregistrer dans ce dépôt-ci comme secret `RELEASES_TOKEN` (Settings → Secrets and variables → Actions).
+
+L'application installée lit l'adresse des versions dans le fichier `app-update.yml` que la compilation y dépose, compilations locales comprises.
 
 Limites : l'installeur Windows n'est pas signé (Windows affiche un avertissement à l'installation) ; sur macOS, la mise à jour automatique exige une application signée ; la version portable, l'APK Android et les paquets TV ne se mettent pas à jour seuls.
 
