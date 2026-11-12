@@ -1,0 +1,13 @@
+**/node_modules
+**/dist
+**/.vite
+.git
+.github
+apps/desktop
+!apps/desktop/package.json
+apps/mobile
+!apps/mobile/package.json
+apps/relay/*
+!apps/relay/package.json
+*.log
+.env

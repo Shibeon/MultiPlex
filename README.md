@@ -15,6 +15,14 @@ pnpm build      # apps/web/dist : site statique, hébergeable n'importe où
 pnpm desktop    # application de bureau (Electron)
 ```
 
+### Héberger la version web (Docker)
+
+L'image `ghcr.io/shibeon/multiplex-web` est publiée avec chaque version (amd64 et arm64) : coller
+[`apps/web/compose.yml`](apps/web/compose.yml) dans une stack, puis la rendre joignable en HTTPS
+par un proxy inverse (port 8080 du conteneur). Le serveur ne sert que les fichiers de
+l'application : les navigateurs parlent directement à Plex. Pour la construire soi-même :
+`docker build -f apps/web/Dockerfile -t multiplex-web .` depuis la racine du dépôt.
+
 ## Ce qui existe (v0.1)
 
 - **Connexion Plex** par lien ou par code à 4 caractères (plex.tv/link, pratique sur TV), connexion manuelle adresse + jeton, mode démo.

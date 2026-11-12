@@ -1,0 +1,25 @@
+# Version web de MultiPlex, prête à coller dans une stack (Portainer, Dockge, Container Manager…).
+#
+# Le site écoute sur 8080. Votre proxy inverse le rend joignable en HTTPS (obligatoire : sans
+# HTTPS, pas d'installation comme application ni de connexion aux serveurs Plex distants), par
+# exemple : https://mon-nom.myasustor.com:1745 → http://<IP-du-NAS>:8080
+# Ce serveur ne sert que les fichiers de l'application : chaque navigateur parle directement à
+# Plex, aucun jeton ni aucune vidéo ne passe par lui.
+services:
+  multiplex-web:
+    image: ghcr.io/shibeon/multiplex-web:latest
+    container_name: multiplex-web
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    # Si votre proxy tourne lui-même dans Docker, vous pouvez à la place retirer « ports »
+    # et brancher le site sur le réseau du proxy (cible : http://multiplex-web:8080) :
+    # networks: [proxy]
+# networks:
+#   proxy:
+#     external: true
