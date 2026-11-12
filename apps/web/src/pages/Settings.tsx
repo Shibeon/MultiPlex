@@ -4,7 +4,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { t } from '../i18n';
 import { DEFAULTS, THEMES, load, sanitize, settings, update, type Settings } from '../settings';
 import { native, nativeAvailable } from '../native';
-import { auth, logout, server, switchServer } from '../store';
+import { auth, home, logout, server, switchServer } from '../store';
 import { Icon } from '../ui';
 import { UpdateSettings, canUpdate } from './Update';
 import type { KnownHub } from './Browse';
@@ -254,11 +254,17 @@ export function SettingsPage() {
       <section>
         <h2>{t('set.account')}</h2>
         <p>
-          {auth.value && <strong>{auth.value.user.username || auth.value.user.title}</strong>}
+          {auth.value && <strong>{auth.value.user.title || auth.value.user.username}</strong>}
           {auth.value && ' · '}
           {t('set.server')} : {server.value?.name}
         </p>
+        {home.value.length > 1 && <Toggle k="askProfile" label={t('home.ask')} />}
         <div class="actions">
+          {home.value.length > 1 && (
+            <a class="btn" href="#/profiles">
+              {t('home.switch')}
+            </a>
+          )}
           <button class="btn" onClick={switchServer}>
             {t('servers.switch')}
           </button>

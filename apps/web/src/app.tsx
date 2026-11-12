@@ -6,13 +6,14 @@ import { DiscoverDetails, WatchlistPage } from './pages/Discover';
 import { Gate } from './pages/Gate';
 import { NativePlayer } from './pages/NativePlayer';
 import { Player } from './pages/Player';
+import { ProfilesPage } from './pages/Profiles';
 import { nativeAvailable } from './native';
 import { SettingsPage } from './pages/Settings';
 import { ThemesPage } from './pages/Themes';
 import { UpdateBanner, WhatsNew } from './pages/Update';
 import { route } from './router';
 import { settings } from './settings';
-import { discover, libraries, server, status } from './store';
+import { auth, discover, home, libraries, server, status } from './store';
 import { Icon } from './ui';
 
 function NavLink({ href, icon, label, iconOnly }: { href: string; icon: string; label: string; iconOnly?: boolean }) {
@@ -22,6 +23,17 @@ function NavLink({ href, icon, label, iconOnly }: { href: string; icon: string; 
     <a class={`nav-link${active ? ' active' : ''}${iconOnly ? ' icon-only' : ''}`} href={href} aria-current={active ? 'page' : undefined} title={label}>
       <Icon name={icon} />
       <span>{label}</span>
+    </a>
+  );
+}
+
+/** Le profil en cours du foyer Plex Home ; un clic ouvre « Qui regarde ? ». */
+function ProfileLink() {
+  const me = home.value.find((u) => u.uuid === auth.value?.user.uuid);
+  const name = me?.title ?? auth.value?.user.title ?? '';
+  return (
+    <a class="nav-profile" href="#/profiles" title={`${name} — ${t('home.switch')}`} aria-label={t('home.switch')}>
+      {me?.thumb ? <img referrerpolicy="no-referrer" src={me.thumb} alt="" /> : <b>{name.slice(0, 1).toUpperCase()}</b>}
     </a>
   );
 }
@@ -37,6 +49,7 @@ function Page() {
   if (kind === 'discover' && id) return <DiscoverDetails key={id} id={id} />;
   if (kind === 'settings') return <SettingsPage />;
   if (kind === 'themes') return <ThemesPage />;
+  if (kind === 'profiles') return <ProfilesPage />;
   return <Home />;
 }
 
@@ -66,6 +79,7 @@ export function App() {
         <div class="nav-sep grow" />
         <NavLink href="#/search" icon="search" label={t('nav.search')} iconOnly />
         <NavLink href="#/settings" icon="settings" label={t('nav.settings')} iconOnly />
+        {home.value.length > 1 && <ProfileLink />}
       </nav>
       <div class="theme-art" aria-hidden="true" />
       <main class="content">

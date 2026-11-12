@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.1.4",
+    "fr": [
+      "Onglet Amis refait en fil d’activité : avatars de vos amis pour filtrer, publications par jour, épisodes vus à la suite regroupés.",
+      "Plex Home : écran « Qui regarde ? » pour changer de profil, avec code PIN pour les profils protégés."
+    ],
+    "en": [
+      "Friends tab redesigned as an activity feed: friend avatars to filter, posts grouped by day, binge-watched episodes grouped together.",
+      "Plex Home: a “Who’s watching?” screen to switch profile, with PIN for protected profiles."
+    ]
+  },
+  {
     "version": "0.1.3",
     "fr": [
       "Lecteur natif : choix de la sortie audio pendant la lecture (casque, écran, ampli), sans interrompre la vidéo."

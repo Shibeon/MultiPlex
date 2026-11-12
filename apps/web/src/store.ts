@@ -6,21 +6,25 @@ import {
   DemoServer,
   PlexDiscover,
   PlexServer,
+  getHomeUsers,
   getJson,
   getServers,
   getUser,
   pickConnection,
   randomId,
+  switchHomeUser,
   type ClientInfo,
   type Community,
   type Discover,
+  type HomeUser,
   type Library,
   type MediaServer,
   type PlexResource,
   type PlexUser,
 } from '@multiplex/core';
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { load, save } from './settings';
+import { go } from './router';
+import { load, save, settings } from './settings';
 
 function browserName(): string {
   const ua = navigator.userAgent;
@@ -70,6 +74,45 @@ export const discover = signal<Discover | null>(null);
 /** Activité des amis Plex ; absente sans compte Plex (connexion manuelle). */
 export const community = signal<Community | null>(null);
 
+/** Profils du foyer Plex Home ; vide sans foyer ou sans compte Plex. */
+export const home = signal<HomeUser[]>([]);
+/** « Qui regarde ? » n'est demandé qu'une fois par lancement. */
+let askedProfile = false;
+
+const DEMO_HOME: HomeUser[] = [
+  { id: 1, uuid: 'demo0001', title: 'Camille', admin: true, restricted: false, protected: false },
+  { id: 2, uuid: 'demo0002', title: 'Les enfants', admin: false, restricted: true, protected: false },
+  { id: 3, uuid: 'demo0003', title: 'Yanis', admin: false, restricted: false, protected: true },
+];
+
+function loadHome(srv: MediaServer): void {
+  const done = (users: HomeUser[]) => {
+    home.value = users;
+    if (users.length > 1 && settings.value.askProfile && !askedProfile) go('/profiles');
+    askedProfile = true;
+  };
+  if (srv instanceof DemoServer) done(DEMO_HOME);
+  else if (auth.value) getHomeUsers(client, auth.value.token).then(done, () => done([]));
+  else done([]);
+}
+
+/** Passe sur un autre profil du foyer : nouveau jeton, puis reconnexion à la bibliothèque avec ses droits. */
+export async function switchProfile(uuid: string, pin?: string): Promise<void> {
+  if (server.value instanceof DemoServer) {
+    if (DEMO_HOME.find((u) => u.uuid === uuid)?.protected && pin !== '1234') throw new Error('pin');
+    auth.value = { token: '', user: { id: 0, uuid, username: '', title: DEMO_HOME.find((u) => u.uuid === uuid)?.title ?? '' } };
+    return;
+  }
+  const a = auth.value;
+  if (!a) throw new Error('Pas de compte');
+  const token = await switchHomeUser(client, a.token, uuid, pin);
+  // Les accès aux bibliothèques sont propres à chaque profil : on repart de la découverte.
+  save('mp.server', null);
+  server.value = null;
+  bootError.value = '';
+  await signIn(token);
+}
+
 const cache = new Map<string, unknown>();
 
 async function use(srv: MediaServer): Promise<void> {
@@ -79,6 +122,7 @@ async function use(srv: MediaServer): Promise<void> {
   libraries.value = await srv.libraries();
   server.value = srv;
   status.value = 'ready';
+  loadHome(srv);
 }
 
 export async function connectManual(uri: string, token: string): Promise<void> {
@@ -161,6 +205,7 @@ export function logout(): void {
   auth.value = null;
   discover.value = null;
   community.value = null;
+  home.value = [];
   server.value = null;
   libraries.value = [];
   status.value = 'login';

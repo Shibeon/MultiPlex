@@ -90,3 +90,34 @@ export function pickConnection(
     });
   });
 }
+
+/** Un profil du foyer Plex Home. */
+export interface HomeUser {
+  id: number;
+  uuid: string;
+  title: string;
+  thumb?: string;
+  /** Propriétaire du foyer. */
+  admin: boolean;
+  /** Profil géré (sans compte Plex à lui, souvent un enfant). */
+  restricted: boolean;
+  /** Protégé par un code PIN. */
+  protected: boolean;
+}
+
+/** Les profils du foyer Plex Home du compte ; un seul (ou aucun) s'il n'y a pas de foyer. */
+export async function getHomeUsers(c: ClientInfo, token: string): Promise<HomeUser[]> {
+  const home = await getJson<{ users?: Partial<HomeUser>[] }>(`${TV}/home/users`, { headers: identityHeaders(c, token) });
+  return (home.users ?? [])
+    .filter((u): u is Partial<HomeUser> & { uuid: string } => typeof u.uuid === 'string')
+    .map((u) => ({ id: Number(u.id) || 0, uuid: u.uuid, title: String(u.title ?? '?'), thumb: u.thumb || undefined, admin: !!u.admin, restricted: !!u.restricted, protected: !!u.protected }));
+}
+
+/** Passe sur un autre profil du foyer et renvoie son jeton. `pin` : son code, s'il est protégé. */
+export async function switchHomeUser(c: ClientInfo, token: string, uuid: string, pin?: string): Promise<string> {
+  if (!/^[0-9a-f]{8,40}$/i.test(uuid)) throw new Error('Profil invalide');
+  const q = pin ? `?pin=${encodeURIComponent(pin)}` : '';
+  const user = await getJson<{ authToken?: string }>(`${TV}/home/users/${uuid}/switch${q}`, { method: 'POST', headers: identityHeaders(c, token) });
+  if (!user.authToken) throw new Error('Changement de profil refusé');
+  return user.authToken;
+}

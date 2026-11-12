@@ -312,6 +312,7 @@ function createWindow() {
         result = { error: String(e) };
       }
       fs.writeFileSync(arg('smoke-out'), JSON.stringify(result, null, 2));
+      if (arg('smoke-shot')) fs.writeFileSync(arg('smoke-shot'), (await win.webContents.capturePage()).toPNG());
       app.exit(0);
     });
   }

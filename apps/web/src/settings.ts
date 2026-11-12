@@ -68,6 +68,8 @@ export interface Settings {
   matchRefresh: boolean;
   /** Application de bureau : compléter les repères d'intro avec IntroDB quand Plex n'en fournit pas. */
   communityMarkers: boolean;
+  /** Plex Home : demander « Qui regarde ? » à chaque lancement. */
+  askProfile: boolean;
 }
 
 export const DEFAULTS: Settings = {
@@ -104,6 +106,7 @@ export const DEFAULTS: Settings = {
   audioDevice: '',
   matchRefresh: false,
   communityMarkers: true,
+  askProfile: false,
 };
 
 const KEY = 'mp.settings';

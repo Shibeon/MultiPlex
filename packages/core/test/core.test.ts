@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  switchHomeUser,
   imdbIdOf,
   segmentsToMarkers,
   toFriendActivity,
@@ -206,6 +207,13 @@ describe('repères communautaires et activité des amis', () => {
     });
     expect(a).toMatchObject({ user: { name: 'Camille' }, type: 'episode', title: 'Pilote', show: 'Archipel', episode: 'S2 · E1', poster: 'https://exemple/p.jpg', discoverId: '5d9c086c7d06d9001ffd27aa' });
     expect(toFriendActivity({ id: 'y', date: '', metadataItem: null })).toBeNull();
+  });
+});
+
+describe('Plex Home', () => {
+  it('refuse un identifiant de profil mal formé avant tout appel réseau', async () => {
+    const c = { clientId: 'x', product: 'p', version: '1', platform: 'p', device: 'd', deviceName: 'n' };
+    await expect(switchHomeUser(c, 'jeton', '../admin')).rejects.toThrow('Profil invalide');
   });
 });
 
