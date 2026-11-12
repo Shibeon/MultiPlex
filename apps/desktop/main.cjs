@@ -24,7 +24,7 @@ if (HIDDEN) app.commandLine.appendSwitch('disable-features', 'CalculateNativeWin
 
 // Les tests automatiques passent l'app en mode démo : ils travaillent dans un profil
 // temporaire à part, pour ne jamais toucher à la session ni aux réglages de l'utilisateur.
-if (arg('smoke') || arg('smoke-native') || process.argv.includes('--smoke-update')) app.setPath('userData', path.join(app.getPath('temp'), 'multiplex-smoke-profile'));
+if (arg('smoke') || arg('smoke-native') || arg('smoke-update-check') || process.argv.includes('--smoke-update')) app.setPath('userData', path.join(app.getPath('temp'), 'multiplex-smoke-profile'));
 
 /** Fenêtre principale, lecteur natif et fenêtre de contrôles superposée. */
 let main = null;
@@ -224,6 +224,27 @@ function createWindow() {
     });
   }
 
+  // Vérification réelle : `--smoke-update-check=rapport.json` interroge la vraie source de
+  // mises à jour et enregistre la réponse (version proposée ou non). Rien n'est téléchargé.
+  const updateCheck = arg('smoke-update-check');
+  if (updateCheck) {
+    const states = [];
+    ipcMain.on('smoke:update-state', () => {});
+    win.webContents.once('did-finish-load', async () => {
+      const read = () => win.webContents.executeJavaScript('window.multiplexNative.updates.state()');
+      await win.webContents.executeJavaScript('window.multiplexNative.updates.check()').catch(() => {});
+      let last = null;
+      for (let i = 0; i < 40; i++) {
+        await new Promise((r) => setTimeout(r, 500));
+        last = await read().catch(() => null);
+        if (last && !states.includes(last.status)) states.push(last.status);
+        if (last && ['available', 'none', 'error'].includes(last.status)) break;
+      }
+      fs.writeFileSync(updateCheck, JSON.stringify({ states, last }, null, 2));
+      app.exit(0);
+    });
+  }
+
   // Test de la mise à jour : `--smoke-update --smoke-out=rapport.json` simule une version
   // disponible et suit le bandeau de l'interface jusqu'à « Redémarrer ».
   if (process.argv.includes('--smoke-update')) {
@@ -337,7 +358,7 @@ app.whenReady().then(() => {
   createWindow();
   // Mise à jour automatique (inactive pendant les tests, sauf simulation demandée).
   if (process.argv.includes('--smoke-update')) setupUpdater((state) => sendTo(main, 'update:event', state), { simulate: true });
-  else if (!arg('smoke') && !arg('smoke-native') && !arg('smoke-eval')) setupUpdater((state) => sendTo(main, 'update:event', state));
+  else if (arg('smoke-update-check') || (!arg('smoke') && !arg('smoke-native') && !arg('smoke-eval'))) setupUpdater((state) => sendTo(main, 'update:event', state));
   else setupUpdater(() => {}, {});
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

@@ -1,6 +1,6 @@
 {
   "name": "@multiplex/desktop",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Coque de bureau MultiPlex (Windows, macOS, Linux)",
   "main": "main.cjs",
@@ -13,7 +13,10 @@
     "electron": "^39.0.0",
     "electron-builder": "^26.0.0"
   },
-  "author": "MultiPlex contributors",
+  "author": {
+    "name": "MultiPlex contributors",
+    "email": "23738103+Shibeon@users.noreply.github.com"
+  },
   "build": {
     "appId": "app.multiplex.client",
     "productName": "MultiPlex",
@@ -53,10 +56,14 @@
     "nsis": {
       "oneClick": false,
       "perMachine": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "${productName}-Setup-${version}.${ext}"
     },
     "mac": {
-      "target": "dmg",
+      "target": [
+        "dmg",
+        "zip"
+      ],
       "category": "public.app-category.video"
     },
     "linux": {
@@ -64,7 +71,10 @@
         "AppImage",
         "deb"
       ],
-      "category": "AudioVideo"
+      "category": "AudioVideo",
+      "executableName": "multiplex",
+      "maintainer": "MultiPlex contributors <23738103+Shibeon@users.noreply.github.com>",
+      "synopsis": "Client Plex communautaire"
     },
     "asarUnpack": [
       "mpv-input.conf"
@@ -76,9 +86,14 @@
         "repo": "MultiPlex-releases",
         "releaseType": "release"
       }
-    ]
+    ],
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "portable": {
+      "artifactName": "${productName}-${version}-portable.${ext}"
+    }
   },
   "dependencies": {
     "electron-updater": "^6.3.0"
-  }
+  },
+  "homepage": "https://github.com/Shibeon/MultiPlex-releases"
 }
