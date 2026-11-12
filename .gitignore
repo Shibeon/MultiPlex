@@ -9,3 +9,4 @@ vendor/
 apps/web/src/gallery/themes.json
 
 apps/desktop/release-notes.txt
+/release-notes-*.txt
