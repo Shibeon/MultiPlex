@@ -47,6 +47,13 @@ export function moveFocus(dx: number, dy: number): boolean {
   if (!best) return false;
   best.focus({ preventScroll: true });
   best.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+  // Élément visible en entier page remontée tout en haut (première rangée sous l'affiche) : on
+  // remonte plutôt que de défiler de quelques centimètres, ce qui coupait l'affiche et collait
+  // son titre contre la barre du haut.
+  const page = document.scrollingElement;
+  if (page && best.getBoundingClientRect().bottom + page.scrollTop < innerHeight - 24) {
+    page.scrollTo({ top: 0, behavior: 'smooth' });
+  }
   return true;
 }
 
