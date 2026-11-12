@@ -9,6 +9,9 @@ name: build
 # les applications de bureau sont en plus publiées comme version GitHub, que
 # l'application installée propose en mise à jour ; l'étiquette `v…` est alors
 # créée ici si elle manque (utile quand on ne peut pas l'envoyer soi-même).
+# De même, un envoi sur `main` dont la version (apps/desktop/package.json) n'a
+# pas encore d'étiquette est compilé, publié puis étiqueté : changer le numéro
+# de version sur `main` suffit à sortir une mise à jour.
 #
 # Les versions sont publiées dans un dépôt public à part, pour que le code puisse
 # rester privé : son adresse est dans apps/desktop/package.json (build.publish).
@@ -52,16 +55,35 @@ jobs:
           name: tv-tizen-webos
           path: dist-platforms
 
+  # Envoi sur main : la version de l'application a-t-elle déjà été publiée ?
+  version:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      release: ${{ steps.check.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: check
+        run: |
+          tag="v$(node -p "require('./apps/desktop/package.json').version")"
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
+            echo "$tag déjà publiée : pas de nouvelle version."
+            echo release=false >> "$GITHUB_OUTPUT"
+          else
+            echo "$tag pas encore publiée : compilation et publication."
+            echo release=true >> "$GITHUB_OUTPUT"
+          fi
+
   desktop:
-    needs: web
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    needs: [web, version]
+    if: ${{ !cancelled() && needs.web.result == 'success' && (startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' || needs.version.outputs.release == 'true') }}
     strategy:
       fail-fast: false
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
     env:
-      PUBLISH: ${{ startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish) }}
+      PUBLISH: ${{ startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish) || needs.version.outputs.release == 'true' }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -118,11 +140,11 @@ jobs:
             apps/desktop/release/*.AppImage
             apps/desktop/release/*.deb
 
-  # Publication lancée à la main : l'étiquette de la version est posée sur le commit publié.
+  # Publication lancée à la main ou par un envoi sur main : l'étiquette de la version est posée sur le commit publié.
   # (Une étiquette envoyée par ce jeton ne relance pas le build.)
   tag:
-    needs: desktop
-    if: github.event_name == 'workflow_dispatch' && inputs.publish
+    needs: [desktop, version]
+    if: ${{ !cancelled() && needs.desktop.result == 'success' && ((github.event_name == 'workflow_dispatch' && inputs.publish) || needs.version.outputs.release == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -137,8 +159,8 @@ jobs:
           fi
 
   android:
-    needs: web
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    needs: [web, version]
+    if: ${{ !cancelled() && needs.web.result == 'success' && (startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' || needs.version.outputs.release == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
