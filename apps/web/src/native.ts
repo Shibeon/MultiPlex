@@ -15,6 +15,10 @@ export interface NativePlayOptions {
   subFiles?: string[];
   /** Transmettre le flux audio brut (Dolby, DTS, Atmos) à un ampli. */
   passthrough?: boolean;
+  /** Sortie audio à utiliser (identifiant donné par audioDevices) ; absent = celle du système. */
+  audioDevice?: string;
+  /** Accorder la fréquence de l'écran à la cadence de la vidéo (Windows). */
+  matchRefresh?: boolean;
   /** Flux produit en direct par le serveur : mettre davantage en tampon avant de reprendre. */
   buffered?: boolean;
 }
@@ -26,6 +30,7 @@ export interface NativeMeta {
   /** Marqueurs d'intro et de générique, en secondes. */
   markers?: { type: string; start: number; end: number }[];
   hasNext?: boolean;
+  hasPrev?: boolean;
   /** Libellés Plex des pistes, dans l'ordre où mpv les numérote. */
   audioLabels?: string[];
   subLabels?: string[];
@@ -35,7 +40,7 @@ export interface NativeMeta {
 }
 
 export type NativeCommand = 'toggle' | 'pause' | 'seek' | 'seekBy' | 'volume' | 'mute' | 'speed' | 'aid' | 'sid' | 'stats' | 'key';
-export type NativeEvent = 'state' | 'ended' | 'error' | 'next' | 'quality';
+export type NativeEvent = 'state' | 'ended' | 'error' | 'next' | 'prev' | 'quality' | 'notice';
 
 /** État de la mise à jour de l'application de bureau. */
 export interface UpdateState {
@@ -45,6 +50,8 @@ export interface UpdateState {
   /** Version proposée. */
   version?: string;
   percent?: number;
+  /** Nouveautés de la version proposée : JSON { fr, en } ou texte libre. */
+  notes?: string;
   message?: string;
 }
 
@@ -57,6 +64,11 @@ export interface NativeApi {
     install(): Promise<unknown>;
     on(listener: (state: UpdateState) => void): () => void;
   };
+  /** Sorties audio de la machine ; absent des versions de l'app qui ne le proposent pas. */
+  audioDevices?(): Promise<{ id: string; label: string }[]>;
+  platform?: string;
+  /** Repères d'intro communautaires (IntroDB) pour un épisode ; absent hors application de bureau. */
+  segments?(imdb: string, season: number, episode: number): Promise<{ intro?: { start_sec?: number; end_sec?: number } | null; outro?: { start_sec?: number; end_sec?: number } | null } | null>;
   available(): Promise<boolean>;
   play(opts: NativePlayOptions): Promise<unknown>;
   stop(): Promise<void>;
@@ -66,7 +78,7 @@ export interface NativeApi {
   setMeta(meta: NativeMeta): void;
   overlayInit(): Promise<{ meta: NativeMeta; state: Record<string, unknown> }>;
   onMeta(listener: (meta: NativeMeta) => void): () => void;
-  action(name: 'back' | 'fullscreen' | 'next' | `quality:${string}`): void;
+  action(name: 'back' | 'fullscreen' | 'next' | 'prev' | `quality:${string}`): void;
 }
 
 export const native = (window as unknown as { multiplexNative?: NativeApi }).multiplexNative;

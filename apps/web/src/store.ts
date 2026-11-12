@@ -1,6 +1,8 @@
 import { signal } from '@preact/signals';
 import {
+  DemoCommunity,
   DemoDiscover,
+  PlexCommunity,
   DemoServer,
   PlexDiscover,
   PlexServer,
@@ -10,6 +12,7 @@ import {
   pickConnection,
   randomId,
   type ClientInfo,
+  type Community,
   type Discover,
   type Library,
   type MediaServer,
@@ -64,12 +67,15 @@ export const resources = signal<PlexResource[]>([]);
 export const bootError = signal('');
 /** Catalogue en ligne de Plex et liste de suivi ; absent sans compte Plex (connexion manuelle). */
 export const discover = signal<Discover | null>(null);
+/** Activité des amis Plex ; absente sans compte Plex (connexion manuelle). */
+export const community = signal<Community | null>(null);
 
 const cache = new Map<string, unknown>();
 
 async function use(srv: MediaServer): Promise<void> {
   cache.clear();
   discover.value = srv instanceof DemoServer ? new DemoDiscover() : auth.value ? new PlexDiscover(auth.value.token, client) : null;
+  community.value = srv instanceof DemoServer ? new DemoCommunity() : auth.value ? new PlexCommunity(auth.value.token, client) : null;
   libraries.value = await srv.libraries();
   server.value = srv;
   status.value = 'ready';
@@ -154,6 +160,7 @@ export function logout(): void {
   cache.clear();
   auth.value = null;
   discover.value = null;
+  community.value = null;
   server.value = null;
   libraries.value = [];
   status.value = 'login';

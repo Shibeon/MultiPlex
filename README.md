@@ -93,7 +93,7 @@ L'application de bureau vérifie au démarrage, puis toutes les six heures, si u
 
 Publier une version :
 
-1. Monter le numéro de version dans `apps/desktop/package.json`.
+1. Monter le numéro de version dans `apps/desktop/package.json`, et ajouter en tête de `apps/web/src/changelog.json` les nouveautés de cette version (en français et en anglais). L'application les montre une fois après la mise à jour, et les propose avant (« Quoi de neuf ? ») ; la publication échoue si l'entrée manque.
 2. Poser l'étiquette correspondante et l'envoyer : `git tag v0.2.0 && git push origin v0.2.0`.
 3. Le workflow compile les applications Windows, macOS et Linux et les publie comme version GitHub, avec le fichier que lit la mise à jour automatique.
 
@@ -108,6 +108,11 @@ Mise en place, une seule fois :
 L'application installée lit l'adresse des versions dans le fichier `app-update.yml` que la compilation y dépose, compilations locales comprises.
 
 Limites : l'installeur Windows n'est pas signé (Windows affiche un avertissement à l'installation) ; sur macOS, la mise à jour automatique exige une application signée ; la version portable, l'APK Android et les paquets TV ne se mettent pas à jour seuls.
+
+## Ce que Plex réserve, et comment MultiPlex fait
+
+- **Repères d'intro et de générique** : Plex ne les transmet qu'aux comptes Plex Pass. Pour les autres, l'application de bureau complète avec [IntroDB](https://introdb.app), base communautaire libre (seuls l'identifiant IMDb de la série et le numéro de l'épisode lui sont envoyés ; désactivable dans les réglages). Les navigateurs et les téléviseurs ne peuvent pas interroger IntroDB.
+- **Lectures en cours** : seul le propriétaire d'un serveur les voit. Pour tout le monde, la page « Amis » montre ce que les amis Plex ont regardé récemment (activité partagée par Plex entre amis), avec un interrupteur pour ne pas partager ses propres lectures — c'est le réglage de confidentialité du compte Plex.
 
 ## Feuille de route
 

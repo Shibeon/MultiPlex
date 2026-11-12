@@ -7,3 +7,5 @@ dist-platforms/
 release/
 vendor/
 apps/web/src/gallery/themes.json
+
+apps/desktop/release-notes.txt

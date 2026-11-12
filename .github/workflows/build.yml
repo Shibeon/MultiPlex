@@ -93,7 +93,9 @@ jobs:
         run: |
           publish=never
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then publish=always; fi
-          pnpm exec electron-builder --publish "$publish"
+          # Les nouveautés de la version accompagnent la publication (affichées par l'app installée).
+          node ../../scripts/release-notes.mjs
+          pnpm exec electron-builder --publish "$publish" -c.releaseInfo.releaseNotesFile=release-notes.txt
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}

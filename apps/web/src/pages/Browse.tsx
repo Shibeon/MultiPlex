@@ -5,7 +5,7 @@ import { go, route } from '../router';
 import { cardWidth, load, save, settings } from '../settings';
 import { libraries, server, useData } from '../store';
 import { DiscoverResults } from './Discover';
-import { Card, ErrorBox, HubRow, Icon, Spinner, VirtualGrid, labels } from '../ui';
+import { Card, ErrorBox, HubRow, Icon, Spinner, VirtualGrid, artSize, labels } from '../ui';
 
 export interface KnownHub {
   id: string;
@@ -44,7 +44,7 @@ function Hero({ hub }: { hub: Hub }) {
   const facts = [sub, formatDuration(item.duration), item.contentRating].filter(Boolean).join(' · ');
   return (
     <section class="hero" aria-label={hub.title}>
-      <div key={item.ratingKey} class="hero-bg" style={{ backgroundImage: `url("${srv.image(item.art ?? item.thumb, 1920, 1080)}")` }} />
+      <div key={item.ratingKey} class="hero-bg" style={{ backgroundImage: `url("${srv.image(item.art ?? item.thumb, ...artSize())}")` }} />
       {/* Illustration du thème, mise en scène par le CSS de son effet. */}
       <div class="hero-art" aria-hidden="true">
         <i class="hero-rays" />

@@ -146,6 +146,8 @@ export interface Metadata {
   originallyAvailableAt?: string;
   Media?: Media[];
   Marker?: Marker[];
+  /** Identifiants externes (« imdb://tt… », « tmdb://… »). */
+  Guid?: { id: string }[];
   Chapter?: Chapter[];
   Genre?: Tag[];
   Role?: Tag[];

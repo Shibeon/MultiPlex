@@ -19,7 +19,8 @@ function setupUpdater(send, { simulate = false } = {}) {
 
   // Test automatique : une mise à jour fictive, pour vérifier l'interface sans rien publier.
   if (simulate) {
-    ipcMain.handle('update:check', () => set({ status: 'available', version: '9.9.9' }));
+    const notes = JSON.stringify({ fr: ['Une nouveauté de démonstration.'], en: ['A demo novelty.'] });
+    ipcMain.handle('update:check', () => set({ status: 'available', version: '9.9.9', notes }));
     ipcMain.handle('update:download', async () => {
       for (const percent of [10, 45, 80, 100]) {
         set({ status: 'downloading', version: '9.9.9', percent });
@@ -28,7 +29,7 @@ function setupUpdater(send, { simulate = false } = {}) {
       set({ status: 'ready', version: '9.9.9' });
     });
     ipcMain.handle('update:install', () => set({ status: 'idle', installed: true }));
-    setTimeout(() => set({ status: 'available', version: '9.9.9' }), 1500);
+    setTimeout(() => set({ status: 'available', version: '9.9.9', notes }), 1500);
     return;
   }
 
@@ -52,10 +53,13 @@ function setupUpdater(send, { simulate = false } = {}) {
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.on('checking-for-update', () => set({ status: 'checking' }));
-  autoUpdater.on('update-available', (info) => set({ status: 'available', version: info.version }));
+  // Les nouveautés de la version proposée voyagent avec elle (texte, sans mise en forme).
+  let notes = '';
+  const notesOf = (info) => (typeof info.releaseNotes === 'string' ? info.releaseNotes.replace(/<[^>]*>/g, '').slice(0, 6000) : '');
+  autoUpdater.on('update-available', (info) => set({ status: 'available', version: info.version, notes: (notes = notesOf(info)) }));
   autoUpdater.on('update-not-available', () => set({ status: 'none' }));
-  autoUpdater.on('download-progress', (p) => set({ status: 'downloading', version: state.version, percent: Math.round(p.percent) }));
-  autoUpdater.on('update-downloaded', (info) => set({ status: 'ready', version: info.version }));
+  autoUpdater.on('download-progress', (p) => set({ status: 'downloading', version: state.version, notes, percent: Math.round(p.percent) }));
+  autoUpdater.on('update-downloaded', (info) => set({ status: 'ready', version: info.version, notes }));
   // Pas de réseau, pas de version publiée : ce n'est pas une panne de l'app, on reste discret.
   autoUpdater.on('error', (e) => set({ status: 'error', message: String(e?.message ?? e).split('\n')[0].slice(0, 160) }));
 

@@ -562,3 +562,51 @@ video::cue { font-family: inherit; }
 @keyframes update-in { from { transform: translate(-50%, 150%); } }
 .reduce-motion .update-banner { animation: none; }
 @media (max-width: 760px) { .update-banner { bottom: 5.5rem; border-radius: 18px; } }
+
+/* ---------- fiches : le texte reste lisible quel que soit le fond ---------- */
+/* Un voile sombre du côté du texte, entre l'image de fond et le contenu. */
+.details::after { content: ''; position: absolute; inset: 0 0 auto 0; height: min(85vh, 48rem); z-index: 0; pointer-events: none; background: linear-gradient(to right, color-mix(in srgb, var(--bg) 94%, transparent) 0%, color-mix(in srgb, var(--bg) 80%, transparent) 42%, color-mix(in srgb, var(--bg) 20%, transparent) 82%), linear-gradient(to top, var(--bg) 0%, transparent 40%); }
+.details-main, .children { z-index: 1; }
+.details-info { text-shadow: 0 1px 10px color-mix(in srgb, var(--bg) 85%, transparent); }
+.details-info .tagline, .details-info .facts, .details-info .credits { color: color-mix(in srgb, var(--text) 82%, transparent); }
+.details-info .facts { font-weight: 500; }
+/* L'illustration de thème s'efface derrière une fiche : elle gênait la lecture. */
+.shell:has(.details) .theme-art { opacity: 0.06; }
+.fx-cadre .shell:has(.details) .theme-art { opacity: 1; }
+
+/* ---------- pastilles de technologies ---------- */
+.tech { display: flex; flex-wrap: wrap; gap: 0.45rem; margin: 0.7rem 0 0; padding: 0; list-style: none; text-shadow: none; }
+.tech li { display: inline-flex; align-items: center; gap: 0.35em; height: 1.75rem; padding: 0 0.6rem; border-radius: 6px; font-size: 0.74rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; color: var(--text); background: color-mix(in srgb, var(--text) 10%, transparent); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--text) 55%, transparent); }
+.tech .tech-resolution { background: var(--text); color: var(--bg); box-shadow: none; }
+/* Plage dynamique : liseré arc-en-ciel discret pour le Dolby Vision, doré pour le HDR. */
+.tech .tech-hdr { box-shadow: none; background: linear-gradient(var(--surface), var(--surface)) padding-box, linear-gradient(120deg, #ffd24a, #ff8a3d) border-box; border: 1.5px solid transparent; }
+.tech .tech-hdr[data-tech='Dolby Vision'] { background: linear-gradient(var(--surface), var(--surface)) padding-box, linear-gradient(120deg, #4ad6ff, #a66bff 45%, #ff5fa2 75%, #ffc04a) border-box; }
+.tech .tech-hdr::before { content: ''; width: 0.62em; height: 0.62em; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #fff, #ffd24a 60%, #ff8a3d); }
+.tech .tech-hdr[data-tech='Dolby Vision']::before { background: conic-gradient(#4ad6ff, #a66bff, #ff5fa2, #ffc04a, #4ad6ff); }
+/* Son : trois barres façon égaliseur ; l'Atmos et le DTS:X, formats « objets », sont mis en avant. */
+.tech .tech-audio::before { content: ''; width: 0.75em; height: 0.7em; background: linear-gradient(currentColor, currentColor) 0 100% / 0.17em 55% no-repeat, linear-gradient(currentColor, currentColor) 50% 100% / 0.17em 100% no-repeat, linear-gradient(currentColor, currentColor) 100% 100% / 0.17em 75% no-repeat; }
+.tech .tech-audio[data-tech='Dolby Atmos'], .tech .tech-audio[data-tech='DTS:X'] { background: color-mix(in srgb, var(--accent) 22%, transparent); box-shadow: inset 0 0 0 1.5px var(--accent); }
+.tech .tech-channels { font-variant-numeric: tabular-nums; }
+
+/* ---------- barre de progression : repères d'intro et de générique ---------- */
+.seek-track { position: relative; flex: 1; display: flex; align-items: center; min-width: 0; }
+.seek-track input { flex: 1; width: 100%; }
+.seek-mark { position: absolute; top: 50%; height: 6px; min-width: 4px; transform: translateY(-50%); border-radius: 99px; pointer-events: none; background: #ffd24a; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45); }
+.seek-mark.credits { background: #7fd1ff; }
+/* Le nom du passage, juste au-dessus de son repère. */
+.seek-mark::after { content: attr(data-label); position: absolute; left: 0; bottom: 0.75rem; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; color: #fff; text-shadow: 0 1px 4px #000; opacity: 0.9; }
+.seek-mark.credits::after { left: auto; right: 0; }
+
+/* ---------- « Ma liste » : titres pas encore disponibles ---------- */
+.card.pending .poster img { filter: grayscale(0.7) brightness(0.55); }
+.soon { position: absolute; left: 0; right: 0; bottom: 0; z-index: 1; padding: 1.6rem 0.5rem 0.55rem; text-align: center; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #fff; background: linear-gradient(transparent, rgba(0, 0, 0, 0.9)); }
+
+/* ---------- nouveautés après une mise à jour ---------- */
+.whatsnew-veil { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 1.5rem; background: rgba(0, 0, 0, 0.72); backdrop-filter: blur(6px); }
+.whatsnew { width: min(100%, 36rem); max-height: 86vh; overflow: auto; display: grid; gap: 0.9rem; padding: 1.6rem 1.8rem; border-radius: calc(var(--radius) * 1.3); background: var(--surface); box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6); }
+.whatsnew h2 { margin: 0; }
+.whatsnew h3 { margin: 0 0 0.4rem; font-size: 0.8rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+.whatsnew ul, .update-notes { margin: 0; padding-left: 1.1rem; display: grid; gap: 0.4rem; line-height: 1.45; }
+.whatsnew .btn { justify-self: end; }
+.update-notes { flex-basis: 100%; font-size: 0.9rem; max-height: 40vh; overflow: auto; }
+.share-row { margin: 0.4rem 0 1rem; max-width: 44rem; }

@@ -1,0 +1,35 @@
+[
+  {
+    "version": "0.1.2",
+    "fr": [
+      "Activité des amis ouverte à tous : ce que vos amis Plex ont regardé récemment, avec un réglage pour ne pas partager ce que vous regardez.",
+      "Repères d'intro et de générique sur la barre de lecture, complétés par la base communautaire IntroDB quand Plex n'en fournit pas (application de bureau).",
+      "Bouton « précédent » dans les lecteurs.",
+      "Son : choix de la sortie audio, et transmission du son brut à l'ampli qui ne bloque plus la lecture.",
+      "Fréquence de l'écran accordée à la vidéo, en option (Windows).",
+      "« Ma liste » indique les titres pas encore disponibles.",
+      "Fiches plus lisibles, pastilles de technologies (4K, Dolby Vision, HDR, Atmos…), images de fond en haute définition.",
+      "L'application s'ouvre en grand, et vous montre désormais les nouveautés à chaque mise à jour."
+    ],
+    "en": [
+      "Friends' activity for everyone: what your Plex friends watched recently, with a setting to keep your own viewing private.",
+      "Intro and credits marks on the seek bar, completed by the community database IntroDB when Plex provides none (desktop app).",
+      "“Previous” button in the players.",
+      "Sound: choice of the audio output, and raw audio passthrough no longer blocks playback.",
+      "Optional display refresh rate matching (Windows).",
+      "“My list” shows which titles are not available yet.",
+      "More readable detail pages, technology badges (4K, Dolby Vision, HDR, Atmos…), high-definition backdrops.",
+      "The app opens maximised, and now shows what is new after each update."
+    ]
+  },
+  {
+    "version": "0.1.1",
+    "fr": ["Versions macOS et Linux.", "Mise à jour automatique vérifiée de bout en bout."],
+    "en": ["macOS and Linux builds.", "Auto-update verified end to end."]
+  },
+  {
+    "version": "0.1.0",
+    "fr": ["Première version : lecteur natif, thèmes, liste de suivi, mise à jour automatique."],
+    "en": ["First release: native player, themes, watchlist, auto-update."]
+  }
+]

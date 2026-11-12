@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { t } from '../i18n';
 import { native } from '../native';
 import { back, go, route } from '../router';
+import { withCommunityMarkers } from '../markers';
 import { settings } from '../settings';
 import { invalidate, server } from '../store';
 import { Spinner, labels } from '../ui';
@@ -22,6 +23,8 @@ const streamLabel = (s: Stream) => s.extendedDisplayTitle ?? s.displayTitle ?? s
  * la logique : pistes au démarrage, progression remontée au serveur, saut
  * automatique d'intro, enchaînement des épisodes, changement de qualité.
  */
+const markersOf = (it: Metadata) => (it.Marker ?? []).filter((m) => m.type === 'intro' || m.type === 'credits').map((m) => ({ type: m.type, start: m.startTimeOffset / 1000, end: m.endTimeOffset / 1000 }));
+
 export function NativePlayer({ id }: { id: string }) {
   const srv = server.value!;
   const [item, setItem] = useState<Metadata | null>(null);
@@ -29,6 +32,7 @@ export function NativePlayer({ id }: { id: string }) {
   const live = useRef({ time: 0, duration: 0, paused: false });
   const itemRef = useRef<Metadata | null>(null);
   const nextRef = useRef<Metadata | null>(null);
+  const prevRef = useRef<Metadata | null>(null);
   const session = useRef(randomId());
   const skipped = useRef(new Set<number>());
   /** Session de conversion en cours côté serveur, à arrêter quand on la quitte. */
@@ -80,6 +84,8 @@ export function NativePlayer({ id }: { id: string }) {
         sid: subs.hasAny ? subs.index : undefined,
         subFiles: subs.external.map((s) => srv.fileRequest(s.key!).url),
         passthrough: settings.value.passthrough,
+        audioDevice: settings.value.audioDevice || undefined,
+        matchRefresh: settings.value.matchRefresh,
       });
     } else {
       // Qualité limitée : le serveur convertit, avec la piste audio et les sous-titres choisis.
@@ -94,17 +100,18 @@ export function NativePlayer({ id }: { id: string }) {
       // Le jeton quitte l'adresse pour un en-tête, comme pour le fichier d'origine.
       const url = new URL(plan.url);
       url.searchParams.delete('X-Plex-Token');
-      await native!.play({ url: url.toString(), headers: file.headers, title: sub ? `${title} — ${sub}` : title, start: at, buffered: true });
+      await native!.play({ url: url.toString(), headers: file.headers, title: sub ? `${title} — ${sub}` : title, start: at, buffered: true, audioDevice: settings.value.audioDevice || undefined, matchRefresh: settings.value.matchRefresh });
     }
 
     // La fenêtre de contrôles ne connaît pas le serveur : on lui décrit le titre.
     native!.setMeta({
       title,
       sub,
-      markers: (it.Marker ?? []).filter((m) => m.type === 'intro' || m.type === 'credits').map((m) => ({ type: m.type, start: m.startTimeOffset / 1000, end: m.endTimeOffset / 1000 })),
+      markers: markersOf(itemRef.current ?? it),
       audioLabels: original ? audio.ordered.map(streamLabel) : [],
       subLabels: original ? subs.ordered.map(streamLabel) : [],
       hasNext: !!nextRef.current,
+      hasPrev: !!prevRef.current,
       quality: quality.current,
       qualities: QUALITIES.map((q) => ({ id: q.id, label: q.label })),
     });
@@ -135,6 +142,8 @@ export function NativePlayer({ id }: { id: string }) {
         }
       } else if (type === 'next') {
         playNext();
+      } else if (type === 'prev') {
+        if (prevRef.current) go(`/play/${prevRef.current.ratingKey}?t=0`, true);
       } else if (type === 'quality') {
         // Changement de qualité depuis les contrôles : on reprend au même endroit.
         const wanted = String(data.id ?? '');
@@ -157,6 +166,13 @@ export function NativePlayer({ id }: { id: string }) {
         if (!alive) return;
         itemRef.current = it;
         setItem(it);
+        // Sans repères de Plex (compte sans Plex Pass), ceux de la communauté arrivent en cours de route.
+        void withCommunityMarkers(srv, it).then((full) => {
+          if (!alive || full === it || itemRef.current !== it) return;
+          itemRef.current = full;
+          setItem(full);
+          native!.setMeta({ markers: markersOf(full) });
+        });
         const t0 = route.value.query.get('t');
         await launch(t0 !== null ? Number(t0) || 0 : (it.viewOffset ?? 0) / 1000);
         if (!alive) return;
@@ -172,6 +188,17 @@ export function NativePlayer({ id }: { id: string }) {
           if (alive && following) {
             nextRef.current = following;
             native!.setMeta({ hasNext: true });
+          }
+          // Épisode précédent, y compris le dernier de la saison d'avant.
+          let previous = i > 0 ? eps[i - 1] : undefined;
+          if (!previous && i === 0 && it.grandparentRatingKey) {
+            const all = await srv.children(it.grandparentRatingKey).catch(() => []);
+            const before = all.filter((s) => (s.index ?? 0) > 0 && (s.index ?? 0) < (it.parentIndex ?? 0)).sort((a, b) => (b.index ?? 0) - (a.index ?? 0))[0];
+            if (before) previous = (await srv.children(before.ratingKey).catch(() => [])).pop();
+          }
+          if (alive && previous) {
+            prevRef.current = previous;
+            native!.setMeta({ hasPrev: true });
           }
         }
       })

@@ -3,6 +3,7 @@ import type Hls from 'hls.js';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { formatClock, t } from '../i18n';
 import { back, go, route } from '../router';
+import { withCommunityMarkers } from '../markers';
 import { settings } from '../settings';
 import { invalidate, server } from '../store';
 import { Icon, Spinner, labels } from '../ui';
@@ -45,6 +46,7 @@ export function Player({ id }: { id: string }) {
 
   const [item, setItem] = useState<Metadata | null>(null);
   const [next, setNext] = useState<Metadata | null>(null);
+  const [prev, setPrev] = useState<Metadata | null>(null);
   const [error, setError] = useState('');
   const [menu, setMenu] = useState<Menu>(null);
   const [visible, setVisible] = useState(true);
@@ -165,6 +167,7 @@ export function Player({ id }: { id: string }) {
     skipped.current.clear();
     recovered.current = false;
     setNext(null);
+    setPrev(null);
     setItem(null);
     srv
       .metadata(id)
@@ -181,6 +184,11 @@ export function Player({ id }: { id: string }) {
           speed: 1,
         };
         setItem(it);
+        void withCommunityMarkers(srv, it).then((full) => {
+          if (!alive || full === it || itemRef.current !== it) return;
+          itemRef.current = full;
+          setItem(full);
+        });
         const t0 = route.value.query.get('t');
         void start(t0 !== null ? Number(t0) || 0 : (it.viewOffset ?? 0) / 1000);
         if (it.type === 'episode' && it.parentRatingKey) {
@@ -194,6 +202,14 @@ export function Player({ id }: { id: string }) {
             if (after) following = (await srv.children(after.ratingKey).catch(() => []))[0];
           }
           if (alive && following) setNext(following);
+          // Épisode précédent, y compris le dernier de la saison d'avant.
+          let previous = i > 0 ? eps[i - 1] : undefined;
+          if (!previous && i === 0 && it.grandparentRatingKey) {
+            const all = await srv.children(it.grandparentRatingKey).catch(() => []);
+            const before = all.filter((s) => (s.index ?? 0) > 0 && (s.index ?? 0) < (it.parentIndex ?? 0)).sort((a, b) => (b.index ?? 0) - (a.index ?? 0))[0];
+            if (before) previous = (await srv.children(before.ratingKey).catch(() => [])).pop();
+          }
+          if (alive && previous) setPrev(previous);
         }
       })
       .catch((e: Error) => alive && setError(e.message));
@@ -475,19 +491,31 @@ export function Player({ id }: { id: string }) {
       <div class="player-bottom">
         <div class="seek">
           <span>{formatClock(ui.time)}</span>
-          <input
-            type="range"
-            aria-label="Position"
-            min={0}
-            max={Math.max(1, Math.floor(ui.duration))}
-            step={1}
-            value={Math.floor(ui.time)}
-            style={{ '--fill': `${ui.duration ? (ui.time / ui.duration) * 100 : 0}%` }}
-            onInput={(e) => (v().currentTime = Number(e.currentTarget.value))}
-          />
+          <div class="seek-track">
+            <input
+              type="range"
+              aria-label="Position"
+              min={0}
+              max={Math.max(1, Math.floor(ui.duration))}
+              step={1}
+              value={Math.floor(ui.time)}
+              style={{ '--fill': `${ui.duration ? (ui.time / ui.duration) * 100 : 0}%` }}
+              onInput={(e) => (v().currentTime = Number(e.currentTarget.value))}
+            />
+            {/* Intro et générique repérés sur la barre. */}
+            {ui.duration > 0 &&
+              (item?.Marker ?? [])
+                .filter((m) => m.type === 'intro' || m.type === 'credits')
+                .map((m) => (
+                  <span key={m.type + m.startTimeOffset} class={`seek-mark ${m.type}`} data-label={m.type === 'intro' ? 'Intro' : t('player.credits')} style={{ left: `${(m.startTimeOffset / 1000 / ui.duration) * 100}%`, width: `${(Math.max(0, m.endTimeOffset - m.startTimeOffset) / 1000 / ui.duration) * 100}%` }} />
+                ))}
+          </div>
           <span>{formatClock(ui.duration)}</span>
         </div>
         <div class="controls">
+          <button class="btn icon-btn" aria-label={t('player.prev')} title={t('player.prev')} onClick={() => (ui.time > 5 || !prev ? void (v().currentTime = 0) : go(`/play/${prev.ratingKey}?t=0`, true))}>
+            <Icon name="prev" size={20} />
+          </button>
           <button class="btn icon-btn" aria-label={ui.playing ? 'Pause' : t('item.play')} onClick={toggle}>
             <Icon name={ui.playing ? 'pause' : 'play'} size={26} />
           </button>

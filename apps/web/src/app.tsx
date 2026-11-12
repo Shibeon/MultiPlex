@@ -9,7 +9,7 @@ import { Player } from './pages/Player';
 import { nativeAvailable } from './native';
 import { SettingsPage } from './pages/Settings';
 import { ThemesPage } from './pages/Themes';
-import { UpdateBanner } from './pages/Update';
+import { UpdateBanner, WhatsNew } from './pages/Update';
 import { route } from './router';
 import { settings } from './settings';
 import { discover, libraries, server, status } from './store';
@@ -72,6 +72,7 @@ export function App() {
         <Page />
       </main>
       <UpdateBanner />
+      <WhatsNew />
     </div>
   );
 }

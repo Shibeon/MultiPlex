@@ -2,13 +2,33 @@
 // son canal JSON (tube nommé). mpv lit le fichier d'origine tel quel — HEVC,
 // AV1, HDR, Dolby Vision, DTS, TrueHD, sous-titres ASS et PGS — sans aucune
 // conversion par le serveur.
-const { spawn } = require('node:child_process');
+const { execFile, spawn } = require('node:child_process');
 const { existsSync } = require('node:fs');
 const net = require('node:net');
 const path = require('node:path');
 
 /** Propriétés suivies en continu ; chaque changement est transmis à l'interface. */
-const OBSERVED = ['time-pos', 'duration', 'pause', 'paused-for-cache', 'aid', 'sid', 'eof-reached', 'volume', 'mute', 'speed', 'track-list', 'chapter-list', 'demuxer-cache-time'];
+const OBSERVED = ['time-pos', 'duration', 'pause', 'paused-for-cache', 'aid', 'sid', 'eof-reached', 'volume', 'mute', 'speed', 'track-list', 'chapter-list', 'demuxer-cache-time', 'current-ao', 'container-fps'];
+
+/** Sorties audio du système, dans l'ordre où mpv les essaie. */
+const NATIVE_AO = process.platform === 'win32' ? 'wasapi' : process.platform === 'darwin' ? 'coreaudio' : 'pipewire,pulse,alsa';
+
+/** Les sorties audio que mpv voit sur cette machine : [{ id, label }]. */
+function listAudioDevices(app) {
+  const exe = findMpv(app);
+  if (!exe) return Promise.resolve([]);
+  return new Promise((resolve) => {
+    execFile(exe, ['--no-config', '--audio-device=help'], { windowsHide: true, timeout: 8000, encoding: 'utf8' }, (_err, stdout) => {
+      const devices = [];
+      for (const line of String(stdout ?? '').split(/\r?\n/)) {
+        const m = /^\s*'([^']+)'\s+\((.*)\)\s*$/.exec(line);
+        // Seules les vraies sorties (« wasapi/… », « coreaudio/… ») ; « auto » est proposé à part.
+        if (m && m[1].includes('/') && /^[\w./{}:@-]{1,200}$/.test(m[1])) devices.push({ id: m[1], label: m[2] });
+      }
+      resolve(devices);
+    });
+  });
+}
 
 function findMpv(app) {
   const exe = process.platform === 'win32' ? 'mpv.exe' : 'mpv';
@@ -83,7 +103,13 @@ class MpvPlayer {
       `--input-conf=${path.join(__dirname, 'mpv-input.conf').replace('app.asar', 'app.asar.unpacked')}`,
     ];
     // Transmission du flux audio brut à un ampli ou une barre de son (Dolby, DTS, Atmos).
-    if (opts.passthrough) args.push('--audio-spdif=ac3,eac3,dts-hd,truehd', '--audio-exclusive=yes');
+    // Si la sortie refuse ce flux (casque, écran, enceintes), mpv se fige en cherchant son
+    // propre repli : on lui donne donc une sortie muette de secours, et dès qu'il s'y rabat
+    // on repasse au son décodé (voir onMessage). La lecture démarre dans tous les cas.
+    this.spdif = !!opts.passthrough;
+    if (this.spdif) args.push('--audio-spdif=ac3,eac3,dts-hd,truehd', `--ao=${NATIVE_AO},null`);
+    // Sortie audio choisie dans les réglages ; sinon celle du système.
+    if (opts.audioDevice) args.push(`--audio-device=${opts.audioDevice}`);
     // Tests automatiques : aucun son.
     if (this.muted) args.push('--mute=yes');
 
@@ -170,6 +196,12 @@ class MpvPlayer {
     if (msg.event === 'property-change') {
       this.state[msg.name] = msg.data;
       if (msg.name === 'eof-reached' && msg.data) this.reachedEnd = true;
+      if (msg.name === 'current-ao' && msg.data === 'null' && this.spdif) {
+        // Flux brut refusé par la sortie : retour au son décodé, sans interrompre la lecture.
+        this.spdif = false;
+        void this.send(['set_property', 'audio-spdif', '']);
+        this.emit('notice', { code: 'passthrough' });
+      }
       this.emit('state', { name: msg.name, value: msg.data });
     } else if (msg.event === 'end-file' && this.loaded) {
       // Démarré à vide, mpv resterait ouvert sur un écran noir : on le ferme à la fin du fichier.
@@ -249,4 +281,4 @@ class MpvPlayer {
   }
 }
 
-module.exports = { MpvPlayer };
+module.exports = { MpvPlayer, listAudioDevices };

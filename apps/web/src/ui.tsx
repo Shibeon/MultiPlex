@@ -1,4 +1,4 @@
-import type { Hub, Metadata } from '@multiplex/core';
+import { techBadges, type Hub, type Metadata } from '@multiplex/core';
 import type { ComponentChildren } from 'preact';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { t } from './i18n';
@@ -22,6 +22,7 @@ const ICONS: Record<string, string> = {
   back: 'M15.5 4l1.5 1.5L10.5 12l6.5 6.5-1.5 1.5-8-8z',
   check: 'M9 16.2l-3.5-3.6L4 14l5 5 11-11-1.5-1.4z',
   next: 'M5 4l10 8-10 8zm11 0h3v16h-3z',
+  prev: 'M19 4L9 12l10 8zM5 4h3v16H5z',
   full: 'M4 4h6v2H6v4H4zm10 0h6v6h-2V6h-4zM4 14h2v4h4v2H4zm14 0h2v6h-6v-2h4z',
   up: 'M12 7l7 7-1.5 1.5L12 10l-5.5 5.5L5 14z',
   down: 'M12 17l-7-7 1.5-1.5L12 14l5.5-5.5L19 10z',
@@ -35,6 +36,21 @@ export function Icon({ name, size = 22 }: { name: string; size?: number }) {
     <svg class="icon" width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
       <path fill="currentColor" fill-rule="evenodd" d={ICONS[name] ?? ICONS.movie} />
     </svg>
+  );
+}
+
+/** Pastilles des technologies d'un fichier : définition, codec, plage dynamique, son. */
+export function TechBadges({ item }: { item: Metadata }) {
+  const badges = techBadges(item.Media?.[0]);
+  if (!badges.length) return null;
+  return (
+    <ul class="tech" aria-label="Caractéristiques techniques">
+      {badges.map((b) => (
+        <li key={b.kind + b.label} class={`tech-${b.kind}`} data-tech={b.label}>
+          {b.label}
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -60,6 +76,16 @@ export function ErrorBox({ error, retry }: { error: Error | string; retry?: () =
 function imgWidth(css: number): number {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   return Math.ceil((css * dpr) / 80) * 80;
+}
+
+/**
+ * Taille à demander pour une image de fond : celle de l'écran, densité comprise,
+ * jusqu'à la 4K. Arrondie par paliers pour que le cache d'images resserve.
+ */
+export function artSize(): [number, number] {
+  const dpr = window.devicePixelRatio || 1;
+  const w = Math.min(3840, Math.max(1280, Math.ceil((window.innerWidth * dpr) / 640) * 640));
+  return [w, Math.round((w * 9) / 16)];
 }
 
 export function labels(item: Metadata): { title: string; sub: string } {

@@ -225,23 +225,43 @@ export function NativeOverlay() {
       <div class="player-bottom">
         <div class="seek">
           <span>{formatClock(shownTime)}</span>
-          <input
-            type="range"
-            aria-label="Position"
-            min={0}
-            max={Math.max(1, Math.floor(duration))}
-            step={1}
-            value={Math.floor(shownTime)}
-            style={{ '--fill': `${duration ? (shownTime / duration) * 100 : 0}%` }}
-            onInput={(e) => setScrub(Number(e.currentTarget.value))}
-            onChange={(e) => {
-              void n.command('seek', Number(e.currentTarget.value));
-              setScrub(null);
-            }}
-          />
+          <div class="seek-track">
+            <input
+              type="range"
+              aria-label="Position"
+              min={0}
+              max={Math.max(1, Math.floor(duration))}
+              step={1}
+              value={Math.floor(shownTime)}
+              style={{ '--fill': `${duration ? (shownTime / duration) * 100 : 0}%` }}
+              onInput={(e) => setScrub(Number(e.currentTarget.value))}
+              onChange={(e) => {
+                void n.command('seek', Number(e.currentTarget.value));
+                setScrub(null);
+              }}
+            />
+            {/* Intro et générique repérés sur la barre. */}
+            {duration > 0 &&
+              (meta.markers ?? []).map((m) => (
+                <span key={m.type + m.start} class={`seek-mark ${m.type}`} data-label={m.type === 'intro' ? 'Intro' : t('player.credits')} style={{ left: `${(m.start / duration) * 100}%`, width: `${(Math.max(0, m.end - m.start) / duration) * 100}%` }} />
+              ))}
+          </div>
           <span>-{formatClock(Math.max(0, duration - shownTime))}</span>
         </div>
         <div class="controls">
+          <button
+            class="btn icon-btn"
+            data-act="prev"
+            aria-label={t('player.prev')}
+            title={t('player.prev')}
+            onClick={() => {
+              // Comme sur une platine : au-delà de quelques secondes, on revient d'abord au début.
+              if (time > 5 || !meta.hasPrev) void n.command('seek', 0);
+              else n.action('prev');
+            }}
+          >
+            <Icon name="prev" size={20} />
+          </button>
           <button class="btn icon-btn play" data-act="toggle" aria-label={paused ? t('item.play') : 'Pause'} onClick={() => void n.command('toggle')}>
             <Icon name={paused ? 'play' : 'pause'} size={26} />
           </button>

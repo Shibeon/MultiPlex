@@ -70,7 +70,7 @@ export class PlexServer implements MediaServer {
   }
 
   async metadata(ratingKey: string): Promise<Metadata> {
-    const mc = await this.mc<{ Metadata?: Metadata[] }>(`/library/metadata/${ratingKey}`, { includeMarkers: 1, includeChapters: 1 });
+    const mc = await this.mc<{ Metadata?: Metadata[] }>(`/library/metadata/${ratingKey}`, { includeMarkers: 1, includeChapters: 1, includeGuids: 1 });
     const m = mc.Metadata?.[0];
     if (!m) throw new Error('Élément introuvable');
     return m;

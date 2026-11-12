@@ -3,8 +3,9 @@
 const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
-const { MpvPlayer } = require('./mpv.cjs');
+const { MpvPlayer, listAudioDevices } = require('./mpv.cjs');
 const { setupUpdater } = require('./updater.cjs');
+const { RefreshMatcher } = require('./display.cjs');
 
 // Empaquetée, l'app embarque le build web dans ses ressources.
 const INDEX = app.isPackaged
@@ -24,7 +25,7 @@ if (HIDDEN) app.commandLine.appendSwitch('disable-features', 'CalculateNativeWin
 
 // Les tests automatiques passent l'app en mode démo : ils travaillent dans un profil
 // temporaire à part, pour ne jamais toucher à la session ni aux réglages de l'utilisateur.
-if (arg('smoke') || arg('smoke-native') || arg('smoke-update-check') || process.argv.includes('--smoke-update')) app.setPath('userData', path.join(app.getPath('temp'), 'multiplex-smoke-profile'));
+if (arg('smoke') || arg('smoke-native') || arg('smoke-passthrough') ||arg('smoke-update-check') || process.argv.includes('--smoke-update')) app.setPath('userData', path.join(app.getPath('temp'), 'multiplex-smoke-profile'));
 
 /** Fenêtre principale, lecteur natif et fenêtre de contrôles superposée. */
 let main = null;
@@ -32,6 +33,18 @@ let player = null;
 let overlay = null;
 /** Ce que la page principale sait du titre en cours (titres, marqueurs, pistes), pour les contrôles. */
 let meta = {};
+/** Accord de la fréquence de l'écran à la vidéo, et si la lecture en cours le demande. */
+let matcher = null;
+let matchOn = false;
+let focusTimer = null;
+/** L'application est-elle au premier plan ? (La fenêtre de contrôles en fait partie.) */
+function syncFocus() {
+  clearTimeout(focusTimer);
+  focusTimer = setTimeout(() => {
+    const alive = (w) => w && !w.isDestroyed();
+    matcher?.setFocused(HIDDEN || (alive(main) && main.isFocused()) || (alive(overlay) && overlay.isFocused()));
+  }, 400);
+}
 
 const preload = path.join(__dirname, 'preload.cjs');
 const sendTo = (w, channel, ...args) => w && !w.isDestroyed() && w.webContents.send(channel, ...args);
@@ -72,6 +85,8 @@ function openOverlay() {
   win.on('closed', () => {
     if (overlay === win) overlay = null;
   });
+  win.on('focus', syncFocus);
+  win.on('blur', syncFocus);
 }
 
 function closeOverlay() {
@@ -88,12 +103,43 @@ function registerPlayer(win) {
   player = new MpvPlayer(app, win, (type, data) => {
     sendTo(win, 'mpv:event', type, data);
     sendTo(overlay, 'mpv:event', type, data);
-    if (type === 'ended' || type === 'error') closeOverlay();
+    if (type === 'ended' || type === 'error') {
+      closeOverlay();
+      matcher?.release();
+    } else if (type === 'state' && data.name === 'container-fps' && typeof data.value === 'number' && matchOn) {
+      matcher?.want(data.value);
+    }
   });
   if (HIDDEN) player.muted = true;
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  matcher = new RefreshMatcher({
+    hwnd: () => {
+      const h = win.getNativeWindowHandle();
+      return h.length === 8 ? h.readBigUInt64LE(0).toString() : h.readUInt32LE(0).toString();
+    },
+    // Tests hors écran : on demande seulement à Windows si le mode serait accepté.
+    test: HIDDEN,
+    // L'écran reste noir une seconde ou deux en changeant de fréquence : la vidéo attend.
+    around: async (change) => {
+      const playing = !!player?.proc && player.state.pause === false;
+      if (playing) await player.command('pause', true);
+      try {
+        await change();
+      } finally {
+        if (playing) {
+          await wait(HIDDEN ? 0 : 1800);
+          await player?.command('pause', false);
+        }
+      }
+    },
+  });
+  win.on('focus', syncFocus);
+  win.on('blur', syncFocus);
+  win.on('minimize', syncFocus);
   for (const ev of ['move', 'resize', 'maximize', 'unmaximize', 'restore', 'enter-full-screen', 'leave-full-screen']) win.on(ev, syncOverlay);
   win.on('closed', () => {
     closeOverlay();
+    matcher?.restoreSync();
     void player?.stop();
     player = null;
     main = null;
@@ -101,6 +147,33 @@ function registerPlayer(win) {
 }
 
 ipcMain.handle('mpv:available', () => !!player?.available());
+
+// Repères d'intro communautaires (IntroDB). La page ne peut pas interroger ce service
+// elle-même (il refuse les navigateurs) ; seuls un identifiant IMDb et un numéro
+// d'épisode partent, rien du compte ni du serveur.
+ipcMain.handle('introdb:segments', async (_e, imdb, season, episode) => {
+  if (!/^tt\d{5,10}$/.test(String(imdb)) || !Number.isInteger(season) || !Number.isInteger(episode) || season < 0 || season > 200 || episode < 0 || episode > 5000) return null;
+  try {
+    const res = await fetch(`https://api.introdb.app/segments?imdb_id=${imdb}&season=${season}&episode=${episode}`, { signal: AbortSignal.timeout(6000), headers: { Accept: 'application/json' } });
+    if (!res.ok) return null;
+    const j = await res.json();
+    const pick = (s) => (s && typeof s === 'object' ? { start_sec: Number(s.start_sec), end_sec: Number(s.end_sec) } : null);
+    return { intro: pick(j.intro), outro: pick(j.outro) };
+  } catch {
+    return null;
+  }
+});
+
+/** Sorties audio connues ; relues à chaque demande de l'interface, et si une sortie choisie manque. */
+let audioDevices = [];
+const refreshAudioDevices = async () => (audioDevices = await listAudioDevices(app));
+ipcMain.handle('audio:devices', refreshAudioDevices);
+/** La sortie demandée si elle existe encore ; sinon rien (sortie du système), plutôt qu'une lecture muette. */
+async function knownAudioDevice(id) {
+  if (typeof id !== 'string' || !id) return undefined;
+  if (!audioDevices.some((d) => d.id === id)) await refreshAudioDevices();
+  return audioDevices.some((d) => d.id === id) ? id : undefined;
+}
 ipcMain.handle('mpv:play', async (_e, opts) => {
   // L'interface ne peut faire lire que des adresses web, jamais un fichier local ni une option mpv.
   const web = (u) => typeof u === 'string' && /^https?:\/\//i.test(u);
@@ -110,6 +183,8 @@ ipcMain.handle('mpv:play', async (_e, opts) => {
     .filter(([k, v]) => /^X-Plex-[A-Za-z-]{1,40}$/.test(k) && typeof v === 'string' && /^[\x20-\x7E]{1,200}$/.test(v))
     .map(([k, v]) => `${k}: ${v}`);
   meta = {};
+  matchOn = !!opts.matchRefresh || (HIDDEN && !!arg('smoke-native'));
+  if (!matchOn) matcher?.release();
   const result = await player.play({
     url: opts.url,
     headers,
@@ -119,6 +194,7 @@ ipcMain.handle('mpv:play', async (_e, opts) => {
     sid: Number.isInteger(opts.sid) ? opts.sid : undefined,
     subFiles: (Array.isArray(opts.subFiles) ? opts.subFiles : []).filter(web).slice(0, 8),
     passthrough: !!opts.passthrough,
+    audioDevice: await knownAudioDevice(opts.audioDevice),
     buffered: !!opts.buffered,
   });
   openOverlay();
@@ -126,6 +202,7 @@ ipcMain.handle('mpv:play', async (_e, opts) => {
 });
 ipcMain.handle('mpv:stop', () => {
   closeOverlay();
+  matcher?.release();
   return player?.stop();
 });
 ipcMain.handle('mpv:command', (_e, name, value) => player?.command(String(name), value));
@@ -145,6 +222,7 @@ ipcMain.on('overlay:action', (_e, name) => {
     // enregistrer la position et revenir à la fiche.
     const time = player?.state['time-pos'] ?? 0;
     closeOverlay();
+    matcher?.release();
     void player?.stop();
     sendTo(main, 'mpv:event', 'ended', { time, eof: false });
   } else if (name === 'fullscreen') {
@@ -152,6 +230,8 @@ ipcMain.on('overlay:action', (_e, name) => {
   } else if (typeof name === 'string' && /^quality:[a-z0-9]{1,12}$/.test(name)) {
     // Le changement de qualité relance la lecture : c'est la page principale qui sait le faire.
     sendTo(main, 'mpv:event', 'quality', { id: name.slice(8) });
+  } else if (name === 'prev') {
+    sendTo(main, 'mpv:event', 'prev', {});
   } else if (name === 'next') {
     // L'enchaînement est décidé par la page principale, qui connaît l'épisode suivant.
     sendTo(main, 'mpv:event', 'next', {});
@@ -176,6 +256,8 @@ function createWindow() {
     },
   });
   main = win;
+  // L'application s'ouvre en grand ; les tests, eux, restent hors écran.
+  if (!HIDDEN) win.maximize();
   registerPlayer(win);
 
   // Les liens externes (connexion Plex) s'ouvrent dans le navigateur du système,
@@ -221,6 +303,29 @@ function createWindow() {
       }
       fs.writeFileSync(arg('smoke-out'), JSON.stringify(result, null, 2));
       app.exit(0);
+    });
+  }
+
+  // Diagnostic de développement : `--smoke-passthrough=rapport.json --smoke-file=essai.mkv`
+  // lit un fichier local avec la transmission audio brute et note si la lecture avance.
+  const smokePass = !app.isPackaged && arg('smoke-passthrough');
+  if (smokePass) {
+    win.webContents.once('did-finish-load', async () => {
+      const report = { notices: [] };
+      const forward = player.emit;
+      player.emit = (type, data) => (type === 'notice' && report.notices.push(data.code), forward(type, data));
+      try {
+        await player.play({ url: arg('smoke-file'), title: 'essai', passthrough: true, audioDevice: await knownAudioDevice(arg('smoke-audio')) });
+        await new Promise((r) => setTimeout(r, 4000));
+        report.ao = await player.send(['get_property', 'current-ao']);
+        report.device = await player.send(['get_property', 'audio-device']);
+        report.info = await player.info();
+      } catch (e) {
+        report.error = String(e);
+      }
+      fs.writeFileSync(smokePass, JSON.stringify(report, null, 2));
+      await player.stop();
+      app.exit(report.error ? 3 : 0);
     });
   }
 
@@ -344,6 +449,7 @@ function createWindow() {
         // Retour, par le bouton.
         report.backClicked = await click('.player-top .btn');
         await wait(2500);
+        report.refresh = matcher?.log;
         report.afterBack = { running: !!player.proc, overlay: !!overlay, hash: await js('location.hash') };
       } catch (e) {
         report.error = String(e);
@@ -365,7 +471,10 @@ app.whenReady().then(() => {
   });
 });
 
-app.on('before-quit', () => void player?.stop());
+app.on('before-quit', () => {
+  matcher?.restoreSync();
+  void player?.stop();
+});
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });

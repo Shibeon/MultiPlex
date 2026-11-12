@@ -222,3 +222,48 @@ export function srtToVtt(srt: string): string {
     .trim();
   return body.startsWith('WEBVTT') ? body + '\n' : `WEBVTT\n\n${body}\n`;
 }
+
+/** Une caractéristique technique à afficher en pastille (image, plage dynamique, son). */
+export interface TechBadge {
+  kind: 'resolution' | 'video' | 'hdr' | 'audio' | 'channels';
+  label: string;
+}
+
+const VIDEO_LABEL: Record<string, string> = { hevc: 'HEVC', h265: 'HEVC', h264: 'H.264', av1: 'AV1', vp9: 'VP9', mpeg2video: 'MPEG-2', vc1: 'VC-1', mpeg4: 'MPEG-4' };
+const AUDIO_LABEL: Record<string, string> = { truehd: 'Dolby TrueHD', eac3: 'Dolby Digital+', ac3: 'Dolby Digital', dca: 'DTS', dts: 'DTS', aac: 'AAC', flac: 'FLAC', mp3: 'MP3', opus: 'Opus', pcm: 'PCM', alac: 'ALAC', vorbis: 'Vorbis' };
+
+/**
+ * Caractéristiques techniques d'un fichier, dans l'ordre d'affichage : définition,
+ * codec vidéo, plage dynamique, format et canaux de la piste audio retenue.
+ */
+export function techBadges(media: Media | undefined): TechBadge[] {
+  if (!media) return [];
+  const part = media.Part?.[0];
+  const out: TechBadge[] = [];
+  const res = (media.videoResolution ?? '').toLowerCase();
+  if (res) out.push({ kind: 'resolution', label: res === '4k' ? '4K' : /^\d+$/.test(res) ? `${res}p` : res.toUpperCase() });
+  const vcodec = (media.videoCodec ?? '').toLowerCase();
+  if (vcodec) out.push({ kind: 'video', label: VIDEO_LABEL[vcodec] ?? vcodec.toUpperCase() });
+  const hdr = hdrKind(streamsOf(part, 1)[0]);
+  if (hdr) out.push({ kind: 'hdr', label: hdr });
+
+  const tracks = streamsOf(part, 2);
+  const audio = tracks.find((s) => s.selected) ?? tracks[0];
+  const acodec = (audio?.codec ?? media.audioCodec ?? '').toLowerCase().replace(/-ma$/, '');
+  const title = `${audio?.extendedDisplayTitle ?? ''} ${audio?.displayTitle ?? ''} ${audio?.title ?? ''}`.toLowerCase();
+  const profile = `${audio?.profile ?? ''} ${media.audioCodec ?? ''}`.toLowerCase();
+  if (acodec) {
+    let label = AUDIO_LABEL[acodec] ?? acodec.toUpperCase();
+    if (acodec === 'dca' || acodec === 'dts') {
+      if (/dts:x|dts-x/.test(title)) label = 'DTS:X';
+      else if (/\bma\b|dts-hd ma/.test(profile + ' ' + title)) label = 'DTS-HD MA';
+      else if (/hra|dts-hd/.test(profile + ' ' + title)) label = 'DTS-HD';
+    }
+    // L'Atmos voyage dans une piste TrueHD ou Dolby Digital+ ; seul l'intitulé de la piste le signale.
+    if (/atmos/.test(title)) label = 'Dolby Atmos';
+    out.push({ kind: 'audio', label });
+  }
+  const channels = audio?.channels ?? media.audioChannels;
+  if (channels) out.push({ kind: 'channels', label: channels >= 8 ? '7.1' : channels >= 6 ? '5.1' : channels === 2 ? 'Stéréo' : channels === 1 ? 'Mono' : `${channels} canaux` });
+  return out;
+}

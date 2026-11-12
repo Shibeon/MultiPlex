@@ -1,9 +1,9 @@
 import { QUALITIES } from '@multiplex/core';
 import type { ComponentChildren } from 'preact';
-import { useState } from 'preact/hooks';
+import { useEffect, useState } from 'preact/hooks';
 import { t } from '../i18n';
 import { DEFAULTS, THEMES, load, sanitize, settings, update, type Settings } from '../settings';
-import { nativeAvailable } from '../native';
+import { native, nativeAvailable } from '../native';
 import { auth, logout, server, switchServer } from '../store';
 import { Icon } from '../ui';
 import { UpdateSettings, canUpdate } from './Update';
@@ -69,6 +69,32 @@ function HomeRows() {
         </li>
       ))}
     </ul>
+  );
+}
+
+/** Choix de la sortie audio du lecteur natif : celle du système, ou une sortie précise. */
+function AudioDeviceRow() {
+  const [devices, setDevices] = useState<{ id: string; label: string }[] | null>(null);
+  useEffect(() => {
+    native
+      ?.audioDevices?.()
+      .then(setDevices)
+      .catch(() => setDevices([]));
+  }, []);
+  const current = settings.value.audioDevice;
+  if (!native?.audioDevices) return null;
+  return (
+    <Row label={t('set.audioDevice')}>
+      <select value={current} onChange={(e) => update({ audioDevice: e.currentTarget.value })}>
+        <option value="">{t('set.audioAuto')}</option>
+        {current && devices && !devices.some((d) => d.id === current) && <option value={current}>{t('set.audioMissing')}</option>}
+        {(devices ?? []).map((d) => (
+          <option key={d.id} value={d.id}>
+            {d.label}
+          </option>
+        ))}
+      </select>
+    </Row>
   );
 }
 
@@ -170,14 +196,26 @@ export function SettingsPage() {
           </select>
         </Row>
         {nativeAvailable.value && <Toggle k="nativePlayer" label={t('set.nativePlayer')} />}
-        {nativeAvailable.value && s.nativePlayer && <Toggle k="passthrough" label={t('set.passthrough')} />}
+        {nativeAvailable.value && s.nativePlayer && native?.platform === 'win32' && <Toggle k="matchRefresh" label={t('set.matchRefresh')} />}
+        {nativeAvailable.value && s.nativePlayer && native?.platform === 'win32' && s.matchRefresh && <p class="muted">{t('set.matchRefreshHelp')}</p>}
         <Toggle k="directPlay" label={t('set.directPlay')} />
         {!(nativeAvailable.value && s.nativePlayer) && <Toggle k="hdrServerOnSdr" label={t('set.hdrServerOnSdr')} />}
         <Toggle k="autoNext" label={t('set.autoNext')} />
+        {!!native?.segments && <Toggle k="communityMarkers" label={t('set.communityMarkers')} />}
+        {!!native?.segments && <p class="muted">{t('set.communityMarkersHelp')}</p>}
         <Toggle k="autoSkipIntro" label={t('set.autoSkipIntro')} />
         <Toggle k="autoSkipCredits" label={t('set.autoSkipCredits')} />
         <Range k="seekStep" label={t('set.seekStep')} min={5} max={60} step={5} unit=" s" />
       </section>
+
+      {nativeAvailable.value && s.nativePlayer && (
+        <section>
+          <h2>{t('set.audio')}</h2>
+          <AudioDeviceRow />
+          <Toggle k="passthrough" label={t('set.passthrough')} />
+          <p class="muted">{t('set.passthroughHelp')}</p>
+        </section>
+      )}
 
       <section>
         <h2>{t('set.advanced')}</h2>

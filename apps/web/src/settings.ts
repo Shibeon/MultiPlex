@@ -62,6 +62,12 @@ export interface Settings {
   autoUpdate: boolean;
   /** Lecteur natif : transmettre l'audio brut (Dolby, DTS, Atmos) à un ampli. */
   passthrough: boolean;
+  /** Lecteur natif : sortie audio choisie (vide = celle du système). */
+  audioDevice: string;
+  /** Lecteur natif, Windows : accorder la fréquence de l'écran à la cadence de la vidéo. */
+  matchRefresh: boolean;
+  /** Application de bureau : compléter les repères d'intro avec IntroDB quand Plex n'en fournit pas. */
+  communityMarkers: boolean;
 }
 
 export const DEFAULTS: Settings = {
@@ -95,6 +101,9 @@ export const DEFAULTS: Settings = {
   nativePlayer: true,
   autoUpdate: true,
   passthrough: false,
+  audioDevice: '',
+  matchRefresh: false,
+  communityMarkers: true,
 };
 
 const KEY = 'mp.settings';

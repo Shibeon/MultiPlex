@@ -15,6 +15,11 @@ contextBridge.exposeInMainWorld('multiplexNative', {
   stop: () => ipcRenderer.invoke('mpv:stop'),
   command: (name, value) => ipcRenderer.invoke('mpv:command', name, value),
   info: () => ipcRenderer.invoke('mpv:info'),
+  /** Sorties audio de la machine : [{ id, label }]. */
+  audioDevices: () => ipcRenderer.invoke('audio:devices'),
+  platform: process.platform,
+  /** Repères d'intro communautaires pour un épisode (IntroDB). */
+  segments: (imdb, season, episode) => ipcRenderer.invoke('introdb:segments', imdb, season, episode),
   /** S'abonne aux évènements du lecteur ; renvoie la fonction de désabonnement. */
   on: subscribe('mpv:event', ([type, data]) => [type, data]),
 

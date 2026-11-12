@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  imdbIdOf,
+  segmentsToMarkers,
+  toFriendActivity,
   DemoDiscover,
   DemoServer,
   discoverId,
@@ -14,6 +17,7 @@ import {
   planPlayback,
   rankConnections,
   srtToVtt,
+  techBadges,
   transcodeParams,
   type ClientInfo,
   type Metadata,
@@ -85,6 +89,23 @@ describe('lecture', () => {
     expect([d.mode, d.keepVideo]).toEqual(['hls', false]);
     const dv8 = movie({ videoCodec: 'hevc' }, [{ id: 1, streamType: 1, codec: 'hevc', bitDepth: 10, DOVIPresent: true, DOVIProfile: 8, DOVIBLCompatID: 1 }]);
     expect(planPlayback(dv8, { quality: 'original', canPlay: yes }).mode).toBe('direct');
+  });
+
+  it('résume les caractéristiques techniques en pastilles', () => {
+    const labels = (m: Metadata) => techBadges(m.Media![0]).map((b) => b.label);
+    const uhd = movie({ videoResolution: '4k', videoCodec: 'hevc', audioCodec: 'truehd', audioChannels: 8 }, [
+      { id: 1, streamType: 1, codec: 'hevc', DOVIPresent: true, colorTrc: 'smpte2084' },
+      { id: 2, streamType: 2, codec: 'truehd', channels: 8, selected: true, extendedDisplayTitle: 'English (TrueHD 7.1 Atmos)' },
+    ]);
+    expect(labels(uhd)).toEqual(['4K', 'HEVC', 'Dolby Vision', 'Dolby Atmos', '7.1']);
+    const dts = movie({ videoResolution: '1080', videoCodec: 'h264', audioCodec: 'dca-ma', audioChannels: 6 }, [
+      { id: 1, streamType: 1, codec: 'h264', colorTrc: 'bt709' },
+      { id: 2, streamType: 2, codec: 'dca', profile: 'ma', channels: 6 },
+    ]);
+    expect(labels(dts)).toEqual(['1080p', 'H.264', 'DTS-HD MA', '5.1']);
+    // Sans détail des pistes (listes, rangées), on se rabat sur le résumé du fichier.
+    expect(labels(movie({ videoResolution: '720', videoCodec: 'h264', audioCodec: 'aac', audioChannels: 2 }))).toEqual(['720p', 'H.264', 'AAC', 'Stéréo']);
+    expect(techBadges(undefined)).toEqual([]);
   });
 
   it('lecture directe quand tout est compatible', () => {
@@ -163,6 +184,28 @@ describe('catalogue et liste de suivi', () => {
     expect([after.total, after.items[0].title, (await d.details(other.ratingKey)).watchlisted]).toEqual([before.total + 1, 'Archipel', true]);
     await d.setWatchlisted(other.ratingKey, false);
     expect((await d.watchlist(0, 50)).total).toBe(before.total);
+  });
+});
+
+describe('repères communautaires et activité des amis', () => {
+  it('lit l’identifiant IMDb et convertit les repères IntroDB', () => {
+    expect(imdbIdOf({ Guid: [{ id: 'tmdb://1396' }, { id: 'imdb://tt0903747' }] })).toBe('tt0903747');
+    expect(imdbIdOf({ guid: 'plex://show/5d9c086c7d06d9001ffd27aa' })).toBeNull();
+    expect(segmentsToMarkers({ intro: { start_sec: 2.5, end_sec: 58 }, outro: null })).toEqual([{ type: 'intro', startTimeOffset: 2500, endTimeOffset: 58000 }]);
+    // Repère trop court ou à l'envers : ignoré.
+    expect(segmentsToMarkers({ intro: { start_sec: 50, end_sec: 51 }, outro: { start_sec: 90, end_sec: 10 } })).toEqual([]);
+    expect(segmentsToMarkers(null)).toEqual([]);
+  });
+
+  it('met en forme une lecture d’ami', () => {
+    const a = toFriendActivity({
+      id: 'x',
+      date: '2026-11-12T10:00:00Z',
+      userV2: { id: '1', username: 'cam', displayName: 'Camille' },
+      metadataItem: { title: 'Pilote', type: 'EPISODE', index: 1, key: '/library/metadata/5d9c086c7d06d9001ffd27ab', parent: { index: 2 }, grandparent: { title: 'Archipel', key: '/library/metadata/5d9c086c7d06d9001ffd27aa', images: { coverPoster: 'https://exemple/p.jpg' } } },
+    });
+    expect(a).toMatchObject({ user: { name: 'Camille' }, type: 'episode', title: 'Pilote', show: 'Archipel', episode: 'S2 · E1', poster: 'https://exemple/p.jpg', discoverId: '5d9c086c7d06d9001ffd27aa' });
+    expect(toFriendActivity({ id: 'y', date: '', metadataItem: null })).toBeNull();
   });
 });
 

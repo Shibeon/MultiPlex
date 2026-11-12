@@ -1,10 +1,10 @@
-import { hdrKind, streamsOf, type MediaServer, type Metadata } from '@multiplex/core';
+import type { MediaServer, Metadata } from '@multiplex/core';
 import { useState } from 'preact/hooks';
 import { formatDuration, t } from '../i18n';
 import { go } from '../router';
 import { settings } from '../settings';
 import { invalidate, server, useData } from '../store';
-import { Card, ErrorBox, Icon, Spinner, isWatched } from '../ui';
+import { Card, ErrorBox, Icon, Spinner, TechBadges, artSize, isWatched } from '../ui';
 import { ServerWatchlistButton } from './Discover';
 
 /** Pour une série ou une saison : le premier épisode pas encore vu. */
@@ -77,25 +77,20 @@ export function Details({ id }: { id: string }) {
   const playable = ['movie', 'episode', 'show', 'season'].includes(item.type);
   const title = item.type === 'episode' ? item.title : item.type === 'season' ? `${item.parentTitle} — ${item.title}` : item.title;
   const poster = item.type === 'episode' ? item.grandparentThumb : (item.thumb ?? item.parentThumb);
-  const media = item.Media?.[0];
   const facts = [
     item.type === 'episode' && `S${item.parentIndex} · E${item.index}`,
     item.year,
     formatDuration(item.duration),
     item.contentRating,
     item.rating && `★ ${item.rating.toFixed(1)}`,
-    media?.videoResolution && (/^\d+$/.test(media.videoResolution) ? `${media.videoResolution}p` : media.videoResolution.toUpperCase()),
-    media?.videoCodec?.toUpperCase(),
-    hdrKind(streamsOf(media?.Part?.[0], 1)[0]),
-    [media?.audioCodec?.toUpperCase(), media?.audioChannels && (media.audioChannels > 2 ? `${media.audioChannels - 1}.1` : media.audioChannels === 2 ? 'stéréo' : 'mono')].filter(Boolean).join(' '),
   ].filter(Boolean);
   const leftMin = item.viewOffset && item.duration ? Math.round((item.duration - item.viewOffset) / 60000) : 0;
 
   return (
     <div class="details">
-      {settings.value.backdrops && item.art && <div class="backdrop" style={{ backgroundImage: `url("${srv.image(item.art, 1280, 720)}")` }} />}
+      {settings.value.backdrops && item.art && <div class="backdrop" style={{ backgroundImage: `url("${srv.image(item.art, ...artSize())}")` }} />}
       <div class="details-main">
-        {poster && <img class="details-poster" src={srv.image(poster, 400, 600)} alt="" />}
+        {poster && <img class="details-poster" src={srv.image(poster, 600, 900)} alt="" />}
         <div class="details-info">
           {item.type === 'episode' && item.grandparentRatingKey && (
             <a class="crumb" href={`#/item/${item.grandparentRatingKey}`}>
@@ -109,6 +104,7 @@ export function Details({ id }: { id: string }) {
               <span key={i}>{f}</span>
             ))}
           </p>
+          <TechBadges item={item} />
           <div class="actions">
             {playable && (
               <button class="btn primary big" disabled={busy} onClick={() => void play(false)}>

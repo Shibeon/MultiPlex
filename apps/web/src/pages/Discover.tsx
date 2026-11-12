@@ -1,5 +1,5 @@
 import { discoverId, discoverImage, type Metadata } from '@multiplex/core';
-import { useState } from 'preact/hooks';
+import { useEffect, useState } from 'preact/hooks';
 import { formatDuration, t } from '../i18n';
 import { settings } from '../settings';
 import { discover, invalidate, server, useData } from '../store';
@@ -7,14 +7,51 @@ import { ErrorBox, Icon, Spinner } from '../ui';
 
 const PAGE = 60;
 
-/** Carte d'un titre du catalogue Plex : mène à sa fiche « hors serveur ». */
-export function DiscoverCard({ item }: { item: Metadata }) {
+/** Disponibilité déjà vérifiée, par bibliothèque et identifiant Plex : null = pas encore disponible. */
+const availability = new Map<string, Metadata | null>();
+
+/**
+ * Pour une liste de titres du catalogue, cherche lesquels sont déjà disponibles.
+ * Les vérifications partent par petits lots et sont mémorisées pour la session.
+ */
+function useAvailability(items: Metadata[] | undefined): (item: Metadata) => Metadata | null | undefined {
+  const srv = server.value!;
+  const [, refresh] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    const todo = (items ?? []).filter((m) => m.guid && !availability.has(`${srv.id}:${m.guid}`));
+    const worker = async () => {
+      for (let m = todo.shift(); m && alive; m = todo.shift()) {
+        const key = `${srv.id}:${m.guid}`;
+        try {
+          availability.set(key, (await srv.findByGuid(m.guid!)) ?? null);
+        } catch {
+          /* vérification manquée : le titre reste « inconnu » et sera revérifié */
+        }
+        if (alive) refresh((n) => n + 1);
+      }
+    };
+    for (let i = 0; i < 6; i++) void worker();
+    return () => {
+      alive = false;
+    };
+  }, [items, srv.id]);
+  return (item) => (item.guid ? availability.get(`${srv.id}:${item.guid}`) : undefined);
+}
+
+/**
+ * Carte d'un titre du catalogue Plex. `local` : l'élément correspondant s'il est
+ * déjà disponible (la carte y mène alors directement), null s'il ne l'est pas
+ * encore, absent tant qu'on ne sait pas.
+ */
+export function DiscoverCard({ item, local }: { item: Metadata; local?: Metadata | null }) {
   const poster = discoverImage(item, 'poster');
   return (
-    <a class="card" href={`#/discover/${item.ratingKey}`} title={item.title}>
+    <a class={`card${local === null ? ' pending' : ''}`} href={local ? `#/item/${local.ratingKey}` : `#/discover/${item.ratingKey}`} title={item.title}>
       <div class="poster">
         <span class="poster-fallback">{item.title}</span>
         {poster && <img loading="lazy" decoding="async" referrerpolicy="no-referrer" src={poster} alt="" />}
+        {local === null && <span class="soon">{t('disc.notOnServer')}</span>}
       </div>
       <div class="card-text">
         <div class="card-title">{item.title}</div>
@@ -58,12 +95,19 @@ export function WatchlistPage() {
   const d = discover.value;
   const [count, setCount] = useState(PAGE);
   const { data, error, reload } = useData(d ? `disc:watchlist:${count}` : null, () => d!.watchlist(0, count));
+  const localOf = useAvailability(data?.items);
   if (!d) return <p class="page muted">{t('disc.needAccount')}</p>;
+  const waiting = data?.items.filter((m) => localOf(m) === null).length ?? 0;
   return (
     <div class="page">
       <header class="page-head">
         <h1>{t('nav.watchlist')}</h1>
         {data && <span class="muted">{data.total}</span>}
+        {waiting > 0 && (
+          <span class="muted">
+            · {waiting} {t('disc.waiting')}
+          </span>
+        )}
       </header>
       <p class="muted">{t('disc.lead')}</p>
       {error && <ErrorBox error={error} retry={reload} />}
@@ -71,7 +115,7 @@ export function WatchlistPage() {
       {data?.total === 0 && <p class="muted">{t('disc.empty')}</p>}
       <div class="row wrap grid-gap">
         {data?.items.map((m) => (
-          <DiscoverCard key={m.ratingKey} item={m} />
+          <DiscoverCard key={m.ratingKey} item={m} local={localOf(m)} />
         ))}
       </div>
       {data && data.items.length < data.total && (
