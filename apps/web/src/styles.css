@@ -546,3 +546,12 @@ video::cue { font-family: inherit; }
 /* Animations coupées si l'utilisateur le demande. */
 .reduce-motion.fx-aura body, .reduce-motion .hero-art, .reduce-motion .hero-rays, .reduce-motion .theme-art, .reduce-motion .nav-art, .reduce-motion.fx-cadre .spinner::after { animation: none !important; }
 @media (prefers-reduced-motion: reduce) { .fx-aura body, .hero-art, .hero-rays, .theme-art, .nav-art, .fx-cadre .spinner::after { animation: none !important; } }
+
+/* Effet « aura » : l'apparition se tient au centre de la page, derrière le contenu. */
+.fx-aura .theme-art {
+  right: auto; bottom: auto; left: 50%; top: 52%; width: auto; height: min(86vh, 60rem);
+  transform: translate(-50%, -50%); opacity: 0.3;
+  -webkit-mask-image: radial-gradient(ellipse at 50% 42%, #000 35%, transparent 72%); mask-image: radial-gradient(ellipse at 50% 42%, #000 35%, transparent 72%);
+  animation: fx-apparition 9s ease-in-out infinite;
+}
+@keyframes fx-apparition { 50% { transform: translate(-50%, calc(-50% - 14px)); } }
