@@ -283,8 +283,8 @@ export interface MediaServer {
    * s'affiche à l'écran (statistiques du lecteur) et dans la liste des processus.
    */
   fileRequest(path: string): { url: string; headers: Record<string, string> };
-  /** Adresse des vignettes d'aperçu (BIF) d'un fichier, si le serveur sait en fournir. */
-  previewIndexUrl?(partId: number): string;
+  /** Vignette d'aperçu préparée par le serveur pour un instant (ms) d'un fichier. */
+  previewThumbUrl?(partId: number, ms: number): string;
   playback(item: Metadata, opts: PlaybackOptions): Promise<PlaybackPlan>;
   stopTranscode(session: string): Promise<void>;
   selectStreams(partId: number, sel: { audioStreamID?: number; subtitleStreamID?: number }): Promise<void>;

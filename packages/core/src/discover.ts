@@ -20,6 +20,25 @@ export interface Discover {
   person(key: string): Promise<Person>;
   /** Sa filmographie complète, par métier. */
   credits(key: string): Promise<CreditGroup[]>;
+  /** Tous les épisodes d'une saison connus du catalogue, à venir compris (identifiant de saison). */
+  seasonEpisodes(seasonId: string, lang?: string): Promise<Metadata[]>;
+}
+
+/** Identifiant du catalogue d'une saison de serveur (`plex://season/<id>`), ou null. */
+export function seasonCatalogId(guid: string | undefined): string | null {
+  const m = /^plex:\/\/season\/([0-9a-f]{16,40})$/i.exec(guid ?? '');
+  return m ? m[1] : null;
+}
+
+/**
+ * Épisodes annoncés mais pas encore sur le serveur : absents de la bibliothèque (par numéro)
+ * et pas encore diffusés, ou sans date. `today` au format AAAA-MM-JJ.
+ */
+export function upcomingEpisodes(catalogue: Metadata[], library: Metadata[], today: string): Metadata[] {
+  const have = new Set(library.map((e) => e.index));
+  return catalogue
+    .filter((e) => e.index !== undefined && !have.has(e.index) && (!e.originallyAvailableAt || e.originallyAvailableAt >= today))
+    .sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
 }
 
 export interface Person {
@@ -47,6 +66,7 @@ const personKey = (key: string) => {
 };
 
 const BASE = 'https://discover.provider.plex.tv';
+const METADATA = 'https://metadata.provider.plex.tv';
 
 /** Identifiant du catalogue porté par un élément de serveur (`plex://movie/<id>`), ou null. */
 export function discoverId(guid: string | undefined): string | null {
@@ -105,6 +125,16 @@ export class PlexDiscover implements Discover {
       .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
       .map((r) => r.Metadata)
       .filter((m) => !seen.has(m.ratingKey) && !!seen.add(m.ratingKey));
+  }
+
+  async seasonEpisodes(seasonId: string, lang = 'fr'): Promise<Metadata[]> {
+    // Le catalogue « discover » ne liste pas les épisodes d'une saison ; le fournisseur de
+    // métadonnées, si (le même que celui du serveur), avec les épisodes annoncés et leur date.
+    const q = new URLSearchParams({ 'X-Plex-Language': lang });
+    const { MediaContainer: mc } = await getJson<ListResponse>(`${METADATA}/library/metadata/${encodeURIComponent(seasonId)}/children?${q}`, {
+      headers: identityHeaders(this.client, this.token),
+    });
+    return mc.Metadata ?? [];
   }
 
   async isWatchlisted(id: string): Promise<boolean> {
@@ -205,6 +235,10 @@ export class DemoDiscover implements Discover {
 
   async isWatchlisted(id: string): Promise<boolean> {
     return this.listed.includes(id);
+  }
+
+  async seasonEpisodes(): Promise<Metadata[]> {
+    return [];
   }
 
   async details(id: string): Promise<Metadata & { watchlisted: boolean }> {

@@ -1,10 +1,10 @@
-import type { Metadata } from '@multiplex/core';
+import { seasonCatalogId, upcomingEpisodes, type Metadata } from '@multiplex/core';
 import { resolvePlayable } from '../queue';
 import { useState } from 'preact/hooks';
 import { formatDuration, t } from '../i18n';
 import { go } from '../router';
 import { settings } from '../settings';
-import { invalidate, server, useData } from '../store';
+import { discover, invalidate, server, useData } from '../store';
 import { Card, ErrorBox, HubRow, Icon, Ratings, Spinner, StarRating, TechBadges, artSize, isWatched } from '../ui';
 import { ServerWatchlistButton } from './Discover';
 import { OfflineButton } from './Offline';
@@ -33,6 +33,47 @@ function EpisodeRow({ ep }: { ep: Metadata }) {
         <p>{ep.summary}</p>
       </div>
     </a>
+  );
+}
+
+/** Date du jour au format AAAA-MM-JJ, en heure locale (comme les dates de diffusion). */
+function today(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** Épisodes annoncés de la saison, absents du serveur : affichés à la suite, avec leur date. */
+function UpcomingEpisodes({ season, have }: { season: Metadata; have: Metadata[] }) {
+  const srv = server.value!;
+  const cat = discover.value;
+  const sid = seasonCatalogId(season.guid);
+  const lang = settings.value.lang;
+  const { data } = useData(cat && sid ? `upcoming:${sid}:${lang}` : null, () => cat!.seasonEpisodes(sid!, lang));
+  const list = data ? upcomingEpisodes(data, have, today()) : [];
+  return (
+    <>
+      {list.map((ep) => {
+        const date = ep.originallyAvailableAt
+          ? new Date(`${ep.originallyAvailableAt}T12:00:00`).toLocaleDateString(lang, { day: 'numeric', month: 'long', year: 'numeric' })
+          : '';
+        const when = date ? t('ep.airs').replace('{date}', date) : t('ep.airsUnknown');
+        const title = !ep.title || /^(TBA|TBD|Episode \d+)$/i.test(ep.title) ? t('ep.tba') : ep.title;
+        return (
+          <div key={ep.ratingKey} class="episode upcoming" aria-label={`${ep.index}. ${title} — ${when}`}>
+            <div class="episode-thumb">
+              {ep.thumb ? <img loading="lazy" decoding="async" src={srv.image(ep.thumb, 320, 180)} alt="" /> : <span class="upcoming-date">{when}</span>}
+            </div>
+            <div class="episode-text">
+              <strong>
+                {ep.index}. {title}
+              </strong>
+              <span class="muted">{when}</span>
+              {ep.summary && <p>{ep.summary}</p>}
+            </div>
+          </div>
+        );
+      })}
+    </>
   );
 }
 
@@ -184,7 +225,10 @@ export function Details({ id }: { id: string }) {
           {kids.error && <ErrorBox error={kids.error} retry={kids.reload} />}
           {!kids.data && !kids.error && <Spinner />}
           {item.type === 'season' ? (
-            <div class="episodes">{kids.data?.map((ep) => <EpisodeRow key={ep.ratingKey} ep={ep} />)}</div>
+            <div class="episodes">
+              {kids.data?.map((ep) => <EpisodeRow key={ep.ratingKey} ep={ep} />)}
+              {kids.data && <UpcomingEpisodes season={item} have={kids.data} />}
+            </div>
           ) : (
             <div class="row wrap">{kids.data?.map((m) => <Card key={m.ratingKey} item={{ ...m, parentTitle: m.title, title: '' }} />)}</div>
           )}

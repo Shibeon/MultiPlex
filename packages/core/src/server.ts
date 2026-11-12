@@ -95,8 +95,8 @@ export class PlexServer implements MediaServer {
     return this.url('/photo/:/transcode', { width, height, minSize: 1, upscale: 1, url: path });
   }
 
-  previewIndexUrl(partId: number): string {
-    return this.url(`/library/parts/${partId}/indexes/sd`);
+  previewThumbUrl(partId: number, ms: number): string {
+    return this.url(`/library/parts/${partId}/indexes/sd/${ms}`);
   }
 
   fileRequest(path: string): { url: string; headers: Record<string, string> } {

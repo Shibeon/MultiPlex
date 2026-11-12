@@ -17,9 +17,9 @@ import {
   videoCodecString,
   pickConnection,
   planPlayback,
+  seasonCatalogId,
+  upcomingEpisodes,
   request,
-  parseBifIndex,
-  bifFrameAt,
   rankConnections,
   srtToVtt,
   techBadges,
@@ -42,41 +42,16 @@ const movie = (over: Partial<NonNullable<Metadata['Media']>[0]> = {}, streams: N
 });
 const yes = () => true;
 
-describe('vignettes BIF', () => {
-  // BIF minimal : 3 images de 2, 3 et 4 octets, une toutes les 10 s.
-  const bif = (() => {
-    const imgs = [new Uint8Array([1, 2]), new Uint8Array([3, 4, 5]), new Uint8Array([6, 7, 8, 9])];
-    const start = 64 + (imgs.length + 1) * 8;
-    const buf = new ArrayBuffer(start + 9);
-    const b = new Uint8Array(buf);
-    b.set([0x89, 0x42, 0x49, 0x46, 0x0d, 0x0a, 0x1a, 0x0a]);
-    const v = new DataView(buf);
-    v.setUint32(12, imgs.length, true);
-    v.setUint32(16, 10000, true);
-    let off = start;
-    imgs.forEach((img, i) => {
-      v.setUint32(64 + i * 8, i, true);
-      v.setUint32(68 + i * 8, off, true);
-      b.set(img, off);
-      off += img.length;
-    });
-    v.setUint32(64 + imgs.length * 8, 0xffffffff, true);
-    v.setUint32(68 + imgs.length * 8, off, true);
-    return buf;
-  })();
-
-  it("lit l'index et trouve l'image d'un instant", () => {
-    const idx = parseBifIndex(bif);
-    expect(idx.times).toEqual([0, 10, 20]);
-    expect(bifFrameAt(idx, 0)).toBe(0);
-    expect(bifFrameAt(idx, 14.9)).toBe(1);
-    expect(bifFrameAt(idx, 999)).toBe(2);
-    const i = bifFrameAt(idx, 25);
-    expect([...new Uint8Array(bif.slice(idx.offsets[i], idx.offsets[i + 1]))]).toEqual([6, 7, 8, 9]);
+describe('épisodes à venir', () => {
+  const ep = (index: number, date?: string): Metadata => ({ ratingKey: `e${index}`, type: 'episode', title: `É${index}`, index, originallyAvailableAt: date });
+  it('garde les épisodes absents de la bibliothèque et pas encore diffusés', () => {
+    const catalogue = [ep(3, '2026-11-11'), ep(1, '2026-11-11'), ep(2, '2026-11-11'), ep(5, '2026-11-18'), ep(4, '2026-11-01'), ep(6)];
+    const library = [ep(1), ep(2)];
+    expect(upcomingEpisodes(catalogue, library, '2026-11-12').map((e) => e.index)).toEqual([5, 6]);
   });
-
-  it('refuse un fichier qui n’est pas un BIF', () => {
-    expect(() => parseBifIndex(new ArrayBuffer(80))).toThrow();
+  it("reconnaît l'identifiant de catalogue d'une saison", () => {
+    expect(seasonCatalogId('plex://season/684de13cce7759c761c9d9ce')).toBe('684de13cce7759c761c9d9ce');
+    expect(seasonCatalogId('com.plexapp.agents.thetvdb://1/2')).toBeNull();
   });
 });
 

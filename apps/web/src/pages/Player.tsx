@@ -1,7 +1,7 @@
 import { QUALITIES, hdrKind, srtToVtt, streamsOf, type Media, type Metadata, type PlaybackPlan, type Stream } from '@multiplex/core';
 import type Hls from 'hls.js';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { bifThumbs } from '../bifthumbs';
+import { serverThumbs } from '../thumbs';
 import { formatClock, t } from '../i18n';
 import { back, go, route } from '../router';
 import { withCommunityMarkers } from '../markers';
@@ -83,7 +83,7 @@ export function Player({ id }: { id: string }) {
   // Aperçus de la barre : vignettes préparées par le serveur Plex (« aperçus vidéo »), lues à la
   // demande. Sans elles, la bulle n'affiche que l'heure.
   const partId = part?.id;
-  const thumbs = useMemo(() => (partId && srv.previewIndexUrl ? bifThumbs(srv.previewIndexUrl(partId)) : null), [partId]);
+  const thumbs = useMemo(() => (partId && srv.previewThumbUrl ? serverThumbs((ms) => srv.previewThumbUrl!(partId, ms)) : null), [partId]);
   useEffect(() => () => thumbs?.dispose(), [thumbs]);
 
   const teardown = async () => {
@@ -372,6 +372,7 @@ export function Player({ id }: { id: string }) {
       `Écran : ${hdrScreen ? 'HDR' : 'SDR'}${hdr && !hdrScreen ? (pl.video === 'transcode' ? ' — HDR converti par le serveur' : ' — HDR adapté par le navigateur (image sombre ? voir Réglages → Lecture, ou l’application de bureau)') : ''}`,
       q ? `Images perdues : ${q.droppedVideoFrames} / ${q.totalVideoFrames}` : '',
       `Tampon : ${ahead.toFixed(1)} s · vitesse ×${el.playbackRate}`,
+      `Aperçus de la barre : ${!thumbs ? 'non proposés' : { unknown: 'survolez la barre', ok: 'vignettes du serveur', missing: 'aucune vignette sur le serveur (Plex : « Générer les aperçus vidéo »)' }[thumbs.state()]}`,
       `Connexion : ${connectionLabel((srv as { uri?: string }).uri)}${hls.current?.bandwidthEstimate ? ` · débit mesuré ${(hls.current.bandwidthEstimate / 1e6).toFixed(0)} Mbps` : ''}`,
     ].filter(Boolean);
   };

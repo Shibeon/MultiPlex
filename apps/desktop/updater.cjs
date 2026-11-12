@@ -55,7 +55,17 @@ function setupUpdater(send, { simulate = false } = {}) {
   autoUpdater.on('checking-for-update', () => set({ status: 'checking' }));
   // Les nouveautés de la version proposée voyagent avec elle (texte, sans mise en forme).
   let notes = '';
-  const notesOf = (info) => (typeof info.releaseNotes === 'string' ? info.releaseNotes.replace(/<[^>]*>/g, '').slice(0, 6000) : '');
+  // GitHub les rend en HTML : on retire les balises et les entités. La limite est large (les
+  // notes reprennent l'historique des versions récentes) : un JSON tronqué serait illisible.
+  const entities = { amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'", '#x27': "'" };
+  const notesOf = (info) =>
+    typeof info.releaseNotes === 'string'
+      ? info.releaseNotes
+          .replace(/<[^>]*>/g, '')
+          .replace(/&(amp|lt|gt|quot|#39|#x27);/g, (_, e) => entities[e])
+          .trim()
+          .slice(0, 100_000)
+      : '';
   autoUpdater.on('update-available', (info) => set({ status: 'available', version: info.version, notes: (notes = notesOf(info)) }));
   autoUpdater.on('update-not-available', () => set({ status: 'none' }));
   autoUpdater.on('download-progress', (p) => set({ status: 'downloading', version: state.version, notes, percent: Math.round(p.percent) }));

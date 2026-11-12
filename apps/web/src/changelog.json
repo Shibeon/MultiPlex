@@ -1,5 +1,26 @@
 [
   {
+    "version": "0.1.8",
+    "fr": [
+      "Épisodes à venir : la page d’une saison affiche aussi les épisodes annoncés mais pas encore sur votre serveur, avec leur date de sortie.",
+      "Version web : aperçu en image sur la barre de lecture, à partir des vignettes que prépare Plex (option « Générer les aperçus vidéo » du serveur).",
+      "Films lourds dans le navigateur : plus d’avance de lecture, et le lecteur attend le serveur au lieu d’échouer (« signal is aborted »).",
+      "Infos de lecture : connexion utilisée (réseau local, Internet ou relais Plex) et débit mesuré.",
+      "Version web hébergée sur votre propre nom : la bibliothèque n’est plus déclarée injoignable.",
+      "Mode TV : l’année sous les affiches n’est plus coupée, et l’accueil ne défile plus à moitié en descendant aux flèches.",
+      "Correctif : les nouveautés proposées avec une mise à jour s’affichent de nouveau en liste."
+    ],
+    "en": [
+      "Upcoming episodes: a season page also shows episodes announced but not yet on your server, with their air date.",
+      "Web version: image preview on the seek bar, from the thumbnails Plex prepares (server option “Generate video preview thumbnails”).",
+      "Heavy films in the browser: more read-ahead, and the player waits for the server instead of failing (“signal is aborted”).",
+      "Playback info: connection in use (local network, Internet or Plex relay) and measured bandwidth.",
+      "Web version hosted under your own name: the library is no longer reported unreachable.",
+      "TV mode: the year under posters is no longer cut off, and the home page no longer half-scrolls when moving down with the arrows.",
+      "Fix: what’s new in an offered update is shown as a list again."
+    ]
+  },
+  {
     "version": "0.1.7",
     "fr": [
       "Regarder ensemble : invitez des amis par un lien ou un code, la lecture reste synchronisée (lecture, pause, avance) pour tout le monde. Messages chiffrés de bout en bout, via un relais que vous hébergez (Réglages → Relais « Regarder ensemble », avec un bouton Tester).",
