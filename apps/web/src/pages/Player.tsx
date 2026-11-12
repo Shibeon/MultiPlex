@@ -285,7 +285,19 @@ export function Player({ id }: { id: string }) {
   const v = () => video.current!;
   const toggle = () => (v().paused ? void v().play().catch(() => {}) : v().pause());
   const seekBy = (d: number) => (v().currentTime = Math.max(0, Math.min((v().duration || Infinity) - 1, v().currentTime + d)));
-  const fullscreen = () => (document.fullscreenElement ? void document.exitFullscreen() : void root.current?.requestFullscreen?.().catch(() => {}));
+  const fullscreen = () => {
+    type Webkit = { webkitFullscreenElement?: Element; webkitExitFullscreen?(): void; webkitRequestFullscreen?(): void; webkitEnterFullscreen?(): void };
+    const doc = document as Document & Webkit;
+    if (document.fullscreenElement) return void document.exitFullscreen().catch(() => {});
+    if (doc.webkitFullscreenElement) return void doc.webkitExitFullscreen?.();
+    const el = root.current as (HTMLElement & Webkit) | null;
+    // iPhone (Safari comme Chrome, même moteur) : pas de plein écran pour la page, seulement pour
+    // la vidéo, avec le lecteur d'iOS. Nos commandes y sont remplacées par les siennes.
+    const ios = () => (video.current as (HTMLVideoElement & Webkit) | null)?.webkitEnterFullscreen?.();
+    if (el?.requestFullscreen) return void el.requestFullscreen().catch(ios);
+    if (el?.webkitRequestFullscreen) return void el.webkitRequestFullscreen();
+    ios();
+  };
   const leave = () => back();
   const playNext = () => next && go(`/play/${next.ratingKey}?t=0`, true);
 
