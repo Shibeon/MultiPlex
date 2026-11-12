@@ -18,6 +18,8 @@ import {
   pickConnection,
   planPlayback,
   request,
+  parseBifIndex,
+  bifFrameAt,
   rankConnections,
   srtToVtt,
   techBadges,
@@ -39,6 +41,44 @@ const movie = (over: Partial<NonNullable<Metadata['Media']>[0]> = {}, streams: N
   Media: [{ id: 1, container: 'mp4', videoCodec: 'h264', audioCodec: 'aac', Part: [{ id: 7, key: '/library/parts/7/file.mp4', container: 'mp4', Stream: streams }], ...over }],
 });
 const yes = () => true;
+
+describe('vignettes BIF', () => {
+  // BIF minimal : 3 images de 2, 3 et 4 octets, une toutes les 10 s.
+  const bif = (() => {
+    const imgs = [new Uint8Array([1, 2]), new Uint8Array([3, 4, 5]), new Uint8Array([6, 7, 8, 9])];
+    const start = 64 + (imgs.length + 1) * 8;
+    const buf = new ArrayBuffer(start + 9);
+    const b = new Uint8Array(buf);
+    b.set([0x89, 0x42, 0x49, 0x46, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const v = new DataView(buf);
+    v.setUint32(12, imgs.length, true);
+    v.setUint32(16, 10000, true);
+    let off = start;
+    imgs.forEach((img, i) => {
+      v.setUint32(64 + i * 8, i, true);
+      v.setUint32(68 + i * 8, off, true);
+      b.set(img, off);
+      off += img.length;
+    });
+    v.setUint32(64 + imgs.length * 8, 0xffffffff, true);
+    v.setUint32(68 + imgs.length * 8, off, true);
+    return buf;
+  })();
+
+  it("lit l'index et trouve l'image d'un instant", () => {
+    const idx = parseBifIndex(bif);
+    expect(idx.times).toEqual([0, 10, 20]);
+    expect(bifFrameAt(idx, 0)).toBe(0);
+    expect(bifFrameAt(idx, 14.9)).toBe(1);
+    expect(bifFrameAt(idx, 999)).toBe(2);
+    const i = bifFrameAt(idx, 25);
+    expect([...new Uint8Array(bif.slice(idx.offsets[i], idx.offsets[i + 1]))]).toEqual([6, 7, 8, 9]);
+  });
+
+  it('refuse un fichier qui n’est pas un BIF', () => {
+    expect(() => parseBifIndex(new ArrayBuffer(80))).toThrow();
+  });
+});
 
 describe('connexions', () => {
   it('classe local > distant > relais et filtre le http si nécessaire', () => {

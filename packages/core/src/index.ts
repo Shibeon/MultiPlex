@@ -7,5 +7,6 @@ export * from './discover';
 export * from './community';
 export * from './markers';
 export * from './ratings';
+export * from './bif';
 export { PlexServer } from './server';
 export { DemoServer } from './demo';

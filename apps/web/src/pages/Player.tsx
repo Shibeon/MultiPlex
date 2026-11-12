@@ -1,6 +1,7 @@
 import { QUALITIES, hdrKind, srtToVtt, streamsOf, type Media, type Metadata, type PlaybackPlan, type Stream } from '@multiplex/core';
 import type Hls from 'hls.js';
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
+import { bifThumbs } from '../bifthumbs';
 import { formatClock, t } from '../i18n';
 import { back, go, route } from '../router';
 import { withCommunityMarkers } from '../markers';
@@ -78,6 +79,12 @@ export function Player({ id }: { id: string }) {
   const part = media?.Part?.[0];
   const audioStreams = streamsOf(part, 2);
   const subStreams = streamsOf(part, 3);
+
+  // Aperçus de la barre : vignettes préparées par le serveur Plex (« aperçus vidéo »), lues à la
+  // demande. Sans elles, la bulle n'affiche que l'heure.
+  const partId = part?.id;
+  const thumbs = useMemo(() => (partId && srv.previewIndexUrl ? bifThumbs(srv.previewIndexUrl(partId)) : null), [partId]);
+  useEffect(() => () => thumbs?.dispose(), [thumbs]);
 
   const teardown = async () => {
     hls.current?.destroy();
@@ -586,7 +593,7 @@ export function Player({ id }: { id: string }) {
       <div class="player-bottom">
         <div class="seek">
           <span>{formatClock(ui.time)}</span>
-          <SeekPreview duration={ui.duration}>
+          <SeekPreview duration={ui.duration} thumb={thumbs ? (time) => thumbs.at(time) : undefined}>
             <input
               type="range"
               aria-label="Position"
