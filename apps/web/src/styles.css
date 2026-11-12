@@ -601,8 +601,8 @@ video::cue { font-family: inherit; }
 /* ---------- barre de progression : repères d'intro et de générique ---------- */
 .seek-track { position: relative; flex: 1; display: flex; align-items: center; min-width: 0; }
 .seek-track input { flex: 1; width: 100%; }
-.seek-mark { position: absolute; top: 50%; height: 6px; min-width: 4px; transform: translateY(-50%); border-radius: 99px; pointer-events: none; background: #ffd24a; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45); }
-.seek-mark.credits { background: #7fd1ff; }
+.seek-mark { position: absolute; top: 50%; margin: 0; height: 6px; min-width: 4px; transform: translateY(-50%); border-radius: 99px; pointer-events: none; background: #ffd24a; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45); }
+.seek-mark.credits { display: block; background: #7fd1ff; } /* « .credits » sert aussi aux fiches : on annule sa marge et sa grille. */
 /* Le nom du passage, juste au-dessus de son repère. */
 .seek-mark::after { content: attr(data-label); position: absolute; left: 0; bottom: 0.75rem; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; color: #fff; text-shadow: 0 1px 4px #000; opacity: 0.9; }
 .seek-mark.credits::after { left: auto; right: 0; }
@@ -850,37 +850,39 @@ button.cast-card { border: 0; background: none; cursor: pointer; font: inherit; 
 /* ---------- lecteur en mode TV : lisible à trois mètres, piloté aux flèches ---------- */
 .player.overlay.couch-player .player-top { padding: 2.2rem 3.5rem 6rem; align-items: flex-start; }
 .player.overlay.couch-player .player-top > .btn { flex: none; padding: 0.9em; margin-top: 0.2rem; }
-.player.overlay.couch-player .player-top > .btn .icon { width: 32px; height: 32px; }
-.player.overlay.couch-player .player-title strong { font-size: 2.6rem; line-height: 1.1; }
+.player.overlay.couch-player .player-top > .btn .icon { width: 1.45rem; height: 1.45rem; }
+.player.overlay.couch-player .player-title strong { font-size: 2.6rem; line-height: 1.1; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 .player.overlay.couch-player .player-title span { font-size: 1.35rem; margin-top: 0.3rem; }
 .couch-clock { display: grid; justify-items: end; gap: 0.15rem; font-variant-numeric: tabular-nums; text-shadow: 0 1px 12px rgba(0, 0, 0, 0.7); }
 .couch-clock b { font-size: 2.2rem; font-weight: 600; line-height: 1; }
 .couch-clock small { font-size: 1.05rem; opacity: 0.8; }
-.player.overlay.couch-player .chips { position: absolute; top: 7.6rem; right: 3.5rem; display: flex; gap: 0.5rem; }
+/* Les pastilles passent sous le titre et l'horloge, alignées à droite : un long titre ne les chevauche plus. */
+.player.overlay.couch-player .player-top { flex-wrap: wrap; }
+.player.overlay.couch-player .chips { flex: 0 0 100%; display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: -0.4rem; }
 .player.overlay.couch-player .chip { font-size: 0.95rem; }
 .player.overlay.couch-player .player-bottom { padding: 8rem 3.5rem 2.6rem; }
 .player.overlay.couch-player .seek { gap: 1.4rem; font-size: 1.5rem; font-weight: 600; }
 .player.overlay.couch-player input[type='range'] { height: 2.4rem; }
-.player.overlay.couch-player input[type='range']::-webkit-slider-runnable-track { height: 12px; }
-.player.overlay.couch-player input[type='range']::-webkit-slider-thumb { width: 30px; height: 30px; margin-top: -9px; opacity: 1; }
+.player.overlay.couch-player input[type='range']::-webkit-slider-runnable-track { height: 0.54rem; }
+.player.overlay.couch-player input[type='range']::-webkit-slider-thumb { width: 1.34rem; height: 1.34rem; margin-top: -0.4rem; opacity: 1; }
 .player.overlay.couch-player input[type='range']:focus-visible { outline: none; }
 .player.overlay.couch-player input[type='range']:focus-visible::-webkit-slider-runnable-track { box-shadow: 0 0 0 4px var(--accent); }
-.player.overlay.couch-player input[type='range']:focus-visible::-webkit-slider-thumb { margin-top: -9px; box-shadow: 0 0 0 6px var(--accent); }
-.player.overlay.couch-player .seek-mark { height: 12px; }
+.player.overlay.couch-player input[type='range']:focus-visible::-webkit-slider-thumb { margin-top: -0.4rem; box-shadow: 0 0 0 6px var(--accent); }
+.player.overlay.couch-player .seek-mark { height: 0.54rem; }
 /* Première ligne : le transport, centré et grand ; la seconde : pistes, sous-titres, réglages. */
 .player.overlay.couch-player .controls { justify-content: center; gap: 1.2rem; margin-top: 1.6rem; }
 .player.overlay.couch-player .controls .spacer { flex: 0 0 100%; height: 0.4rem; }
 /* Volume : un curseur large ; au clavier ou à la télécommande, gauche / droite le règlent quand il a le focus. */
 .player.overlay.couch-player .controls .volume { width: 11rem; height: 2.4rem; }
-.player.overlay.couch-player .controls .volume::-webkit-slider-runnable-track { height: 10px; }
-.player.overlay.couch-player .controls .volume::-webkit-slider-thumb { width: 26px; height: 26px; margin-top: -8px; opacity: 1; }
-.player.overlay.couch-player .controls .volume:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 6px var(--accent); margin-top: -8px; }
+.player.overlay.couch-player .controls .volume::-webkit-slider-runnable-track { height: 0.45rem; }
+.player.overlay.couch-player .controls .volume::-webkit-slider-thumb { width: 1.16rem; height: 1.16rem; margin-top: -0.355rem; opacity: 1; }
+.player.overlay.couch-player .controls .volume:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 6px var(--accent); margin-top: -0.355rem; }
 .player.overlay.couch-player .btn { font-size: 1.2rem; padding: 0.75em 1.4em; }
 .player.overlay.couch-player .btn.icon-btn { padding: 0.85em; }
-.player.overlay.couch-player .btn .icon { width: 30px; height: 30px; }
+.player.overlay.couch-player .btn .icon { width: 1.34rem; height: 1.34rem; }
 .player.overlay.couch-player .btn.jump { min-width: 4.4rem; font-size: 1.15rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 .player.overlay.couch-player .btn.play { padding: 1.25em; }
-.player.overlay.couch-player .btn.play .icon { width: 46px; height: 46px; }
+.player.overlay.couch-player .btn.play .icon { width: 2.05rem; height: 2.05rem; }
 .player.overlay.couch-player .btn:focus-visible { outline: none; transform: scale(1.12); background: #fff; color: #000; box-shadow: 0 0 0 4px var(--accent), 0 0 40px color-mix(in srgb, var(--accent) 60%, transparent); }
 .player.overlay.couch-player .player-menu { left: 50%; right: auto; bottom: 100%; transform: translateX(-50%); min-width: 26rem; max-height: 60vh; overflow: auto; margin-bottom: 1rem; padding: 0.8rem; }
 .player.overlay.couch-player .player-menu button { font-size: 1.35rem; padding: 0.8em 1.2em; }

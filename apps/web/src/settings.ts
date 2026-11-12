@@ -1,5 +1,6 @@
 import { THEME_EFFECTS, isThemeImage, luminance } from '@multiplex/core';
 import { effect, signal } from '@preact/signals';
+import { isOverlayWindow } from './native';
 
 export interface Theme {
   name: string;
@@ -278,7 +279,13 @@ export function initSettings(): void {
     for (const [k, v] of Object.entries(vars)) root.style.setProperty(k, v);
     applied = Object.keys(vars);
     // Les téléviseurs exposent souvent un écran logique de 960×540 : on réduit l'échelle pour que tout tienne.
-    root.style.fontSize = `${s.uiScale * (viewport.value.tv ? 0.72 : 1) * (s.couch ? COUCH_SCALE : 1)}%`;
+    // Commandes du lecteur natif en mode TV : elles occupent tout l'écran, leur taille suit donc
+    // celle de la fenêtre (référence : 1920×1080), quelle que soit la mise à l'échelle de Windows.
+    // Sans cela, un téléviseur réglé à 200 % (960×540 logiques) les affiche deux fois trop grandes.
+    root.style.fontSize =
+      isOverlayWindow && s.couch
+        ? `calc(${(s.uiScale / 100) * COUCH_SCALE} * min(${(100 / 1920) * 16}vw, ${(100 / 1080) * 16}vh))`
+        : `${s.uiScale * (viewport.value.tv ? 0.72 : 1) * (s.couch ? COUCH_SCALE : 1)}%`;
     root.classList.toggle('tv', viewport.value.tv);
     root.classList.toggle('couch', s.couch);
     // Illustration du thème : uniquement une image embarquée, jamais une adresse à charger
