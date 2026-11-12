@@ -268,3 +268,85 @@ video::cue { background: rgba(0, 0, 0, 0.6); font-size: 1.1em; }
 .session .chip.state-playing { color: var(--accent); }
 .session-progress { display: grid; gap: 0.2rem; margin: 0.2rem 0; }
 .session-progress .progress { position: static; display: block; height: 5px; border-radius: 99px; overflow: hidden; background: var(--surface-2); }
+
+/* =====================================================================
+   Style « salon » : barre flottante translucide, affiche vedette,
+   vignettes paysage, cartes qui se soulèvent. Disposition par défaut.
+   ===================================================================== */
+body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Segoe UI', system-ui, sans-serif; letter-spacing: -0.005em; }
+.hub h2 { font-size: 1.35rem; font-weight: 700; letter-spacing: -0.015em; }
+.poster { box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35); transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.22s; }
+.card:hover .poster, .card:focus-visible .poster { transform: scale(1.06); box-shadow: 0 18px 40px rgba(0, 0, 0, 0.6); }
+.reduce-motion .card:hover .poster, .reduce-motion .card:focus-visible .poster { transform: none; }
+.btn.primary { box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3); }
+.btn.glass { background: color-mix(in srgb, var(--text) 16%, transparent); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
+.backdrop { opacity: var(--backdrop-opacity, 0.28); }
+
+/* --- vignettes paysage --- */
+.row .card.wide { flex-basis: calc(var(--card-w) * 1.9); }
+.card.wide .poster { aspect-ratio: 16 / 9; }
+.wide-caption { position: absolute; inset: auto 0 0 0; display: grid; padding: 2rem 0.9rem 0.75rem; color: #fff; background: linear-gradient(transparent, rgba(0, 0, 0, 0.88)); }
+.wide-caption strong, .wide-caption small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wide-caption small { opacity: 0.75; }
+.card.wide .progress { height: 3px; }
+
+/* --- affiche vedette --- */
+.page.home { padding-top: 0; }
+.hero { position: relative; display: flex; align-items: flex-end; height: min(76vh, 46rem); min-height: 24rem; margin: 0 calc(-1 * clamp(1rem, 3vw, 2.5rem)) 1.6rem; overflow: hidden; }
+.hero-bg { position: absolute; inset: 0; background-size: cover; background-position: center 20%; animation: hero-in 0.9s ease both; }
+@keyframes hero-in { from { opacity: 0; transform: scale(1.04); } }
+.reduce-motion .hero-bg { animation: none; }
+.hero::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(to top, var(--bg) 3%, transparent 58%), linear-gradient(to right, color-mix(in srgb, var(--bg) 78%, transparent), transparent 62%); }
+.hero-info { position: relative; z-index: 1; display: grid; gap: 0.55rem; max-width: 44rem; padding: 0 clamp(1rem, 3vw, 2.5rem) 2rem; }
+.hero-kicker { font-size: 0.75rem; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.8; }
+.hero h1 { font-size: clamp(2rem, 5vw, 3.6rem); font-weight: 800; letter-spacing: -0.025em; text-shadow: 0 2px 20px rgba(0, 0, 0, 0.4); }
+.hero-facts { margin: 0; color: var(--muted); }
+.hero-summary { margin: 0; opacity: 0.88; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.hero .actions { margin: 0.5rem 0 0.2rem; }
+.hero-dots { display: flex; gap: 0.45rem; }
+.hero-dots button { width: 0.5rem; height: 0.5rem; padding: 0; border: 0; border-radius: 99px; background: color-mix(in srgb, var(--text) 35%, transparent); cursor: pointer; transition: width 0.3s, background 0.3s; }
+.hero-dots button.on { width: 1.6rem; background: var(--text); }
+
+/* --- barre flottante (écrans larges) --- */
+@media (min-width: 761px) {
+  .shell.top .sidebar {
+    inset: 0.9rem auto auto 50%; transform: translateX(-50%); width: auto; max-width: calc(100vw - 2rem);
+    flex-direction: row; align-items: center; gap: 2px; padding: 5px; border-radius: 99px;
+    overflow-x: auto; overflow-y: hidden; scrollbar-width: none;
+    background: color-mix(in srgb, var(--surface) 62%, transparent);
+    backdrop-filter: blur(28px) saturate(1.7); -webkit-backdrop-filter: blur(28px) saturate(1.7);
+    box-shadow: 0 10px 34px rgba(0, 0, 0, 0.4), inset 0 0 0 1px color-mix(in srgb, var(--text) 10%, transparent);
+  }
+  .shell.top .sidebar .brand, .shell.top .nav-sep { display: none; }
+  .shell.top .nav-link { flex: none; gap: 0.5rem; padding: 0.5rem 1.05rem; border-radius: 99px; color: var(--text); opacity: 0.72; white-space: nowrap; font-weight: 500; }
+  .shell.top .nav-link .icon { display: none; }
+  .shell.top .nav-link.icon-only { padding: 0.5rem 0.65rem; }
+  .shell.top .nav-link.icon-only .icon { display: block; }
+  .shell.top .nav-link.icon-only span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .shell.top .nav-link:hover, .shell.top .nav-link:focus-visible { background: color-mix(in srgb, var(--text) 12%, transparent); opacity: 1; }
+  .shell.top .nav-link.active { background: color-mix(in srgb, var(--text) 20%, transparent); color: var(--text); opacity: 1; }
+  .shell.top .content { margin-left: 0; }
+  .shell.top .page { padding-top: 5.5rem; }
+  .shell.top .page.home { padding-top: 0; }
+  .shell.top .details { padding-top: 6rem; }
+  .shell.top .backdrop { height: min(85vh, 48rem); }
+}
+/* --- barre du bas translucide sur mobile --- */
+@media (max-width: 760px) {
+  .sidebar { background: color-mix(in srgb, var(--surface) 72%, transparent); backdrop-filter: blur(24px) saturate(1.6); -webkit-backdrop-filter: blur(24px) saturate(1.6); }
+  .nav-link.active { background: none; }
+  .hero { height: min(68vh, 34rem); }
+}
+
+/* ---------- lecteur : infos de lecture ---------- */
+.player-stats { position: absolute; top: 5.5rem; left: clamp(1rem, 3vw, 2.5rem); z-index: 3; max-width: min(40rem, 90vw); padding: 0.8rem 1rem; border-radius: var(--radius); background: rgba(0, 0, 0, 0.72); color: #fff; font: 0.82rem/1.6 ui-monospace, Consolas, monospace; pointer-events: none; }
+.player .btn.on { background: rgba(255, 255, 255, 0.32); }
+video::cue { font-family: inherit; }
+.player-menu { z-index: 5; }
+
+/* ---------- lecteur natif : écran d'attente derrière la surface de mpv ---------- */
+.player.native { display: grid; place-items: center; }
+.native-info { display: grid; justify-items: center; gap: 0.4rem; padding: 2rem; text-align: center; color: #fff; }
+.native-info strong { font-size: 1.6rem; }
+.native-info small { margin-top: 1rem; opacity: 0.6; max-width: 34rem; }
+.native-info .spinner { position: static; margin: 0 auto 1rem; }

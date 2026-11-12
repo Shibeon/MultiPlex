@@ -10,10 +10,11 @@
     "preview": "pnpm --filter @multiplex/web preview",
     "test": "pnpm --filter @multiplex/core test",
     "typecheck": "pnpm -r typecheck",
-    "desktop": "pnpm build && pnpm --filter @multiplex/desktop start",
+    "desktop": "pnpm fetch:mpv && pnpm build && pnpm --filter @multiplex/desktop start",
     "package:tv": "pnpm build && node scripts/package-tv.mjs",
     "mobile:sync": "pnpm build && pnpm --filter @multiplex/mobile sync",
-    "desktop:dist": "pnpm build && pnpm --filter @multiplex/desktop dist"
+    "desktop:dist": "pnpm fetch:mpv && pnpm build && pnpm --filter @multiplex/desktop dist",
+    "fetch:mpv": "node scripts/fetch-mpv.mjs"
   },
   "packageManager": "pnpm@10.33.0"
 }

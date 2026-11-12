@@ -1,4 +1,4 @@
-import type { MediaServer, Metadata } from '@multiplex/core';
+import { hdrKind, streamsOf, type MediaServer, type Metadata } from '@multiplex/core';
 import { useState } from 'preact/hooks';
 import { formatDuration, t } from '../i18n';
 import { go } from '../router';
@@ -85,7 +85,8 @@ export function Details({ id }: { id: string }) {
     item.rating && `★ ${item.rating.toFixed(1)}`,
     media?.videoResolution && (/^\d+$/.test(media.videoResolution) ? `${media.videoResolution}p` : media.videoResolution.toUpperCase()),
     media?.videoCodec?.toUpperCase(),
-    media?.audioCodec?.toUpperCase(),
+    hdrKind(streamsOf(media?.Part?.[0], 1)[0]),
+    [media?.audioCodec?.toUpperCase(), media?.audioChannels && (media.audioChannels > 2 ? `${media.audioChannels - 1}.1` : media.audioChannels === 2 ? 'stéréo' : 'mono')].filter(Boolean).join(' '),
   ].filter(Boolean);
   const leftMin = item.viewOffset && item.duration ? Math.round((item.duration - item.viewOffset) / 60000) : 0;
 

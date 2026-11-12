@@ -58,6 +58,30 @@ export interface Stream {
   selected?: boolean;
   /** Présent uniquement pour les flux externes (fichiers annexes). */
   key?: string;
+  forced?: boolean;
+  profile?: string;
+  level?: number;
+  bitDepth?: number;
+  bitrate?: number;
+  width?: number;
+  height?: number;
+  frameRate?: number;
+  channels?: number;
+  audioChannelLayout?: string;
+  /** Caractéristique de transfert : smpte2084 = HDR10, arib-std-b67 = HLG. */
+  colorTrc?: string;
+  colorPrimaries?: string;
+  DOVIPresent?: boolean;
+  DOVIProfile?: number;
+  /** 0 = pas de couche de base lisible sans décodeur Dolby Vision. */
+  DOVIBLCompatID?: number;
+}
+
+export interface Chapter {
+  index?: number;
+  tag?: string;
+  startTimeOffset: number;
+  endTimeOffset: number;
 }
 
 export interface Part {
@@ -118,6 +142,7 @@ export interface Metadata {
   originallyAvailableAt?: string;
   Media?: Media[];
   Marker?: Marker[];
+  Chapter?: Chapter[];
   Genre?: Tag[];
   Role?: Tag[];
   Director?: Tag[];
@@ -153,8 +178,10 @@ export interface PlaybackOptions {
   subtitleStreamId?: number;
   /** Fourni par la plateforme : indique si un type MIME (avec codecs) est lisible. */
   canPlay: (mime: string) => boolean;
-  /** Nom de plateforme pour le profil de transcodage (Chrome, Safari, Firefox…). */
-  platform?: string;
+  /** Le navigateur sait décoder le HEVC : le serveur peut alors le copier tel quel dans le flux. */
+  hevc?: boolean;
+  /** Version du fichier à lire quand l'élément en a plusieurs (index dans Media). */
+  mediaIndex?: number;
 }
 
 export interface PlaybackPlan {
@@ -163,8 +190,12 @@ export interface PlaybackPlan {
   session: string;
   /** Pourquoi ce mode a été retenu (affiché dans le lecteur). */
   reason: string;
-  subtitle: 'none' | 'sidecar' | 'burn';
+  /** 'segmented' : sous-titres livrés dans le flux HLS en WebVTT, sans toucher à la vidéo. */
+  subtitle: 'none' | 'sidecar' | 'burn' | 'segmented';
   subtitleUrl?: string;
+  /** Ce que le serveur fait de la vidéo et de l'audio (absent en lecture directe). */
+  video?: 'copy' | 'transcode';
+  audio?: 'copy' | 'transcode';
 }
 
 export interface TimelineReport {
@@ -203,6 +234,12 @@ export interface MediaServer {
   children(ratingKey: string): Promise<Metadata[]>;
   search(query: string, limit?: number): Promise<Hub[]>;
   image(path: string | undefined, width: number, height: number): string;
+  /**
+   * Accès à un fichier du serveur (clé d'une partie ou d'un sous-titre externe) pour
+   * un lecteur natif. Le jeton voyage dans un en-tête, jamais dans l'adresse : celle-ci
+   * s'affiche à l'écran (statistiques du lecteur) et dans la liste des processus.
+   */
+  fileRequest(path: string): { url: string; headers: Record<string, string> };
   playback(item: Metadata, opts: PlaybackOptions): Promise<PlaybackPlan>;
   stopTranscode(session: string): Promise<void>;
   selectStreams(partId: number, sel: { audioStreamID?: number; subtitleStreamID?: number }): Promise<void>;

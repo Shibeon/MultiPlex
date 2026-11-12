@@ -1,13 +1,30 @@
-import { QUALITIES, srtToVtt, streamsOf, type Metadata, type PlaybackPlan, type Stream } from '@multiplex/core';
+import { QUALITIES, hdrKind, srtToVtt, streamsOf, type Media, type Metadata, type PlaybackPlan, type Stream } from '@multiplex/core';
 import type Hls from 'hls.js';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { formatClock, t } from '../i18n';
 import { back, go, route } from '../router';
 import { settings } from '../settings';
-import { client, invalidate, server } from '../store';
+import { invalidate, server } from '../store';
 import { Icon, Spinner, labels } from '../ui';
 
-type Menu = null | 'audio' | 'sub' | 'quality';
+type Menu = null | 'audio' | 'sub' | 'quality' | 'speed' | 'chapter' | 'version';
+
+const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
+
+/** Le navigateur sait-il décoder le HEVC 10 bits ? Si oui, le serveur peut copier la vidéo d'origine dans le flux. */
+function canDecodeHevc(): boolean {
+  const type = 'video/mp4; codecs="hvc1.2.4.L153.B0"';
+  try {
+    return typeof MediaSource !== 'undefined' && MediaSource.isTypeSupported(type);
+  } catch {
+    return false;
+  }
+}
+
+const versionLabel = (m: Media) =>
+  [m.videoResolution && (/^\d+$/.test(m.videoResolution) ? `${m.videoResolution}p` : m.videoResolution.toUpperCase()), m.videoCodec?.toUpperCase(), m.bitrate && `${(m.bitrate / 1000).toFixed(1)} Mbps`, m.container?.toUpperCase()]
+    .filter(Boolean)
+    .join(' · ');
 
 const streamLabel = (s: Stream) => s.extendedDisplayTitle ?? s.displayTitle ?? s.title ?? s.language ?? `#${s.id}`;
 
@@ -24,7 +41,7 @@ export function Player({ id }: { id: string }) {
   const retries = useRef(0);
   const lastTime = useRef(0);
   const hideTimer = useRef(0);
-  const choice = useRef({ audio: 0, sub: 0, quality: settings.value.quality, force: false });
+  const choice = useRef({ audio: 0, sub: 0, quality: settings.value.quality, force: false, media: 0, speed: 1 });
 
   const [item, setItem] = useState<Metadata | null>(null);
   const [next, setNext] = useState<Metadata | null>(null);
@@ -32,10 +49,12 @@ export function Player({ id }: { id: string }) {
   const [menu, setMenu] = useState<Menu>(null);
   const [visible, setVisible] = useState(true);
   const [trackUrl, setTrackUrl] = useState('');
+  const [stats, setStats] = useState<string[] | null>(null);
   const [ui, setUi] = useState({ playing: false, time: 0, duration: 0, buffering: true, muted: false, reason: '' });
   const patch = (p: Partial<typeof ui>) => setUi((u) => ({ ...u, ...p }));
 
-  const part = item?.Media?.[0]?.Part?.[0];
+  const media = item?.Media?.[choice.current.media] ?? item?.Media?.[0];
+  const part = media?.Part?.[0];
   const audioStreams = streamsOf(part, 2);
   const subStreams = streamsOf(part, 3);
 
@@ -86,7 +105,8 @@ export function Player({ id }: { id: string }) {
         audioStreamId: c.audio || undefined,
         subtitleStreamId: c.sub || undefined,
         canPlay: (mime) => !!v.canPlayType(mime),
-        platform: client.platform,
+        hevc: canDecodeHevc(),
+        mediaIndex: c.media,
       });
       if (mine !== gen.current) return;
       plan.current = p;
@@ -102,13 +122,17 @@ export function Player({ id }: { id: string }) {
           .catch(() => {});
       }
 
-      if (p.mode === 'hls' && !v.canPlayType('application/vnd.apple.mpegurl')) {
-        // hls.js n'est téléchargé que si un transcodage est réellement nécessaire.
-        const { default: HlsLib } = await import('hls.js');
-        if (mine !== gen.current) return;
-        if (!HlsLib.isSupported()) return setError(t('player.unsupported'));
+      // hls.js n'est téléchargé que si le passage par le serveur est réellement nécessaire.
+      // On le préfère à la lecture HLS native : lui seul affiche les sous-titres livrés à part.
+      const HlsLib = p.mode === 'hls' ? (await import('hls.js')).default : null;
+      if (mine !== gen.current) return;
+      if (HlsLib?.isSupported()) {
         const h = new HlsLib({ startPosition: at, maxBufferLength: 30 });
         hls.current = h;
+        h.on(HlsLib.Events.SUBTITLE_TRACKS_UPDATED, () => {
+          h.subtitleDisplay = p.subtitle === 'segmented';
+          h.subtitleTrack = p.subtitle === 'segmented' ? 0 : -1;
+        });
         h.on(HlsLib.Events.ERROR, (_e, data) => {
           if (!data.fatal) return;
           if (data.type === HlsLib.ErrorTypes.MEDIA_ERROR && !recovered.current) {
@@ -118,10 +142,14 @@ export function Player({ id }: { id: string }) {
         });
         h.loadSource(p.url);
         h.attachMedia(v);
+      } else if (p.mode === 'hls' && !v.canPlayType('application/vnd.apple.mpegurl')) {
+        return setError(t('player.unsupported'));
       } else {
         v.src = p.url;
         if (at > 0) v.addEventListener('loadedmetadata', () => (v.currentTime = at), { once: true });
       }
+      v.defaultPlaybackRate = c.speed;
+      v.playbackRate = c.speed;
       v.play().catch(() => {});
     } catch (e) {
       if (mine === gen.current) setError((e as Error).message);
@@ -146,6 +174,8 @@ export function Player({ id }: { id: string }) {
           sub: streamsOf(p, 3).find((s) => s.selected)?.id ?? 0,
           quality: settings.value.quality,
           force: false,
+          media: 0,
+          speed: 1,
         };
         setItem(it);
         const t0 = route.value.query.get('t');
@@ -198,11 +228,58 @@ export function Player({ id }: { id: string }) {
   const leave = () => back();
   const playNext = () => next && go(`/play/${next.ratingKey}?t=0`, true);
 
+  const pip = () => {
+    const el = v() as HTMLVideoElement & { requestPictureInPicture?: () => Promise<unknown> };
+    if (document.pictureInPictureElement) void document.exitPictureInPicture();
+    else void el.requestPictureInPicture?.().catch(() => {});
+  };
+
+  /** Infos de lecture (« statistiques pour les curieux ») : ce qui est réellement décodé et affiché. */
+  const readStats = (): string[] => {
+    const el = video.current;
+    const pl = plan.current;
+    if (!el || !pl) return [];
+    const vs = streamsOf(part, 1)[0];
+    const as = streamsOf(part, 2).find((s) => s.id === choice.current.audio) ?? streamsOf(part, 2)[0];
+    const q = el.getVideoPlaybackQuality?.();
+    const ahead = el.buffered.length ? el.buffered.end(el.buffered.length - 1) - el.currentTime : 0;
+    const hdrScreen = matchMedia('(dynamic-range: high)').matches;
+    const hdr = hdrKind(vs);
+    return [
+      `Mode : ${pl.reason}`,
+      `Source vidéo : ${[media?.videoCodec?.toUpperCase(), vs?.profile, vs?.width && `${vs.width}×${vs.height}`, vs?.bitDepth && `${vs.bitDepth} bits`, hdr || 'SDR', vs?.frameRate && `${Math.round(vs.frameRate * 100) / 100} i/s`].filter(Boolean).join(' · ')}`,
+      `Source audio : ${[as?.codec?.toUpperCase(), as?.audioChannelLayout ?? (as?.channels && `${as.channels} canaux`), pl.audio === 'transcode' ? 'converti en AAC' : 'tel quel'].filter(Boolean).join(' · ')}`,
+      `Image décodée : ${el.videoWidth}×${el.videoHeight}${pl.mode === 'hls' ? ` (${pl.video === 'copy' ? 'copie' : 'conversion'} serveur)` : ''}`,
+      `Écran : ${hdrScreen ? 'HDR' : 'SDR'}${hdr && !hdrScreen ? ' — le navigateur adapte le HDR à l’écran' : ''}`,
+      q ? `Images perdues : ${q.droppedVideoFrames} / ${q.totalVideoFrames}` : '',
+      `Tampon : ${ahead.toFixed(1)} s · vitesse ×${el.playbackRate}`,
+    ].filter(Boolean);
+  };
+  useEffect(() => {
+    if (!stats) return;
+    const timer = setInterval(() => setStats(readStats()), 1000);
+    return () => clearInterval(timer);
+  }, [!!stats, item]);
+
   const change = async (kind: Exclude<Menu, null>, value: number | string) => {
     setMenu(null);
     const c = choice.current;
     const at = video.current?.currentTime ?? 0;
-    if (kind === 'quality') c.quality = String(value);
+    if (kind === 'speed') {
+      c.speed = Number(value);
+      v().defaultPlaybackRate = c.speed;
+      v().playbackRate = c.speed;
+      return;
+    }
+    if (kind === 'chapter') return void (v().currentTime = Number(value) / 1000);
+    if (kind === 'version') {
+      // Autre fichier du même titre : ses propres pistes par défaut.
+      c.media = Number(value);
+      const np = itemRef.current?.Media?.[c.media]?.Part?.[0];
+      c.audio = streamsOf(np, 2).find((s) => s.selected)?.id ?? 0;
+      c.sub = streamsOf(np, 3).find((s) => s.selected)?.id ?? 0;
+      c.force = false;
+    } else if (kind === 'quality') c.quality = String(value);
     else {
       if (kind === 'audio') c.audio = Number(value);
       else c.sub = Number(value);
@@ -263,13 +340,19 @@ export function Player({ id }: { id: string }) {
         case 'm':
           done();
           return void (v().muted = !v().muted);
+        case 'i':
+          done();
+          return setStats((s) => (s ? null : readStats()));
+        case 'p':
+          done();
+          return pip();
         default:
           wake();
       }
     };
     addEventListener('keydown', onKey, true);
     return () => removeEventListener('keydown', onKey, true);
-  }, [menu, visible, next]);
+  }, [menu, visible, next, item]);
 
   const onTime = () => {
     const el = video.current;
@@ -305,6 +388,7 @@ export function Player({ id }: { id: string }) {
 
   const marker = (item?.Marker ?? []).find((m) => ui.time * 1000 >= m.startTimeOffset && ui.time * 1000 < m.endTimeOffset - 1000 && (m.type === 'intro' || m.type === 'credits'));
   const head = item ? labels(item) : { title: '', sub: '' };
+  const chapters = item?.Chapter ?? [];
   const menuItems: { id: number | string; label: string; on: boolean }[] =
     menu === 'audio'
       ? audioStreams.map((s) => ({ id: s.id, label: streamLabel(s), on: s.id === choice.current.audio || (!choice.current.audio && s === audioStreams[0]) }))
@@ -312,7 +396,18 @@ export function Player({ id }: { id: string }) {
         ? [{ id: 0, label: t('player.none'), on: !choice.current.sub }, ...subStreams.map((s) => ({ id: s.id, label: streamLabel(s), on: s.id === choice.current.sub }))]
         : menu === 'quality'
           ? QUALITIES.map((q) => ({ id: q.id, label: q.label, on: q.id === choice.current.quality }))
-          : [];
+          : menu === 'speed'
+            ? SPEEDS.map((s) => ({ id: s, label: s === 1 ? 'Normale' : `×${s}`, on: s === choice.current.speed }))
+            : menu === 'chapter'
+              ? chapters.map((c, i) => ({ id: c.startTimeOffset, label: `${formatClock(c.startTimeOffset / 1000)} — ${c.tag || `${t('player.chapters')} ${i + 1}`}`, on: ui.time * 1000 >= c.startTimeOffset && ui.time * 1000 < c.endTimeOffset }))
+              : menu === 'version'
+                ? (item?.Media ?? []).map((m, i) => ({ id: i, label: versionLabel(m), on: i === choice.current.media }))
+                : [];
+  const menuButton = (kind: Exclude<Menu, null>, label: string) => (
+    <button class="btn" aria-expanded={menu === kind} onClick={() => setMenu(menu === kind ? null : kind)}>
+      {label}
+    </button>
+  );
 
   return (
     <div ref={root} class={`player${visible || menu || error ? ' show-ui' : ''}`} data-focus-scope onMouseMove={wake} onTouchStart={wake}>
@@ -336,6 +431,14 @@ export function Player({ id }: { id: string }) {
       </video>
 
       {ui.buffering && !error && <Spinner />}
+
+      {stats && (
+        <div class="player-stats" role="status">
+          {stats.map((line) => (
+            <div key={line.split(' : ')[0]}>{line}</div>
+          ))}
+        </div>
+      )}
 
       {error && (
         <div class="player-error" role="alert">
@@ -394,19 +497,20 @@ export function Player({ id }: { id: string }) {
             </button>
           )}
           <span class="spacer" />
-          {audioStreams.length > 1 && (
-            <button class="btn" aria-expanded={menu === 'audio'} onClick={() => setMenu(menu === 'audio' ? null : 'audio')}>
-              {t('player.audio')}
-            </button>
-          )}
-          {subStreams.length > 0 && (
-            <button class="btn" aria-expanded={menu === 'sub'} onClick={() => setMenu(menu === 'sub' ? null : 'sub')}>
-              {t('player.subs')}
-            </button>
-          )}
-          <button class="btn" aria-expanded={menu === 'quality'} onClick={() => setMenu(menu === 'quality' ? null : 'quality')}>
-            {t('player.quality')}
+          {chapters.length > 1 && menuButton('chapter', t('player.chapters'))}
+          {(item?.Media?.length ?? 0) > 1 && menuButton('version', t('player.version'))}
+          {audioStreams.length > 1 && menuButton('audio', t('player.audio'))}
+          {subStreams.length > 0 && menuButton('sub', t('player.subs'))}
+          {menuButton('quality', t('player.quality'))}
+          {menuButton('speed', ui.playing && choice.current.speed !== 1 ? `×${choice.current.speed}` : t('player.speed'))}
+          <button class={`btn icon-btn${stats ? ' on' : ''}`} aria-label={t('player.stats')} aria-pressed={!!stats} title={t('player.stats')} onClick={() => setStats(stats ? null : readStats())}>
+            <Icon name="info" />
           </button>
+          {document.pictureInPictureEnabled && (
+            <button class="btn icon-btn" aria-label={t('player.pip')} title={t('player.pip')} onClick={pip}>
+              <Icon name="pip" />
+            </button>
+          )}
           <button class="btn icon-btn" aria-label={t('player.fullscreen')} onClick={fullscreen}>
             <Icon name="full" />
           </button>

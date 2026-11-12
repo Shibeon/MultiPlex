@@ -6,7 +6,7 @@
   "main": "main.cjs",
   "scripts": {
     "start": "electron .",
-    "typecheck": "node --check main.cjs",
+    "typecheck": "node --check main.cjs && node --check mpv.cjs && node --check preload.cjs",
     "dist": "electron-builder"
   },
   "devDependencies": {
@@ -22,12 +22,24 @@
     },
     "files": [
       "main.cjs",
+      "mpv.cjs",
+      "preload.cjs",
+      "mpv-input.conf",
       "package.json"
     ],
     "extraResources": [
       {
         "from": "../web/dist",
         "to": "web"
+      },
+      {
+        "from": "vendor/mpv",
+        "to": "mpv",
+        "filter": [
+          "mpv.exe",
+          "*.dll",
+          "VERSION"
+        ]
       }
     ],
     "win": {
@@ -51,6 +63,9 @@
         "deb"
       ],
       "category": "AudioVideo"
-    }
+    },
+    "asarUnpack": [
+      "mpv-input.conf"
+    ]
   }
 }

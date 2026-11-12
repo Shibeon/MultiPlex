@@ -180,6 +180,10 @@ export class DemoServer implements MediaServer {
     return path ?? '';
   }
 
+  fileRequest(path: string): { url: string; headers: Record<string, string> } {
+    return { url: path, headers: {} };
+  }
+
   async playback(): Promise<PlaybackPlan> {
     return { mode: 'hls', url: TEST_STREAM, session: randomId(), reason: 'flux de démonstration', subtitle: 'none' };
   }

@@ -25,7 +25,34 @@ pnpm desktop    # application de bureau (Electron)
 - **Télécommande et clavier** : navigation spatiale aux flèches, touches Retour Tizen / webOS.
 - **Français et anglais**, PWA installable.
 
-Vérifié contre un vrai Plex Media Server (bibliothèques de plusieurs milliers de titres) : connexion, découverte, grille, fiches, recherche, lecture directe 4K HEVC, transcodage HLS, avance rapide, remontée de progression, vu / non vu. Limite connue : les sous-titres intégrés au fichier ne peuvent pas être servis à part par le serveur, ils imposent donc un transcodage vidéo.
+Vérifié contre un vrai Plex Media Server (bibliothèques de plusieurs milliers de titres) : connexion, découverte, grille, fiches, recherche, lecture directe 4K HEVC, passage par le serveur, pistes audio, sous-titres, chapitres, vitesse, avance rapide, remontée de progression, vu / non vu, lectures en cours.
+
+### Lecture : ce que fait le navigateur, et ses limites
+
+Le lecteur cherche toujours à toucher le moins possible au fichier :
+
+1. **Lecture directe** quand le navigateur sait tout lire. La décision repose sur la chaîne de codec exacte de la piste (profil, niveau, profondeur 8 / 10 bits), pas sur le seul nom du codec.
+2. **Vidéo d'origine conservée** quand seul le reste bloque (audio DTS / TrueHD, piste audio secondaire, sous-titres intégrés) : le serveur copie la vidéo telle quelle — 4K, HDR10 et couche HDR10 du Dolby Vision compris —, convertit l'audio en AAC et livre les sous-titres texte à part en WebVTT.
+3. **Conversion vidéo** en dernier recours : qualité limitée, sous-titres image (PGS, VobSub), Dolby Vision profil 5 (sans couche HDR10, que seul un décodeur Dolby Vision affiche correctement), codec vidéo inconnu du navigateur.
+
+Ce qu'un navigateur ne sait pas faire, quel que soit le client :
+
+| Fonction | Plex pour Windows (lecteur natif) | MultiPlex dans un navigateur |
+| --- | --- | --- |
+| HEVC 10 bits, HDR10 | Oui | Oui (Chrome / Edge récents avec décodage matériel) ; adapté par le navigateur sur un écran SDR |
+| Dolby Vision | Selon matériel | Couche HDR10 seulement ; profil 5 converti par le serveur |
+| AV1, VP9 | Oui | Oui selon navigateur |
+| DTS, DTS-HD, TrueHD, Atmos | Décodage ou transmission à l'ampli | Converti en AAC stéréo par le serveur ; pas de transmission à l'ampli |
+| Sous-titres ASS / SSA stylés | Rendu complet | Texte seul (mise en forme perdue) |
+| Sous-titres image PGS / VobSub | Sans conversion | Incrustés par le serveur (conversion vidéo) |
+
+### Lecteur natif de l'application de bureau
+
+L'application Windows embarque **mpv** et s'en sert par défaut : il reçoit l'adresse du fichier d'origine et le lit tel quel, sans conversion par le serveur — tous les codecs vidéo, HDR10, HLG, Dolby Vision (conversion des tons par libplacebo), DTS / TrueHD / Atmos (décodés, ou transmis à l'ampli avec l'option correspondante), sous-titres ASS stylés et PGS. La progression, l'enchaînement des épisodes et le saut automatique d'intro restent gérés par MultiPlex.
+
+Pendant la lecture, ce sont les commandes de mpv qui s'affichent : espace (pause), flèches (avance), `a` (piste audio), `s` (sous-titres), `i` (statistiques), `f` ou double-clic (plein écran), Échap (retour à MultiPlex). Le lecteur intégré du navigateur reste disponible dans Réglages → Lecture.
+
+`pnpm fetch:mpv` télécharge mpv (builds de shinchiro référencés par mpv.io, GPL v2+, lancé comme programme séparé) dans `apps/desktop/vendor/mpv`. Sous Linux et macOS, le mpv du système est utilisé s'il est installé.
 
 ## Performance
 
@@ -62,7 +89,7 @@ Une fois le dépôt poussé sur GitHub, `.github/workflows/build.yml` compile à
 
 ## Feuille de route
 
-- Lecteur natif (mpv) sur ordinateur pour la lecture directe de tout format (MKV, HEVC, DTS, sous-titres ASS).
+- Lecteur natif : commandes aux couleurs de MultiPlex par-dessus la vidéo (aujourd'hui celles de mpv), choix des pistes depuis l'interface.
 - Sous-titres intégrés sans transcodage vidéo, choix de la version du fichier.
 - Musique, photos, listes de lecture, collections, filtres avancés.
 - Utilisateurs Plex Home, multi-serveurs simultanés.

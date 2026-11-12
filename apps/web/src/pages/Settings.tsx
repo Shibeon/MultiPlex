@@ -3,6 +3,7 @@ import type { ComponentChildren } from 'preact';
 import { useState } from 'preact/hooks';
 import { t } from '../i18n';
 import { DEFAULTS, THEMES, load, sanitize, settings, update, type Settings } from '../settings';
+import { nativeAvailable } from '../native';
 import { auth, logout, server, switchServer } from '../store';
 import { Icon } from '../ui';
 import type { KnownHub } from './Browse';
@@ -113,9 +114,15 @@ export function SettingsPage() {
             ))}
           </select>
         </Row>
+        <Row label={t('set.layout')}>
+          <select value={s.layout} onChange={(e) => update({ layout: e.currentTarget.value })}>
+            <option value="top">{t('set.layout.top')}</option>
+            <option value="side">{t('set.layout.side')}</option>
+          </select>
+        </Row>
         <Row label={t('set.accent')}>
           <span class="inline">
-            <input type="color" value={s.accent || THEMES[s.theme]?.vars['--accent'] || '#e5a00d'} onInput={(e) => update({ accent: e.currentTarget.value })} />
+            <input type="color" value={s.accent || THEMES[s.theme]?.vars['--accent'] || '#ffffff'} onInput={(e) => update({ accent: e.currentTarget.value })} />
             {s.accent && (
               <button class="link" onClick={() => update({ accent: '' })}>
                 {t('set.accentReset')}
@@ -154,6 +161,8 @@ export function SettingsPage() {
             ))}
           </select>
         </Row>
+        {nativeAvailable.value && <Toggle k="nativePlayer" label={t('set.nativePlayer')} />}
+        {nativeAvailable.value && s.nativePlayer && <Toggle k="passthrough" label={t('set.passthrough')} />}
         <Toggle k="directPlay" label={t('set.directPlay')} />
         <Toggle k="autoNext" label={t('set.autoNext')} />
         <Toggle k="autoSkipIntro" label={t('set.autoSkipIntro')} />

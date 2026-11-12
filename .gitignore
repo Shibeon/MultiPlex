@@ -5,3 +5,4 @@ dist/
 .vite/
 dist-platforms/
 release/
+vendor/

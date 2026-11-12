@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   DemoServer,
   directPlayMime,
+  hdrKind,
+  videoCodecString,
   pickConnection,
   planPlayback,
   rankConnections,
@@ -49,8 +51,34 @@ describe('connexions', () => {
 describe('lecture', () => {
   it('construit le type MIME', () => {
     expect(directPlayMime(movie().Media![0])).toBe('video/mp4; codecs="avc1.640028, mp4a.40.2"');
+    expect(directPlayMime(movie({ videoCodec: 'hevc' }, [{ id: 1, streamType: 1, bitDepth: 10, level: 150 }]).Media![0])).toBe('video/mp4; codecs="hvc1.2.4.L150.B0, mp4a.40.2"');
     expect(directPlayMime(movie({ videoCodec: 'mpeg2video' }).Media![0])).toBeNull();
     expect(directPlayMime(movie({ audioCodec: 'dca' }).Media![0])).toBeNull();
+  });
+
+  it('construit des chaînes de codec exactes', () => {
+    expect(videoCodecString('h264', { id: 1, streamType: 1, profile: 'high', level: 41 })).toBe('avc1.640029');
+    expect(videoCodecString('h264', { id: 1, streamType: 1, profile: 'high 10', level: 51 })).toBe('avc1.6E0033');
+    expect(videoCodecString('hevc', { id: 1, streamType: 1, profile: 'main 10', bitDepth: 10, level: 153 })).toBe('hvc1.2.4.L153.B0');
+    expect(videoCodecString('hevc', { id: 1, streamType: 1, level: 120 })).toBe('hvc1.1.6.L120.B0');
+    expect(videoCodecString('av1', { id: 1, streamType: 1, bitDepth: 10 })).toBe('av01.0.12M.10');
+    expect(videoCodecString('vp9', { id: 1, streamType: 1, bitDepth: 10 })).toBe('vp09.02.51.10');
+    expect(videoCodecString('mpeg2video')).toBeNull();
+  });
+
+  it('reconnaît HDR10, HLG et Dolby Vision', () => {
+    expect(hdrKind({ id: 1, streamType: 1, colorTrc: 'smpte2084' })).toBe('HDR10');
+    expect(hdrKind({ id: 1, streamType: 1, colorTrc: 'arib-std-b67' })).toBe('HLG');
+    expect(hdrKind({ id: 1, streamType: 1, DOVIPresent: true, colorTrc: 'smpte2084' })).toBe('Dolby Vision');
+    expect(hdrKind({ id: 1, streamType: 1, colorTrc: 'bt709' })).toBe('');
+  });
+
+  it('refuse de lire tel quel un Dolby Vision sans couche HDR10', () => {
+    const dv5 = movie({ videoCodec: 'hevc' }, [{ id: 1, streamType: 1, codec: 'hevc', bitDepth: 10, DOVIPresent: true, DOVIProfile: 5, DOVIBLCompatID: 0 }]);
+    const d = planPlayback(dv5, { quality: 'original', canPlay: yes });
+    expect([d.mode, d.keepVideo]).toEqual(['hls', false]);
+    const dv8 = movie({ videoCodec: 'hevc' }, [{ id: 1, streamType: 1, codec: 'hevc', bitDepth: 10, DOVIPresent: true, DOVIProfile: 8, DOVIBLCompatID: 1 }]);
+    expect(planPlayback(dv8, { quality: 'original', canPlay: yes }).mode).toBe('direct');
   });
 
   it('lecture directe quand tout est compatible', () => {
@@ -94,7 +122,9 @@ describe('lecture', () => {
     expect(orig.directStream).toBe(1);
     expect(orig.maxVideoBitrate).toBeUndefined();
     const low = transcodeParams(movie(), { quality: '4000', canPlay: yes, subtitleStreamId: 5 }, 's', client);
-    expect([low.directStream, low.maxVideoBitrate, low.videoResolution, low.subtitles]).toEqual([0, 4000, '1280x720', 'burn']);
+    expect([low.directStream, low.maxVideoBitrate, low.videoResolution, low.subtitles]).toEqual([0, 4000, '1280x720', 'auto']);
+    expect(String(orig['X-Plex-Client-Profile-Extra'])).not.toContain('hevc');
+    expect(String(transcodeParams(movie(), { quality: 'original', canPlay: yes }, 's', client, true)['X-Plex-Client-Profile-Extra'])).toContain('videoCodec=h264,hevc');
   });
 
   it('convertit le SRT en VTT', () => {

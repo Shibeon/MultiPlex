@@ -32,6 +32,7 @@ const movie = {
             { id: 1, streamType: 1, codec: 'h264' },
             { id: 2, streamType: 2, codec: 'aac', selected: true },
             { id: 3, streamType: 3, codec: 'srt', key: '/library/streams/3' },
+            { id: 4, streamType: 3, codec: 'ass' },
           ],
         },
       ],
@@ -61,7 +62,29 @@ const routes: Record<string, (q: URLSearchParams) => unknown> = {
   '/library/parts/77': () => ({}),
   '/video/:/transcode/universal/stop': () => ({}),
   '/video/:/transcode/universal/decision': (q) =>
-    q.get('path') === '/library/metadata/66' ? { generalDecisionCode: 2001, generalDecisionText: 'Conversion impossible' } : { generalDecisionCode: 1001 },
+    q.get('path') === '/library/metadata/66'
+      ? { generalDecisionCode: 2001, generalDecisionText: 'Conversion impossible' }
+      : {
+          generalDecisionCode: 1001,
+          Metadata: [
+            {
+              Media: [
+                {
+                  Part: [
+                    {
+                      Stream: [
+                        // Le faux serveur ne copie la vidéo que si le HEVC est proposé et qu'aucun débit n'est imposé.
+                        { streamType: 1, decision: String(q.get('X-Plex-Client-Profile-Extra')).includes('hevc') && q.get('path') !== '/library/metadata/77' ? 'copy' : 'transcode' },
+                        { streamType: 2, decision: 'transcode' },
+                        ...(q.get('subtitles') === 'auto' ? [{ streamType: 3, decision: 'transcode', location: 'segments-subs' }] : []),
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
 };
 
 let http: Server;
@@ -132,6 +155,11 @@ describe('PlexServer contre un faux PMS', () => {
     const u = new URL(srv.image('/library/metadata/10/thumb/1', 320, 480));
     expect([u.pathname, u.searchParams.get('url'), u.searchParams.get('width'), u.searchParams.get('X-Plex-Token')]).toEqual(['/photo/:/transcode', '/library/metadata/10/thumb/1', '320', TOKEN]);
     expect(srv.image(undefined, 1, 1)).toBe('');
+    // Lecteur natif : le jeton part en en-tête, l'adresse n'en contient aucune trace.
+    const file = srv.fileRequest('/library/parts/77/123/file.mkv');
+    expect(file.url).toBe(`${base}/library/parts/77/123/file.mkv`);
+    expect(file.url).not.toContain(TOKEN);
+    expect(file.headers['X-Plex-Token']).toBe(TOKEN);
     expect(srv.image('https://exemple.test/a.jpg', 1, 1)).toBe('https://exemple.test/a.jpg');
   });
 
@@ -143,7 +171,7 @@ describe('PlexServer contre un faux PMS', () => {
   });
 
   it('transcodage : URL HLS complète', async () => {
-    const plan = await srv.playback(movie, { quality: '4000', canPlay: yes, platform: 'Firefox' });
+    const plan = await srv.playback(movie, { quality: '4000', canPlay: yes });
     // La décision est demandée avant le démarrage, avec la même session.
     expect([last().path, last().q.get('session'), last().q.get('maxVideoBitrate')]).toEqual(['/video/:/transcode/universal/decision', plan.session, '4000']);
     await expect(srv.playback({ ...movie, ratingKey: '66' }, { quality: '4000', canPlay: yes })).rejects.toThrow('Conversion impossible');
@@ -151,8 +179,19 @@ describe('PlexServer contre un faux PMS', () => {
     const q = u.searchParams;
     expect(plan.mode).toBe('hls');
     expect(u.pathname).toBe('/video/:/transcode/universal/start.m3u8');
-    expect([q.get('path'), q.get('protocol'), q.get('maxVideoBitrate'), q.get('X-Plex-Platform'), q.get('session')]).toEqual(['/library/metadata/10', 'hls', '4000', 'Firefox', plan.session]);
+    expect([q.get('path'), q.get('protocol'), q.get('maxVideoBitrate'), q.get('session')]).toEqual(['/library/metadata/10', 'hls', '4000', plan.session]);
     expect(q.get('X-Plex-Token')).toBe(TOKEN);
+    expect([q.get('X-Plex-Platform'), q.get('X-Plex-Device'), plan.video, String(q.get('X-Plex-Client-Profile-Extra')).includes('hevc')]).toEqual(['MultiPlex', 'Windows', 'transcode', false]);
+
+    // Qualité d'origine + navigateur HEVC : la vidéo est copiée, les sous-titres texte livrés à part.
+    const keep = await srv.playback(movie, { quality: 'original', canPlay: () => false, hevc: true, subtitleStreamId: 4 });
+    expect([keep.mode, keep.video, keep.audio, keep.subtitle]).toEqual(['hls', 'copy', 'transcode', 'segmented']);
+    expect(new URL(keep.url).searchParams.get('subtitles')).toBe('auto');
+    expect(keep.reason).toContain('vidéo d’origine');
+
+    // Si le serveur compte réencoder malgré tout, on retombe sur du H.264.
+    const fallback = await srv.playback({ ...movie, ratingKey: '77' }, { quality: 'original', canPlay: () => false, hevc: true });
+    expect([fallback.video, String(new URL(fallback.url).searchParams.get('X-Plex-Client-Profile-Extra')).includes('hevc')]).toEqual(['transcode', false]);
     await srv.stopTranscode(plan.session);
     expect([last().path, last().q.get('session')]).toEqual(['/video/:/transcode/universal/stop', plan.session]);
   });

@@ -7,6 +7,7 @@ export interface Theme {
 
 /** Thèmes intégrés. Un thème n'est qu'un jeu de variables CSS. */
 export const THEMES: Record<string, Theme> = {
+  cinema: { name: 'Cinéma', vars: { '--bg': '#000000', '--surface': '#1c1c1e', '--surface-2': '#2c2c2e', '--text': '#ffffff', '--muted': '#98989f', '--accent': '#ffffff', '--on-accent': '#000000', '--backdrop-opacity': '0.6' } },
   midnight: { name: 'Minuit', vars: { '--bg': '#0f1115', '--surface': '#181b22', '--surface-2': '#232733', '--text': '#eceef2', '--muted': '#9aa1ad', '--accent': '#e5a00d', '--on-accent': '#17130a' } },
   amoled: { name: 'AMOLED', vars: { '--bg': '#000000', '--surface': '#0c0c0e', '--surface-2': '#1a1a1e', '--text': '#f2f2f2', '--muted': '#8d8d93', '--accent': '#e5a00d', '--on-accent': '#17130a' } },
   nord: { name: 'Nord', vars: { '--bg': '#2e3440', '--surface': '#3b4252', '--surface-2': '#434c5e', '--text': '#eceff4', '--muted': '#b4bccb', '--accent': '#88c0d0', '--on-accent': '#1d2530' } },
@@ -17,6 +18,8 @@ export const THEMES: Record<string, Theme> = {
 export interface Settings {
   lang: 'fr' | 'en';
   theme: string;
+  /** 'top' : barre flottante et affiche vedette ; 'side' : barre latérale classique. */
+  layout: string;
   /** Couleur d'accent personnalisée ; vide = celle du thème. */
   accent: string;
   /** Surcharges de variables CSS (thème importé / personnalisé). */
@@ -36,16 +39,21 @@ export interface Settings {
   autoSkipIntro: boolean;
   autoSkipCredits: boolean;
   seekStep: number;
+  /** Application de bureau : lire avec le lecteur natif (mpv) plutôt qu'avec celui du navigateur. */
+  nativePlayer: boolean;
+  /** Lecteur natif : transmettre l'audio brut (Dolby, DTS, Atmos) à un ampli. */
+  passthrough: boolean;
 }
 
 export const DEFAULTS: Settings = {
   lang: typeof navigator !== 'undefined' && navigator.language?.startsWith('fr') ? 'fr' : 'en',
-  theme: 'midnight',
+  theme: 'cinema',
+  layout: 'top',
   accent: '',
   customVars: {},
   customCss: '',
   cardSize: 160,
-  radius: 10,
+  radius: 14,
   uiScale: 100,
   showTitles: true,
   backdrops: true,
@@ -58,6 +66,8 @@ export const DEFAULTS: Settings = {
   autoSkipIntro: false,
   autoSkipCredits: false,
   seekStep: 10,
+  nativePlayer: true,
+  passthrough: false,
 };
 
 const KEY = 'mp.settings';
@@ -80,7 +90,14 @@ export function save(key: string, value: unknown): void {
   }
 }
 
-export const settings = signal<Settings>({ ...DEFAULTS, ...load<Partial<Settings>>(KEY) });
+function initial(): Settings {
+  const stored = load<Partial<Settings>>(KEY);
+  // Réglages d'avant la disposition « barre flottante » : on adopte le nouveau style une fois.
+  if (stored && stored.layout === undefined) Object.assign(stored, { theme: DEFAULTS.theme, radius: DEFAULTS.radius, accent: '', customVars: {} });
+  return { ...DEFAULTS, ...stored };
+}
+
+export const settings = signal<Settings>(initial());
 
 export function update(patch: Partial<Settings>): void {
   settings.value = { ...settings.value, ...patch };
@@ -128,7 +145,7 @@ export function initSettings(): void {
     save(KEY, s);
     const root = document.documentElement;
     const vars: Record<string, string> = {
-      ...(THEMES[s.theme] ?? THEMES.midnight).vars,
+      ...(THEMES[s.theme] ?? THEMES.cinema).vars,
       ...s.customVars,
       '--card-w': `${cardWidth()}px`,
       '--radius': `${s.radius}px`,

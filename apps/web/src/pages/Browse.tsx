@@ -1,10 +1,10 @@
 import type { Hub, Metadata } from '@multiplex/core';
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { t } from '../i18n';
+import { formatDuration, t } from '../i18n';
 import { go, route } from '../router';
 import { cardWidth, load, save, settings } from '../settings';
 import { libraries, server, useData } from '../store';
-import { Card, ErrorBox, HubRow, Spinner, VirtualGrid } from '../ui';
+import { Card, ErrorBox, HubRow, Icon, Spinner, VirtualGrid, labels } from '../ui';
 
 export interface KnownHub {
   id: string;
@@ -23,6 +23,50 @@ function arrange(hubs: Hub[]): Hub[] {
     .map((h, i) => ({ h, i }))
     .sort((a, b) => pos(a.h) - pos(b.h) || a.i - b.i)
     .map((x) => x.h);
+}
+
+/** Affiche vedette plein écran : fait défiler les premiers titres de la première rangée. */
+function Hero({ hub }: { hub: Hub }) {
+  const srv = server.value!;
+  const items = (hub.Metadata ?? []).filter((m) => m.art || m.thumb).slice(0, 5);
+  const [index, setIndex] = useState(0);
+  const reduce = settings.value.reduceMotion;
+  useEffect(() => {
+    if (items.length < 2 || reduce) return;
+    const timer = setInterval(() => !document.hidden && setIndex((i) => (i + 1) % items.length), 9000);
+    return () => clearInterval(timer);
+  }, [items.length, reduce]);
+  const item = items[index % Math.max(1, items.length)];
+  if (!item) return null;
+  const { title, sub } = labels(item);
+  const playable = item.type === 'movie' || item.type === 'episode';
+  const facts = [sub, formatDuration(item.duration), item.contentRating].filter(Boolean).join(' · ');
+  return (
+    <section class="hero" aria-label={hub.title}>
+      <div key={item.ratingKey} class="hero-bg" style={{ backgroundImage: `url("${srv.image(item.art ?? item.thumb, 1920, 1080)}")` }} />
+      <div class="hero-info">
+        <span class="hero-kicker">{hub.title}</span>
+        <h1>{title}</h1>
+        {facts && <p class="hero-facts">{facts}</p>}
+        {item.summary && <p class="hero-summary">{item.summary}</p>}
+        <div class="actions">
+          <a class="btn primary big" href={playable ? `#/play/${item.ratingKey}` : `#/item/${item.ratingKey}`}>
+            <Icon name="play" /> {item.viewOffset ? t('item.resume') : t('item.play')}
+          </a>
+          <a class="btn big glass" href={`#/item/${item.ratingKey}`}>
+            {t('hero.more')}
+          </a>
+        </div>
+        {items.length > 1 && (
+          <div class="hero-dots">
+            {items.map((m, i) => (
+              <button key={m.ratingKey} class={i === index ? 'on' : ''} aria-label={labels(m).title} aria-current={i === index} onClick={() => setIndex(i)} />
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
 }
 
 export function Home() {
@@ -45,8 +89,10 @@ export function Home() {
 
   if (!data) return error ? <ErrorBox error={error} retry={reload} /> : <Spinner />;
   const hubs = arrange(data);
+  const hero = settings.value.layout !== 'side' ? hubs[0] : undefined;
   return (
-    <div class="page">
+    <div class={hero ? 'page home' : 'page'}>
+      {hero && <Hero hub={hero} />}
       {hubs.length === 0 && !loading && <p class="muted">{t('common.empty')}</p>}
       {hubs.map((h) => (
         <HubRow key={h.hubIdentifier} hub={h} />

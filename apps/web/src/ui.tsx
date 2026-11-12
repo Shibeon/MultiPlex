@@ -14,6 +14,8 @@ const ICONS: Record<string, string> = {
   artist: 'M9 3h10v3h-8v11a3 3 0 1 1-2-2.8z',
   photo: 'M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zm1 12h14l-4.5-6-3.5 4.5-2.5-3z',
   play: 'M7 4l13 8-13 8z',
+  info: 'M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20zm0 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16zm-1 6h2v7h-2zm0-3h2v2h-2z',
+  pip: 'M3 5h18a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zm1 2v10h16V7zm8 4h6v4h-6z',
   live: 'M12 9a3 3 0 1 1 0 6 3 3 0 0 1 0-6zM5.6 5.6L7 7a7 7 0 0 0 0 10l-1.4 1.4a9 9 0 0 1 0-12.8zm12.8 0a9 9 0 0 1 0 12.8L17 17a7 7 0 0 0 0-10z',
   pause: 'M6 4h4v16H6zm8 0h4v16h-4z',
   back: 'M15.5 4l1.5 1.5L10.5 12l6.5 6.5-1.5 1.5-8-8z',
@@ -99,14 +101,40 @@ export function Card({ item }: { item: Metadata }) {
   );
 }
 
+/** Vignette paysage (rangée « Reprendre ») : image large, titre incrusté, progression. */
+export function WideCard({ item }: { item: Metadata }) {
+  const srv = server.value!;
+  const w = imgWidth(cardWidth() * 1.9);
+  const { title, sub } = labels(item);
+  const image = item.type === 'episode' ? (item.thumb ?? item.art) : (item.art ?? item.thumb);
+  const progress = item.viewOffset && item.duration ? Math.min(1, item.viewOffset / item.duration) : 0;
+  return (
+    <a class="card wide" href={`#/item/${item.ratingKey}`} title={title}>
+      <div class="poster">
+        <span class="poster-fallback">{title}</span>
+        {image && <img loading="lazy" decoding="async" src={srv.image(image, w, Math.round((w * 9) / 16))} alt="" />}
+        <span class="wide-caption">
+          <strong>{title}</strong>
+          <small>{sub}</small>
+        </span>
+        {progress > 0 && (
+          <span class="progress">
+            <i style={{ width: `${progress * 100}%` }} />
+          </span>
+        )}
+      </div>
+    </a>
+  );
+}
+
 export function HubRow({ hub }: { hub: Hub }) {
+  // Les rangées de reprise s'affichent en vignettes paysage, comme une file « À suivre ».
+  const wide = /continue|ondeck|inprogress/i.test(hub.hubIdentifier);
   return (
     <section class="hub" data-hub={hub.hubIdentifier}>
       <h2>{hub.title}</h2>
       <div class="row">
-        {(hub.Metadata ?? []).map((m) => (
-          <Card key={m.ratingKey} item={m} />
-        ))}
+        {(hub.Metadata ?? []).map((m) => (wide ? <WideCard key={m.ratingKey} item={m} /> : <Card key={m.ratingKey} item={m} />))}
       </div>
     </section>
   );
