@@ -55,6 +55,21 @@ describe('connexions', () => {
     expect((await pickConnection(conns, { secureOnly: true, probe }))?.uri).toBe('https://local');
   });
 
+  it('sonde avec le jeton (sinon Plex refuse les sites autres que les siens)', async () => {
+    const seen: string[] = [];
+    const real = globalThis.fetch;
+    globalThis.fetch = (async (url: string) => {
+      seen.push(String(url));
+      return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
+    }) as typeof fetch;
+    try {
+      await pickConnection([conn('https://local', true, false)], { secureOnly: true, token: 'a b' });
+    } finally {
+      globalThis.fetch = real;
+    }
+    expect(seen).toEqual(['https://local/identity?X-Plex-Token=a%20b']);
+  });
+
   it('renvoie null si rien ne répond', async () => {
     expect(await pickConnection(conns, { secureOnly: false, probe: () => Promise.reject(new Error('x')) })).toBeNull();
   });

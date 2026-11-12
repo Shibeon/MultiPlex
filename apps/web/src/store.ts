@@ -144,7 +144,7 @@ export async function retryOnline(): Promise<void> {
 
 export async function connectManual(uri: string, token: string): Promise<void> {
   uri = uri.trim().replace(/\/+$/, '');
-  const id = await getJson<{ MediaContainer: { machineIdentifier: string } }>(`${uri}/identity`, { timeout: 6000 });
+  const id = await getJson<{ MediaContainer: { machineIdentifier: string } }>(`${uri}/identity?X-Plex-Token=${encodeURIComponent(token.trim())}`, { timeout: 6000 });
   const saved: SavedServer = { id: id.MediaContainer.machineIdentifier, name: new URL(uri).hostname, uri, token: token.trim() };
   await use(new PlexServer(saved.id, saved.name, saved.uri, saved.token, client));
   save('mp.server', saved);
@@ -154,7 +154,7 @@ export async function connect(res: PlexResource): Promise<void> {
   status.value = 'connecting';
   bootError.value = '';
   try {
-    const conn = await pickConnection(res.connections, { secureOnly: location.protocol === 'https:' });
+    const conn = await pickConnection(res.connections, { secureOnly: location.protocol === 'https:', token: res.accessToken });
     if (!conn) throw new Error('unreachable');
     const saved: SavedServer = { id: res.clientIdentifier, name: res.name, uri: conn.uri, token: res.accessToken };
     await use(new PlexServer(saved.id, saved.name, saved.uri, saved.token, client));

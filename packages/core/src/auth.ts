@@ -66,10 +66,13 @@ export function rankConnections(conns: PlexConnection[], secureOnly: boolean): P
  */
 export function pickConnection(
   conns: PlexConnection[],
-  opts: { secureOnly: boolean; timeout?: number; probe?: (uri: string) => Promise<unknown> },
+  opts: { secureOnly: boolean; timeout?: number; token?: string; probe?: (uri: string) => Promise<unknown> },
 ): Promise<PlexConnection | null> {
   const list = rankConnections(conns, opts.secureOnly);
-  const probe = opts.probe ?? ((uri: string) => getJson(`${uri}/identity`, { timeout: opts.timeout ?? 5000 }));
+  // Avec le jeton : sans lui, Plex n'autorise que ses propres sites (app.plex.tv, localhost) à lire
+  // la réponse, et la version web hébergée ailleurs croyait le serveur injoignable.
+  const q = opts.token ? `?X-Plex-Token=${encodeURIComponent(opts.token)}` : '';
+  const probe = opts.probe ?? ((uri: string) => getJson(`${uri}/identity${q}`, { timeout: opts.timeout ?? 5000 }));
   if (!list.length) return Promise.resolve(null);
   return new Promise((resolve) => {
     const state: ('pending' | 'ok' | 'fail')[] = list.map(() => 'pending');
