@@ -1,5 +1,18 @@
 [
   {
+    "version": "0.1.9",
+    "fr": [
+      "Lecteur en mode TV : les commandes s’adaptent à la taille de l’écran, même quand Windows agrandit l’affichage (150 %, 200 %…). Plus de titre sur deux lignes ni d’éléments qui se chevauchent.",
+      "Lecteur : le repère du générique s’affiche de nouveau sur la barre de lecture, et non en dessous.",
+      "Réglages : les rangées de l’accueil se réordonnent par glisser-déposer, à la souris ou au doigt."
+    ],
+    "en": [
+      "Player in TV mode: controls now fit the screen size, even when Windows enlarges the display (150%, 200%…). No more two-line titles or overlapping elements.",
+      "Player: the credits marker sits on the seek bar again instead of below it.",
+      "Settings: home rows can be reordered by drag and drop, with a mouse or a finger."
+    ]
+  },
+  {
     "version": "0.1.8",
     "fr": [
       "Épisodes à venir : la page d’une saison affiche aussi les épisodes annoncés mais pas encore sur votre serveur, avec leur date de sortie.",
