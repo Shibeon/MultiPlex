@@ -5,6 +5,7 @@ import { go } from '../router';
 import { settings } from '../settings';
 import { invalidate, server, useData } from '../store';
 import { Card, ErrorBox, Icon, Spinner, isWatched } from '../ui';
+import { ServerWatchlistButton } from './Discover';
 
 /** Pour une série ou une saison : le premier épisode pas encore vu. */
 async function resolvePlayable(srv: MediaServer, item: Metadata): Promise<Metadata | undefined> {
@@ -130,6 +131,7 @@ export function Details({ id }: { id: string }) {
                 <Icon name={isWatched(item) ? 'eye' : 'check'} size={18} /> {isWatched(item) ? t('item.unwatched') : t('item.watched')}
               </button>
             )}
+            <ServerWatchlistButton item={item} />
           </div>
           {item.summary && <p class="summary">{item.summary}</p>}
           <dl class="credits">

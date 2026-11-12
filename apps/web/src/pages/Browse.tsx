@@ -4,6 +4,7 @@ import { formatDuration, t } from '../i18n';
 import { go, route } from '../router';
 import { cardWidth, load, save, settings } from '../settings';
 import { libraries, server, useData } from '../store';
+import { DiscoverResults } from './Discover';
 import { Card, ErrorBox, HubRow, Icon, Spinner, VirtualGrid, labels } from '../ui';
 
 export interface KnownHub {
@@ -44,6 +45,12 @@ function Hero({ hub }: { hub: Hub }) {
   return (
     <section class="hero" aria-label={hub.title}>
       <div key={item.ratingKey} class="hero-bg" style={{ backgroundImage: `url("${srv.image(item.art ?? item.thumb, 1920, 1080)}")` }} />
+      {/* Illustration du thème, mise en scène par le CSS de son effet. */}
+      <div class="hero-art" aria-hidden="true">
+        <i class="hero-rays" />
+        <i class="hero-portrait" />
+        <i class="hero-motto" />
+      </div>
       <div class="hero-info">
         <span class="hero-kicker">{hub.title}</span>
         <h1>{title}</h1>
@@ -234,6 +241,7 @@ export function SearchPage() {
       {query && loading && !data && <Spinner />}
       {query && data?.length === 0 && <p class="muted">{t('search.none')}</p>}
       {data?.map((h) => <HubRow key={h.hubIdentifier} hub={h} />)}
+      <DiscoverResults query={query} />
     </div>
   );
 }

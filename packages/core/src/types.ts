@@ -115,6 +115,10 @@ export interface Tag {
 export interface Metadata {
   ratingKey: string;
   key?: string;
+  /** Identifiant Plex universel (`plex://movie/…`), commun au serveur et au catalogue en ligne. */
+  guid?: string;
+  /** Images d'un titre du catalogue en ligne (affiche, fond…). */
+  Image?: { type: string; url: string }[];
   type: string;
   title: string;
   summary?: string;
@@ -231,6 +235,8 @@ export interface MediaServer {
   hubs(sectionId?: string): Promise<Hub[]>;
   items(sectionId: string, query: ItemsQuery): Promise<Page<Metadata>>;
   metadata(ratingKey: string): Promise<Metadata>;
+  /** Élément du serveur correspondant à un identifiant Plex universel, s'il existe. */
+  findByGuid(guid: string): Promise<Metadata | undefined>;
   children(ratingKey: string): Promise<Metadata[]>;
   search(query: string, limit?: number): Promise<Hub[]>;
   image(path: string | undefined, width: number, height: number): string;

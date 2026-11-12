@@ -1,0 +1,16 @@
+{
+  "id": "synthwave",
+  "name": "Synthwave",
+  "author": "MultiPlex",
+  "description": "Néons roses et violets des années 80.",
+  "mode": "dark",
+  "vars": {
+    "--bg": "#150a26",
+    "--surface": "#1f1035",
+    "--surface-2": "#2c1a4a",
+    "--text": "#f6ecff",
+    "--muted": "#a996c7",
+    "--accent": "#ff3ea5"
+  },
+  "radius": 18
+}

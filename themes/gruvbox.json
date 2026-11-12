@@ -1,0 +1,16 @@
+{
+  "id": "gruvbox",
+  "name": "Gruvbox",
+  "author": "Pavel Pertsev",
+  "description": "Tons rétro, chauds et peu contrastés.",
+  "mode": "dark",
+  "vars": {
+    "--bg": "#282828",
+    "--surface": "#32302f",
+    "--surface-2": "#45403d",
+    "--text": "#ebdbb2",
+    "--muted": "#a89984",
+    "--accent": "#fabd2f"
+  },
+  "radius": 6
+}

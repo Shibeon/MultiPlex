@@ -163,6 +163,10 @@ export class DemoServer implements MediaServer {
     return m;
   }
 
+  async findByGuid(guid: string): Promise<Metadata | undefined> {
+    return [...this.db.values()].find((m) => m.guid === guid);
+  }
+
   async children(ratingKey: string): Promise<Metadata[]> {
     return (this.db.get(ratingKey)?._children ?? []).map((k) => this.db.get(k)!);
   }

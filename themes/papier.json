@@ -1,0 +1,16 @@
+{
+  "id": "papier",
+  "name": "Papier",
+  "author": "MultiPlex",
+  "description": "Clair et sépia, reposant en journée.",
+  "mode": "light",
+  "vars": {
+    "--bg": "#f6f1e7",
+    "--surface": "#fffaf0",
+    "--surface-2": "#e9e0cf",
+    "--text": "#2b2419",
+    "--muted": "#6f6453",
+    "--accent": "#a8590f"
+  },
+  "radius": 8
+}

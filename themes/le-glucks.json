@@ -1,0 +1,22 @@
+{
+  "id": "le-glucks",
+  "name": "Le Glucks",
+  "author": "Fan-club de Strasbourg",
+  "description": "Gris sérieux, bleu sage, un charisme tout en retenue. Hommage amusé à Raphaël Glucksmann.",
+  "mode": "dark",
+  "vars": {
+    "--bg": "#1b1f26",
+    "--surface": "#232831",
+    "--surface-2": "#2f3541",
+    "--text": "#dfe3ea",
+    "--muted": "#8c94a3",
+    "--accent": "#8fa6c9",
+    "--on-accent": "#141922",
+    "--backdrop-opacity": "0.22"
+  },
+  "radius": 4,
+  "image": "le-glucks.webp",
+  "imageCredit": "D’après « Raphaël Glucksmann-1040795 », Harald Krichel, CC BY-SA 4.0, via Wikimedia Commons (image retouchée, même licence)",
+  "effect": "cadre",
+  "motto": "Enthousiasme modéré"
+}

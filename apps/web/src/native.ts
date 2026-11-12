@@ -15,23 +15,52 @@ export interface NativePlayOptions {
   subFiles?: string[];
   /** Transmettre le flux audio brut (Dolby, DTS, Atmos) à un ampli. */
   passthrough?: boolean;
+  /** Flux produit en direct par le serveur : mettre davantage en tampon avant de reprendre. */
+  buffered?: boolean;
 }
+
+/** Ce que la page principale sait du titre en cours et transmet à la fenêtre de contrôles. */
+export interface NativeMeta {
+  title?: string;
+  sub?: string;
+  /** Marqueurs d'intro et de générique, en secondes. */
+  markers?: { type: string; start: number; end: number }[];
+  hasNext?: boolean;
+  /** Libellés Plex des pistes, dans l'ordre où mpv les numérote. */
+  audioLabels?: string[];
+  subLabels?: string[];
+  /** Qualité en cours et choix proposés (« original » = fichier lu tel quel). */
+  quality?: string;
+  qualities?: { id: string; label: string }[];
+}
+
+export type NativeCommand = 'toggle' | 'pause' | 'seek' | 'seekBy' | 'volume' | 'mute' | 'speed' | 'aid' | 'sid' | 'stats' | 'key';
+export type NativeEvent = 'state' | 'ended' | 'error' | 'next' | 'quality';
 
 export interface NativeApi {
   available(): Promise<boolean>;
   play(opts: NativePlayOptions): Promise<unknown>;
   stop(): Promise<void>;
-  command(name: 'toggle' | 'pause' | 'seek' | 'seekBy' | 'fullscreen' | 'key' | 'mouse' | 'button', value?: unknown): Promise<unknown>;
+  command(name: NativeCommand, value?: unknown): Promise<unknown>;
   info(): Promise<Record<string, unknown>>;
-  on(listener: (type: 'state' | 'ended' | 'error', data: Record<string, unknown>) => void): () => void;
+  on(listener: (type: NativeEvent, data: Record<string, unknown>) => void): () => void;
+  setMeta(meta: NativeMeta): void;
+  overlayInit(): Promise<{ meta: NativeMeta; state: Record<string, unknown> }>;
+  onMeta(listener: (meta: NativeMeta) => void): () => void;
+  action(name: 'back' | 'fullscreen' | 'next' | `quality:${string}`): void;
 }
 
 export const native = (window as unknown as { multiplexNative?: NativeApi }).multiplexNative;
 
+/** Cette fenêtre est-elle la couche de contrôles posée par-dessus la vidéo ? */
+export const isOverlayWindow = !!native && location.hash.startsWith('#/overlay');
+
 /** Vrai une fois confirmé que mpv est présent sur la machine. */
 export const nativeAvailable = signal(false);
 
-native
-  ?.available()
-  .then((ok) => (nativeAvailable.value = ok))
-  .catch(() => {});
+if (!isOverlayWindow) {
+  native
+    ?.available()
+    .then((ok) => (nativeAvailable.value = ok))
+    .catch(() => {});
+}

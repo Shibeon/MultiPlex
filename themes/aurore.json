@@ -1,0 +1,15 @@
+{
+  "id": "aurore",
+  "name": "Aurore",
+  "author": "MultiPlex",
+  "description": "Nuit polaire traversée de vert et de violet.",
+  "mode": "dark",
+  "vars": {
+    "--bg": "#0b1020",
+    "--surface": "#131a2e",
+    "--surface-2": "#1d2742",
+    "--text": "#e6edf7",
+    "--muted": "#93a0b8",
+    "--accent": "#5eead4"
+  }
+}

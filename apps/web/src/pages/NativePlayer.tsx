@@ -1,41 +1,39 @@
-import { randomId, streamsOf, type Metadata } from '@multiplex/core';
+import { QUALITIES, randomId, streamsOf, type Metadata, type Stream } from '@multiplex/core';
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { formatClock, t } from '../i18n';
+import { t } from '../i18n';
 import { native } from '../native';
 import { back, go, route } from '../router';
 import { settings } from '../settings';
 import { invalidate, server } from '../store';
 import { Spinner, labels } from '../ui';
 
-/** Touches de la page relayées à mpv tant que sa surface n'a pas le focus clavier. */
-const KEYS: Record<string, string> = {
-  ' ': 'SPACE',
-  Enter: 'SPACE',
-  ArrowLeft: 'LEFT',
-  ArrowRight: 'RIGHT',
-  ArrowUp: 'UP',
-  ArrowDown: 'DOWN',
-  Escape: 'ESC',
-  Backspace: 'ESC',
-  MediaPlayPause: 'SPACE',
-};
+const streamLabel = (s: Stream) => s.extendedDisplayTitle ?? s.displayTitle ?? s.title ?? s.language ?? `#${s.id}`;
 
 /**
- * Lecture par le lecteur natif de l'application de bureau. mpv reçoit l'adresse
- * du fichier d'origine : aucun codec, aucune piste audio ni aucun sous-titre ne
- * passe par la conversion du serveur. mpv affiche ses propres commandes ; cette
- * page suit sa progression pour la remonter au serveur et enchaîner les épisodes.
+ * Lecture par le lecteur natif de l'application de bureau.
+ *
+ * En qualité « Original », mpv reçoit l'adresse du fichier : aucun codec, aucune
+ * piste audio ni aucun sous-titre ne passe par la conversion du serveur. En
+ * qualité limitée (connexion lente, lecture à distance), mpv lit le flux que le
+ * serveur convertit au débit demandé.
+ *
+ * La vidéo de mpv recouvre cette page : les commandes sont dessinées par une
+ * fenêtre transparente posée par-dessus (voir NativeOverlay). Cette page garde
+ * la logique : pistes au démarrage, progression remontée au serveur, saut
+ * automatique d'intro, enchaînement des épisodes, changement de qualité.
  */
 export function NativePlayer({ id }: { id: string }) {
   const srv = server.value!;
   const [item, setItem] = useState<Metadata | null>(null);
   const [error, setError] = useState('');
-  const [state, setState] = useState({ time: 0, duration: 0, paused: false });
   const live = useRef({ time: 0, duration: 0, paused: false });
   const itemRef = useRef<Metadata | null>(null);
   const nextRef = useRef<Metadata | null>(null);
   const session = useRef(randomId());
   const skipped = useRef(new Set<number>());
+  /** Session de conversion en cours côté serveur, à arrêter quand on la quitte. */
+  const transcode = useRef('');
+  const quality = useRef(settings.value.quality);
 
   const report = (kind: 'playing' | 'paused' | 'stopped', time = live.current.time) => {
     const it = itemRef.current;
@@ -45,9 +43,77 @@ export function NativePlayer({ id }: { id: string }) {
       .catch(() => {});
   };
 
+  const stopTranscode = () => {
+    if (transcode.current) srv.stopTranscode(transcode.current).catch(() => {});
+    transcode.current = '';
+  };
+
+  /** (Re)lance mpv à la position donnée, dans la qualité courante. */
+  const launch = async (at: number) => {
+    const it = itemRef.current;
+    const part = it?.Media?.[0]?.Part?.[0];
+    if (!it || !part) throw new Error(t('player.error'));
+    // mpv numérote les pistes par type, dans l'ordre du fichier ; les sous-titres
+    // externes (fichiers annexes) s'ajoutent après ceux du fichier.
+    const rank = (type: number) => {
+      const all = streamsOf(part, type);
+      const embedded = all.filter((s) => !s.key);
+      const external = all.filter((s) => s.key);
+      const selected = all.find((s) => s.selected);
+      const index = !selected ? 0 : selected.key ? embedded.length + external.indexOf(selected) + 1 : embedded.indexOf(selected) + 1;
+      return { index, selected, external, ordered: [...embedded, ...external], hasAny: all.length > 0 };
+    };
+    const audio = rank(2);
+    const subs = rank(3);
+    const { title, sub } = labels(it);
+    const file = srv.fileRequest(part.key);
+    const original = quality.current === 'original';
+    stopTranscode();
+
+    if (original) {
+      await native!.play({
+        url: file.url,
+        headers: file.headers,
+        title: sub ? `${title} — ${sub}` : title,
+        start: at,
+        aid: audio.index || undefined,
+        sid: subs.hasAny ? subs.index : undefined,
+        subFiles: subs.external.map((s) => srv.fileRequest(s.key!).url),
+        passthrough: settings.value.passthrough,
+      });
+    } else {
+      // Qualité limitée : le serveur convertit, avec la piste audio et les sous-titres choisis.
+      const plan = await srv.playback(it, {
+        quality: quality.current,
+        forceTranscode: true,
+        canPlay: () => false,
+        audioStreamId: audio.selected?.id,
+        subtitleStreamId: subs.selected?.id,
+      });
+      transcode.current = plan.mode === 'hls' ? plan.session : '';
+      // Le jeton quitte l'adresse pour un en-tête, comme pour le fichier d'origine.
+      const url = new URL(plan.url);
+      url.searchParams.delete('X-Plex-Token');
+      await native!.play({ url: url.toString(), headers: file.headers, title: sub ? `${title} — ${sub}` : title, start: at, buffered: true });
+    }
+
+    // La fenêtre de contrôles ne connaît pas le serveur : on lui décrit le titre.
+    native!.setMeta({
+      title,
+      sub,
+      markers: (it.Marker ?? []).filter((m) => m.type === 'intro' || m.type === 'credits').map((m) => ({ type: m.type, start: m.startTimeOffset / 1000, end: m.endTimeOffset / 1000 })),
+      audioLabels: original ? audio.ordered.map(streamLabel) : [],
+      subLabels: original ? subs.ordered.map(streamLabel) : [],
+      hasNext: !!nextRef.current,
+      quality: quality.current,
+      qualities: QUALITIES.map((q) => ({ id: q.id, label: q.label })),
+    });
+  };
+
   useEffect(() => {
     if (!native) return;
     let alive = true;
+    const playNext = () => nextRef.current && go(`/play/${nextRef.current.ratingKey}?t=0`, true);
     const off = native.on((type, data) => {
       if (!alive) return;
       if (type === 'state') {
@@ -67,12 +133,20 @@ export function NativePlayer({ id }: { id: string }) {
             void native!.command('seek', m.endTimeOffset / 1000);
           }
         }
-        setState((prev) => (Math.floor(prev.time) === Math.floor(l.time) && prev.paused === l.paused && prev.duration === l.duration ? prev : { ...l }));
+      } else if (type === 'next') {
+        playNext();
+      } else if (type === 'quality') {
+        // Changement de qualité depuis les contrôles : on reprend au même endroit.
+        const wanted = String(data.id ?? '');
+        if (!QUALITIES.some((q) => q.id === wanted) || wanted === quality.current) return;
+        quality.current = wanted;
+        launch(live.current.time).catch((e: Error) => alive && setError(e.message));
       } else if (type === 'ended') {
         const time = typeof data.time === 'number' && data.time > 0 ? data.time : live.current.time;
         report('stopped', time);
+        stopTranscode();
         invalidate(`${srv.id}:`);
-        if (data.eof && nextRef.current && settings.value.autoNext) go(`/play/${nextRef.current.ratingKey}?t=0`, true);
+        if (data.eof && nextRef.current && settings.value.autoNext) playNext();
         else back();
       } else if (type === 'error') setError(String(data.message ?? t('player.error')));
     });
@@ -83,33 +157,9 @@ export function NativePlayer({ id }: { id: string }) {
         if (!alive) return;
         itemRef.current = it;
         setItem(it);
-        const part = it.Media?.[0]?.Part?.[0];
-        if (!part) throw new Error(t('player.error'));
-        // mpv numérote les pistes par type, dans l'ordre du fichier ; les sous-titres
-        // externes (fichiers annexes) s'ajoutent après ceux du fichier.
-        const rank = (type: number) => {
-          const all = streamsOf(part, type);
-          const embedded = all.filter((s) => !s.key);
-          const external = all.filter((s) => s.key);
-          const selected = all.find((s) => s.selected);
-          const index = !selected ? 0 : selected.key ? embedded.length + external.indexOf(selected) + 1 : embedded.indexOf(selected) + 1;
-          return { index, external, hasAny: all.length > 0 };
-        };
-        const audio = rank(2);
-        const subs = rank(3);
         const t0 = route.value.query.get('t');
-        const { title, sub } = labels(it);
-        const file = srv.fileRequest(part.key);
-        await native!.play({
-          url: file.url,
-          headers: file.headers,
-          title: sub ? `${title} — ${sub}` : title,
-          start: t0 !== null ? Number(t0) || 0 : (it.viewOffset ?? 0) / 1000,
-          aid: audio.index || undefined,
-          sid: subs.hasAny ? subs.index : undefined,
-          subFiles: subs.external.map((s) => srv.fileRequest(s.key!).url),
-          passthrough: settings.value.passthrough,
-        });
+        await launch(t0 !== null ? Number(t0) || 0 : (it.viewOffset ?? 0) / 1000);
+        if (!alive) return;
         if (it.type === 'episode' && it.parentRatingKey) {
           const eps = await srv.children(it.parentRatingKey).catch(() => []);
           const i = eps.findIndex((e) => e.ratingKey === it.ratingKey);
@@ -119,74 +169,35 @@ export function NativePlayer({ id }: { id: string }) {
             const after = seasons.filter((s) => (s.index ?? 0) > (it.parentIndex ?? 0)).sort((a, b) => (a.index ?? 0) - (b.index ?? 0))[0];
             if (after) following = (await srv.children(after.ratingKey).catch(() => []))[0];
           }
-          if (alive) nextRef.current = following ?? null;
+          if (alive && following) {
+            nextRef.current = following;
+            native!.setMeta({ hasNext: true });
+          }
         }
       })
       .catch((e: Error) => alive && setError(e.message));
 
     const timer = setInterval(() => !live.current.paused && report('playing'), 10000);
+    // Si le clavier revient à cette fenêtre (clic sur sa barre de titre), les touches essentielles restent actives.
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
-      const key = KEYS[e.key] ?? (/^[a-z0-9]$/i.test(e.key) ? e.key : '');
-      if (!key) return;
+      const step = settings.value.seekStep;
+      if (e.key === ' ' || e.key === 'k') void native!.command('toggle');
+      else if (e.key === 'ArrowLeft') void native!.command('seekBy', -step);
+      else if (e.key === 'ArrowRight') void native!.command('seekBy', step);
+      else if (e.key === 'Escape' || e.key === 'Backspace') native!.action('back');
+      else return;
       e.preventDefault();
       e.stopPropagation();
-      void native!.command('key', key);
     };
     addEventListener('keydown', onKey, true);
-
-    // La surface vidéo de mpv, incrustée dans la fenêtre, ne reçoit pas la souris : c'est
-    // cette page, cachée dessous, qui la reçoit. On la relaie pour que la barre de contrôle
-    // de mpv apparaisse, se clique et se fasse glisser normalement.
-    const BUTTONS = ['MBTN_LEFT', 'MBTN_MID', 'MBTN_RIGHT'];
-    let pending: { x: number; y: number } | null = null;
-    let idle = 0;
-    const flush = () => {
-      if (pending) void native!.command('mouse', pending);
-      pending = null;
-    };
-    const onMove = (e: MouseEvent) => {
-      const first = !pending;
-      pending = { x: e.clientX * devicePixelRatio, y: e.clientY * devicePixelRatio };
-      if (first) requestAnimationFrame(flush);
-      // Le pointeur se masque avec la barre quand la souris ne bouge plus.
-      document.body.style.cursor = '';
-      clearTimeout(idle);
-      idle = window.setTimeout(() => (document.body.style.cursor = 'none'), 2500);
-    };
-    const onButton = (action: 'down' | 'up') => (e: MouseEvent) => {
-      const name = BUTTONS[e.button];
-      if (!name) return;
-      e.preventDefault();
-      pending = { x: e.clientX * devicePixelRatio, y: e.clientY * devicePixelRatio };
-      flush();
-      void native!.command('button', { name, action });
-    };
-    const onDown = onButton('down');
-    const onUp = onButton('up');
-    const onDouble = () => void native!.command('button', { name: 'MBTN_LEFT_DBL', action: 'press' });
-    const onWheel = (e: WheelEvent) => void native!.command('button', { name: e.deltaY < 0 ? 'WHEEL_UP' : 'WHEEL_DOWN', action: 'press' });
-    const onMenu = (e: Event) => e.preventDefault();
-    addEventListener('mousemove', onMove);
-    addEventListener('mousedown', onDown);
-    addEventListener('mouseup', onUp);
-    addEventListener('dblclick', onDouble);
-    addEventListener('wheel', onWheel, { passive: true });
-    addEventListener('contextmenu', onMenu);
     return () => {
-      removeEventListener('mousemove', onMove);
-      removeEventListener('mousedown', onDown);
-      removeEventListener('mouseup', onUp);
-      removeEventListener('dblclick', onDouble);
-      removeEventListener('wheel', onWheel);
-      removeEventListener('contextmenu', onMenu);
-      clearTimeout(idle);
-      document.body.style.cursor = '';
       alive = false;
       off();
       clearInterval(timer);
       removeEventListener('keydown', onKey, true);
       report('stopped');
+      stopTranscode();
       void native!.stop();
       invalidate(`${srv.id}:`);
     };
@@ -208,13 +219,9 @@ export function NativePlayer({ id }: { id: string }) {
           </div>
         ) : (
           <>
-            {!state.time && <Spinner />}
+            <Spinner />
             <strong>{head.title}</strong>
             <span>{head.sub}</span>
-            <span class="native-state">
-              {state.paused ? t('live.paused') : t('live.playing')} · {formatClock(state.time)} / {formatClock(state.duration || (item?.duration ?? 0) / 1000)}
-            </span>
-            <small>{t('native.hint')}</small>
           </>
         )}
       </div>

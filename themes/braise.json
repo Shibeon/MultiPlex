@@ -1,0 +1,15 @@
+{
+  "id": "braise",
+  "name": "Braise",
+  "author": "MultiPlex",
+  "description": "Noir profond et rouge incandescent.",
+  "mode": "dark",
+  "vars": {
+    "--bg": "#0d0b0b",
+    "--surface": "#191414",
+    "--surface-2": "#261d1d",
+    "--text": "#f5eeee",
+    "--muted": "#a89a9a",
+    "--accent": "#ff4d4d"
+  }
+}

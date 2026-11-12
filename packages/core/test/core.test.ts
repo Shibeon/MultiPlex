@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DemoDiscover,
   DemoServer,
+  discoverId,
+  discoverImage,
   directPlayMime,
   hdrKind,
+  luminance,
+  parseGallery,
+  parseTheme,
   videoCodecString,
   pickConnection,
   planPlayback,
@@ -129,6 +135,81 @@ describe('lecture', () => {
 
   it('convertit le SRT en VTT', () => {
     expect(srtToVtt('﻿1\r\n00:00:01,500 --> 00:00:02,000\r\nSalut\r\n')).toBe('WEBVTT\n\n1\n00:00:01.500 --> 00:00:02.000\nSalut\n');
+  });
+});
+
+describe('catalogue et liste de suivi', () => {
+  it('extrait l’identifiant du catalogue', () => {
+    expect(discoverId('plex://movie/5d776824f54112001f5bbddc')).toBe('5d776824f54112001f5bbddc');
+    expect(discoverId('plex://show/5d9c08aa3c3f87001f354581')).toBe('5d9c08aa3c3f87001f354581');
+    expect(discoverId('plex://episode/5d9c08aa3c3f87001f354581')).toBeNull();
+    expect(discoverId('com.plexapp.agents.imdb://tt1375666?lang=fr')).toBeNull();
+    expect(discoverId(undefined)).toBeNull();
+  });
+  it('choisit l’affiche et le fond', () => {
+    const item = { ratingKey: 'a', type: 'movie', title: 't', Image: [{ type: 'background', url: 'https://x/bg.jpg' }, { type: 'coverPoster', url: 'https://x/p.jpg' }] };
+    expect([discoverImage(item, 'poster'), discoverImage(item, 'background')]).toEqual(['https://x/p.jpg', 'https://x/bg.jpg']);
+    expect(discoverImage({ ...item, thumb: 'https://x/t.jpg' }, 'poster')).toBe('https://x/t.jpg');
+  });
+  it('le catalogue de démo gère la liste de suivi', async () => {
+    const d = new DemoDiscover();
+    const before = await d.watchlist(0, 50);
+    const hit = (await d.search('brume'))[0];
+    expect(hit.title).toBe('Brume');
+    const other = (await d.search('archipel'))[0];
+    expect(await d.isWatchlisted(other.ratingKey)).toBe(false);
+    await d.setWatchlisted(other.ratingKey, true);
+    const after = await d.watchlist(0, 50);
+    expect([after.total, after.items[0].title, (await d.details(other.ratingKey)).watchlisted]).toEqual([before.total + 1, 'Archipel', true]);
+    await d.setWatchlisted(other.ratingKey, false);
+    expect((await d.watchlist(0, 50)).total).toBe(before.total);
+  });
+});
+
+describe('thèmes partagés', () => {
+  const vars = { '--bg': '#101010', '--surface': '#1a1a1a', '--surface-2': '#2a2a2a', '--text': '#ffffff', '--muted': '#999999', '--accent': '#ffcc00' };
+  it('accepte un thème valide et complète ce qui manque', () => {
+    const th = parseTheme({ id: 'mon-theme', name: ' Mon thème ', vars, radius: 12.4 })!;
+    expect([th.id, th.name, th.mode, th.radius, th.vars['--on-accent']]).toEqual(['mon-theme', 'Mon thème', 'dark', 12, '#000000']);
+    expect(parseTheme({ id: 'clair', name: 'Clair', vars: { ...vars, '--bg': '#fafafa', '--accent': '#102040' } })).toMatchObject({ mode: 'light', vars: { '--on-accent': '#ffffff' } });
+  });
+  it('rejette ce qui pourrait charger ou exécuter quelque chose', () => {
+    expect(parseTheme({ id: 'x', name: 'trop court', vars })).toBeNull();
+    expect(parseTheme({ id: 'Majuscule', name: 'n', vars })).toBeNull();
+    expect(parseTheme({ id: 'incomplet', name: 'n', vars: { '--bg': '#000' } })).toBeNull();
+    expect(parseTheme({ id: 'piege', name: 'n', vars: { ...vars, '--bg': 'url(https://exemple.test/pixel.png)' } })).toBeNull();
+    expect(parseTheme({ id: 'piege2', name: 'n', vars: { ...vars, '--accent': 'red; background: url(x)' } })).toBeNull();
+    const th = parseTheme({ id: 'extra', name: 'n', css: 'body{display:none}', vars: { ...vars, '--inconnue': '#fff', color: 'red' } })!;
+    expect(Object.keys(th.vars).sort()).toEqual([...Object.keys(vars), '--on-accent'].sort());
+    expect('css' in th).toBe(false);
+  });
+  it('n’accepte une illustration que si elle est embarquée', () => {
+    const pixel = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+    const ok = parseTheme({ id: 'illustre', name: 'n', vars, image: pixel, imageCredit: ' Auteur, CC BY ' })!;
+    expect([ok.image, ok.imageCredit]).toEqual([pixel, 'Auteur, CC BY']);
+    // La mise en scène se choisit dans une liste fermée, et n'a de sens qu'avec une illustration.
+    expect(parseTheme({ id: 'illustre', name: 'n', vars, image: pixel, effect: 'aura', motto: ' Devise ' })).toMatchObject({ effect: 'aura', motto: 'Devise' });
+    expect(parseTheme({ id: 'illustre', name: 'n', vars, image: pixel, effect: 'body{display:none}' })!.effect).toBeUndefined();
+    expect(parseTheme({ id: 'illustre', name: 'n', vars, effect: 'aura', motto: 'x' })).toMatchObject({ effect: undefined, motto: undefined });
+    for (const image of ['https://exemple.test/photo.jpg', 'data:image/svg+xml;base64,PHN2Zz4=', 'data:text/html;base64,PGI+', pixel + '" onerror="x', 'data:image/png;base64,' + 'A'.repeat(400000)]) {
+      const th = parseTheme({ id: 'illustre', name: 'n', vars, image, imageCredit: 'x' })!;
+      expect([th.image, th.imageCredit]).toEqual([undefined, undefined]);
+    }
+  });
+  it('valide une galerie sans doublon', () => {
+    const list = parseGallery({ themes: [{ id: 'aa', name: 'A', vars }, { id: 'aa', name: 'Doublon', vars }, { id: 'bb', name: 'B', vars }, 'autre chose', null] });
+    expect(list.map((x) => x.name)).toEqual(['A', 'B']);
+    expect(parseGallery('pas une liste')).toEqual([]);
+  });
+  it('mesure la luminance', () => {
+    expect(luminance('#000000')).toBe(0);
+    expect(luminance('#fff')).toBeCloseTo(1);
+    expect(luminance('rgb(1,2,3)')).toBeNull();
+    // Une couleur à six chiffres ne doit pas être lue comme ses trois premiers.
+    expect(luminance('#f6f1e7')!).toBeGreaterThan(0.8);
+    expect(luminance('#101014')!).toBeLessThan(0.05);
+    expect(luminance('#ffffff80')).toBeCloseTo(1);
+    expect(parseTheme({ id: 'papier', name: 'Papier', vars: { '--bg': '#f6f1e7', '--surface': '#fffaf0', '--surface-2': '#e9e0cf', '--text': '#2b2419', '--muted': '#6f6453', '--accent': '#a8590f' } })).toMatchObject({ mode: 'light', vars: { '--on-accent': '#ffffff' } });
   });
 });
 

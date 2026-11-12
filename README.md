@@ -89,13 +89,71 @@ Une fois le dépôt poussé sur GitHub, `.github/workflows/build.yml` compile à
 
 ## Feuille de route
 
+- **Liste de suivi Plex (prioritaire)** : afficher la liste de suivi du compte, et rechercher comme dans Plex — y compris des titres absents du serveur — pour les y ajouter. Un outil comme Seerr, branché sur la liste de suivi, se charge alors de les récupérer.
 - Lecteur natif : commandes aux couleurs de MultiPlex par-dessus la vidéo (aujourd'hui celles de mpv), choix des pistes depuis l'interface.
 - Sous-titres intégrés sans transcodage vidéo, choix de la version du fichier.
 - Musique, photos, listes de lecture, collections, filtres avancés.
 - Utilisateurs Plex Home, multi-serveurs simultanés.
-- Galerie de thèmes communautaires et système d'extensions.
+- Galerie de thèmes en ligne, alimentée par le dépôt une fois publié (la galerie embarquée existe déjà).
 - Téléchargements hors ligne.
+
+## Idées mises de côté
+
+Pistes retenues pour plus tard, pas encore commencées.
+
+**Communauté**
+
+- **Regarder ensemble** : une salle où plusieurs personnes lisent le même titre, synchronisées (pause, avance), avec un petit chat. Demande un service de synchronisation, pensé pour tourner sur la machine d'un des participants.
+- **Activité des amis enrichie** : sur la page « En direct », voir ce qu'ils ont regardé récemment et rejoindre leur lecture.
+- **Recommandations entre amis** : conseiller un titre à quelqu'un, qui le retrouve dans une rangée « Recommandé par… ».
+- **Extensions** : des modules pour ajouter des rangées, des sources de métadonnées ou des boutons.
+
+**Discord**
+
+- **Statut d'activité** : « Regarde … » sur le profil, avec progression et pause / lecture. Passe par l'application de bureau (Discord local) ; demande un identifiant d'application Discord et des affiches publiques (TMDB) ou une icône générique ; à rendre désactivable.
+- **Invitation** : bouton « Rejoindre » sur le statut, branché sur « Regarder ensemble ».
+- **Annonces dans un salon** : message automatique au début d'un film, ou récapitulatif des ajouts de la semaine, par webhook.
+- **Bot** : commandes `/en-direct`, `/quoi-regarder`, `/recommander` ; demande un hébergement permanent.
+- **Activité intégrée** : MultiPlex dans un salon vocal. Le plus lourd : validation par Discord et relais des flux.
 
 ## Contribuer
 
-Les contributions sont bienvenues : un thème n'est qu'un jeu de variables CSS (`apps/web/src/settings.ts`), une langue un dictionnaire (`apps/web/src/i18n.ts`). Licence MIT.
+Les contributions sont bienvenues. Licence MIT.
+
+### Proposer un thème
+
+La galerie de l'application (Réglages → Ouvrir la galerie) affiche les thèmes du dossier `themes/`. Pour en ajouter un, créez `themes/mon-theme.json` :
+
+```json
+{
+  "id": "mon-theme",
+  "name": "Mon thème",
+  "author": "Votre nom",
+  "description": "Une phrase pour le présenter.",
+  "mode": "dark",
+  "vars": {
+    "--bg": "#101014",
+    "--surface": "#1a1a20",
+    "--surface-2": "#26262e",
+    "--text": "#f2f2f5",
+    "--muted": "#9a9aa6",
+    "--accent": "#ff8a3d"
+  },
+  "radius": 14
+}
+```
+
+- `id` reprend le nom du fichier ; les six couleurs de `vars` sont obligatoires, `--on-accent` (texte sur la couleur d'accent), `--backdrop-opacity` et `radius` sont facultatifs.
+- Un thème ne contient que des couleurs (`#rrggbb`, `rgb()`, `hsl()`) : ni CSS libre ni adresse, pour qu'un thème reçu d'ailleurs ne puisse rien charger ni exécuter.
+- **Illustration (facultative)** : un portrait ou un emblème, déposé à côté du thème sous le même nom (`themes/mon-theme.webp`, `.jpg` ou `.png`, 200 Ko au plus) et déclaré par `"image": "mon-theme.webp"` avec un `"imageCredit"` obligatoire (auteur et licence). L'application l'affiche en médaillon dans la navigation, en filigrane dans le fond des pages et à la place de l'indicateur de chargement. L'image est incorporée au thème à la compilation : une adresse en ligne est toujours refusée. N'utilisez que des images dont la licence permet la réutilisation.
+- Le plus simple pour partir de l'existant : réglez l'apparence dans l'application, puis « Partager mon thème » enregistre le fichier.
+- `node scripts/build-themes.mjs` vérifie tous les thèmes ; il tourne aussi avant `pnpm dev`, `pnpm build` et `pnpm typecheck`.
+
+Une langue est un dictionnaire dans `apps/web/src/i18n.ts`.
+
+### Crédits des illustrations
+
+Le code est sous licence MIT ; les illustrations de thèmes gardent leur propre licence.
+
+- `themes/le-glucks.webp` : d'après « Raphaël Glucksmann-1040795 (cropped) » de Harald Krichel, [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/), via [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Rapha%C3%ABl_Glucksmann-1040795_(cropped).jpg). Image recadrée et passée en bichromie ; cette version est diffusée sous la même licence.
+- `themes/christ-cosmique.webp` : d'après « Sylvain Durif, sur une aire d'autoroute, en 2013 » de chatzefratz, [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/), via [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Sylvain_Durif,_sur_une_aire_d%27autoroute,_en_2013.png). Image recadrée, passée en bichromie, halo et étoiles ajoutés.

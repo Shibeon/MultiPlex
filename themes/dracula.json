@@ -1,0 +1,15 @@
+{
+  "id": "dracula",
+  "name": "Dracula",
+  "author": "Dracula Theme",
+  "description": "Le classique violet et rose des éditeurs de code.",
+  "mode": "dark",
+  "vars": {
+    "--bg": "#282a36",
+    "--surface": "#21222c",
+    "--surface-2": "#44475a",
+    "--text": "#f8f8f2",
+    "--muted": "#b3b7d1",
+    "--accent": "#bd93f9"
+  }
+}

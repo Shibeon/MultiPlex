@@ -1,0 +1,15 @@
+{
+  "id": "tokyo-night",
+  "name": "Tokyo Night",
+  "author": "enkia",
+  "description": "Bleu nuit et lumières de ville.",
+  "mode": "dark",
+  "vars": {
+    "--bg": "#1a1b26",
+    "--surface": "#16161e",
+    "--surface-2": "#292e42",
+    "--text": "#c0caf5",
+    "--muted": "#8189af",
+    "--accent": "#7aa2f7"
+  }
+}

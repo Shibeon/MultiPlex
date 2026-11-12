@@ -8,7 +8,7 @@ const net = require('node:net');
 const path = require('node:path');
 
 /** Propriétés suivies en continu ; chaque changement est transmis à l'interface. */
-const OBSERVED = ['time-pos', 'duration', 'pause', 'paused-for-cache', 'fullscreen', 'aid', 'sid', 'eof-reached'];
+const OBSERVED = ['time-pos', 'duration', 'pause', 'paused-for-cache', 'aid', 'sid', 'eof-reached', 'volume', 'mute', 'speed', 'track-list', 'chapter-list', 'demuxer-cache-time'];
 
 function findMpv(app) {
   const exe = process.platform === 'win32' ? 'mpv.exe' : 'mpv';
@@ -61,10 +61,11 @@ class MpvPlayer {
       '--idle=yes',
       '--keep-open=no',
       '--force-window=immediate',
-      '--osc=yes',
-      // Barre de contrôle complète en bas de l'image (lecture, progression, pistes, volume, plein écran).
-      '--script-opts=osc-layout=bottombar,osc-seekbarstyle=bar,osc-scalewindowed=1.4,osc-scalefullscreen=1.4,osc-hidetimeout=2500,osc-fadeduration=250,osc-visibility=auto,osc-deadzonesize=0.6',
-      '--osd-bar=yes',
+      // Pas de commandes mpv à l'écran : celles de MultiPlex sont dessinées par une
+      // fenêtre transparente posée par-dessus la vidéo (voir main.cjs).
+      '--osc=no',
+      '--osd-bar=no',
+      '--osd-level=0',
       '--input-default-bindings=yes',
       '--input-vo-keyboard=yes',
       // Rendu : libplacebo sur Direct3D 11, décodage matériel quand il est sûr.
@@ -83,6 +84,8 @@ class MpvPlayer {
     ];
     // Transmission du flux audio brut à un ampli ou une barre de son (Dolby, DTS, Atmos).
     if (opts.passthrough) args.push('--audio-spdif=ac3,eac3,dts-hd,truehd', '--audio-exclusive=yes');
+    // Tests automatiques : aucun son.
+    if (this.muted) args.push('--mute=yes');
 
     this.state = {};
     const proc = spawn(exe, args, { stdio: 'ignore', windowsHide: false });
@@ -93,7 +96,6 @@ class MpvPlayer {
       this.proc = null;
       this.sock?.destroy();
       this.sock = null;
-      if (this.win.isFullScreen() && this.enteredFullscreen) this.win.setFullScreen(false);
       this.emit('ended', { code, time: this.state['time-pos'] ?? 0, duration: this.state.duration ?? 0, eof: !!this.state['eof-reached'] || this.reachedEnd });
     });
     this.reachedEnd = false;
@@ -106,6 +108,14 @@ class MpvPlayer {
     const options = { start: String(Math.max(0, Number(opts.start) || 0)) };
     if (opts.aid !== undefined) options.aid = opts.aid > 0 ? String(opts.aid) : 'no';
     if (opts.sid !== undefined) options.sid = opts.sid > 0 ? String(opts.sid) : 'no';
+    if (opts.buffered) {
+      // Flux converti par le serveur, parfois à peine plus vite que la lecture : après un
+      // arrêt, on attend d'avoir quelques secondes d'avance plutôt que de repartir aussitôt
+      // et de s'arrêter de nouveau (moins d'interruptions, plus espacées).
+      options['cache-pause-wait'] = '6';
+      options['cache-pause-initial'] = 'yes';
+      options['demuxer-readahead-secs'] = '60';
+    }
     if (opts.subFiles?.length) options['sub-files'] = opts.subFiles.join(process.platform === 'win32' ? ';' : ':');
     this.loaded = true;
     await this.send({ name: 'loadfile', url: opts.url, flags: 'replace', options });
@@ -160,11 +170,6 @@ class MpvPlayer {
     if (msg.event === 'property-change') {
       this.state[msg.name] = msg.data;
       if (msg.name === 'eof-reached' && msg.data) this.reachedEnd = true;
-      if (msg.name === 'fullscreen') {
-        // mpv est incrusté : c'est la fenêtre de l'application qui passe en plein écran.
-        if (msg.data) this.enteredFullscreen = true;
-        if (this.win.isFullScreen() !== !!msg.data) this.win.setFullScreen(!!msg.data);
-      }
       this.emit('state', { name: msg.name, value: msg.data });
     } else if (msg.event === 'end-file' && this.loaded) {
       // Démarré à vide, mpv resterait ouvert sur un écran noir : on le ferme à la fin du fichier.
@@ -195,17 +200,18 @@ class MpvPlayer {
         return this.send(['seek', Number(value) || 0, 'absolute']);
       case 'seekBy':
         return this.send(['seek', Number(value) || 0, 'relative']);
-      case 'fullscreen':
-        return this.send(['cycle', 'fullscreen']);
-      case 'mouse':
-        // Position du pointeur, en pixels de la surface vidéo.
-        return Number.isFinite(value?.x) && Number.isFinite(value?.y) ? this.send(['mouse', Math.round(value.x), Math.round(value.y)]) : undefined;
-      case 'button': {
-        // Boutons et molette : appui, relâchement (pour glisser sur la barre) ou clic complet.
-        const names = ['MBTN_LEFT', 'MBTN_RIGHT', 'MBTN_MID', 'MBTN_LEFT_DBL', 'WHEEL_UP', 'WHEEL_DOWN'];
-        if (!names.includes(value?.name)) return undefined;
-        return this.send([value.action === 'down' ? 'keydown' : value.action === 'up' ? 'keyup' : 'keypress', value.name]);
-      }
+      case 'volume':
+        return this.send(['set_property', 'volume', Math.max(0, Math.min(150, Number(value) || 0))]);
+      case 'mute':
+        return value === undefined ? this.send(['cycle', 'mute']) : this.send(['set_property', 'mute', !!value]);
+      case 'speed':
+        return this.send(['set_property', 'speed', Math.max(0.25, Math.min(4, Number(value) || 1))]);
+      case 'aid':
+      case 'sid':
+        // Numéro de piste donné par mpv (track-list), ou 0 pour aucune.
+        return this.send(['set_property', name, Number.isInteger(value) && value > 0 ? value : 'no']);
+      case 'stats':
+        return this.send(['script-binding', 'stats/display-stats-toggle']);
       case 'key':
         return /^[A-Za-z0-9_+]{1,20}$/.test(String(value)) ? this.send(['keypress', String(value)]) : undefined;
       default:

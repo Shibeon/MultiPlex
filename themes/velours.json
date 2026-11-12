@@ -1,0 +1,16 @@
+{
+  "id": "velours",
+  "name": "Velours",
+  "author": "MultiPlex",
+  "description": "Bordeaux sombre et or, ambiance salle de cinéma.",
+  "mode": "dark",
+  "vars": {
+    "--bg": "#140a0e",
+    "--surface": "#1f1116",
+    "--surface-2": "#2e1a21",
+    "--text": "#f5e9ec",
+    "--muted": "#b0969d",
+    "--accent": "#d4af37",
+    "--backdrop-opacity": "0.5"
+  }
+}

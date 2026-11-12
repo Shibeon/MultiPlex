@@ -106,7 +106,8 @@ export function SettingsPage() {
       <section>
         <h2>{t('set.appearance')}</h2>
         <Row label={t('set.theme')}>
-          <select value={s.theme} onChange={(e) => update({ theme: e.currentTarget.value, customVars: {} })}>
+          <select value={s.theme} onChange={(e) => update({ theme: e.currentTarget.value, customVars: {}, themeLabel: '', themeImage: '', themeImageCredit: '', themeEffect: '', themeMotto: '' })}>
+            {s.theme.startsWith('gallery:') && <option value={s.theme}>{s.themeLabel || t('themes.title')}</option>}
             {Object.entries(THEMES).map(([id, th]) => (
               <option key={id} value={id}>
                 {th.name}
@@ -114,6 +115,12 @@ export function SettingsPage() {
             ))}
           </select>
         </Row>
+        <div class="set-row">
+          <span>{t('themes.lead')}</span>
+          <a class="btn primary" href="#/themes">
+            {t('themes.open')}
+          </a>
+        </div>
         <Row label={t('set.layout')}>
           <select value={s.layout} onChange={(e) => update({ layout: e.currentTarget.value })}>
             <option value="top">{t('set.layout.top')}</option>
@@ -122,7 +129,7 @@ export function SettingsPage() {
         </Row>
         <Row label={t('set.accent')}>
           <span class="inline">
-            <input type="color" value={s.accent || THEMES[s.theme]?.vars['--accent'] || '#ffffff'} onInput={(e) => update({ accent: e.currentTarget.value })} />
+            <input type="color" value={s.accent || s.customVars['--accent'] || THEMES[s.theme]?.vars['--accent'] || '#ffffff'} onInput={(e) => update({ accent: e.currentTarget.value })} />
             {s.accent && (
               <button class="link" onClick={() => update({ accent: '' })}>
                 {t('set.accentReset')}
@@ -164,6 +171,7 @@ export function SettingsPage() {
         {nativeAvailable.value && <Toggle k="nativePlayer" label={t('set.nativePlayer')} />}
         {nativeAvailable.value && s.nativePlayer && <Toggle k="passthrough" label={t('set.passthrough')} />}
         <Toggle k="directPlay" label={t('set.directPlay')} />
+        {!(nativeAvailable.value && s.nativePlayer) && <Toggle k="hdrServerOnSdr" label={t('set.hdrServerOnSdr')} />}
         <Toggle k="autoNext" label={t('set.autoNext')} />
         <Toggle k="autoSkipIntro" label={t('set.autoSkipIntro')} />
         <Toggle k="autoSkipCredits" label={t('set.autoSkipCredits')} />

@@ -6,3 +6,4 @@ dist/
 dist-platforms/
 release/
 vendor/
+apps/web/src/gallery/themes.json

@@ -1,3 +1,4 @@
+import { THEME_EFFECTS, isThemeImage, luminance } from '@multiplex/core';
 import { effect, signal } from '@preact/signals';
 
 export interface Theme {
@@ -18,6 +19,16 @@ export const THEMES: Record<string, Theme> = {
 export interface Settings {
   lang: 'fr' | 'en';
   theme: string;
+  /** Nom du thème de la galerie appliqué (vide pour un thème intégré). */
+  themeLabel: string;
+  /** Illustration du thème appliqué (image embarquée) et son crédit. */
+  themeImage: string;
+  themeImageCredit: string;
+  /** Mise en scène de l'illustration et devise du thème appliqué. */
+  themeEffect: string;
+  themeMotto: string;
+  /** Adresse d'une galerie de thèmes en ligne (facultative, HTTPS). */
+  galleryUrl: string;
   /** 'top' : barre flottante et affiche vedette ; 'side' : barre latérale classique. */
   layout: string;
   /** Couleur d'accent personnalisée ; vide = celle du thème. */
@@ -39,6 +50,12 @@ export interface Settings {
   autoSkipIntro: boolean;
   autoSkipCredits: boolean;
   seekStep: number;
+  /**
+   * Lecteur du navigateur, contenu HDR sur un écran qui ne l'est pas : laisser le
+   * serveur convertir l'image en SDR plutôt que de s'en remettre au navigateur,
+   * dont le rendu est souvent trop sombre.
+   */
+  hdrServerOnSdr: boolean;
   /** Application de bureau : lire avec le lecteur natif (mpv) plutôt qu'avec celui du navigateur. */
   nativePlayer: boolean;
   /** Lecteur natif : transmettre l'audio brut (Dolby, DTS, Atmos) à un ampli. */
@@ -48,6 +65,12 @@ export interface Settings {
 export const DEFAULTS: Settings = {
   lang: typeof navigator !== 'undefined' && navigator.language?.startsWith('fr') ? 'fr' : 'en',
   theme: 'cinema',
+  themeLabel: '',
+  themeImage: '',
+  themeImageCredit: '',
+  themeEffect: '',
+  themeMotto: '',
+  galleryUrl: '',
   layout: 'top',
   accent: '',
   customVars: {},
@@ -66,6 +89,7 @@ export const DEFAULTS: Settings = {
   autoSkipIntro: false,
   autoSkipCredits: false,
   seekStep: 10,
+  hdrServerOnSdr: false,
   nativePlayer: true,
   passthrough: false,
 };
@@ -157,7 +181,19 @@ export function initSettings(): void {
     // Les téléviseurs exposent souvent un écran logique de 960×540 : on réduit l'échelle pour que tout tienne.
     root.style.fontSize = `${s.uiScale * (viewport.value.tv ? 0.72 : 1)}%`;
     root.classList.toggle('tv', viewport.value.tv);
+    // Illustration du thème : uniquement une image embarquée, jamais une adresse à charger
+  // (des réglages importés pourraient en contenir une).
+    const art = isThemeImage(s.themeImage) ? s.themeImage : '';
+    if (art) root.style.setProperty('--theme-art', `url("${art}")`);
+    else root.style.removeProperty('--theme-art');
+    root.classList.toggle('has-art', !!art);
+    // Mise en scène : une classe par effet connu, et la devise passée au CSS comme texte.
+    for (const fx of THEME_EFFECTS) root.classList.toggle(`fx-${fx}`, !!art && s.themeEffect === fx);
+    if (art && s.themeMotto) root.style.setProperty('--theme-motto', JSON.stringify(s.themeMotto.slice(0, 60)));
+    else root.style.removeProperty('--theme-motto');
     root.lang = s.lang;
+    // Les champs de formulaire et les barres de défilement suivent la clarté du thème.
+    root.style.colorScheme = (luminance(vars['--bg']) ?? 0) > 0.5 ? 'light' : 'dark';
     root.classList.toggle('reduce-motion', s.reduceMotion);
     root.classList.toggle('no-titles', !s.showTitles);
     style.textContent = s.customCss;

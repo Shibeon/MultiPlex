@@ -99,13 +99,16 @@ export function Player({ id }: { id: string }) {
     setTrackUrl((old) => (old && URL.revokeObjectURL(old), ''));
     const c = choice.current;
     try {
+      // HDR sur écran SDR : au choix de l'utilisateur, c'est le serveur qui convertit l'image.
+      const source = streamsOf((it.Media?.[c.media] ?? it.Media?.[0])?.Part?.[0], 1)[0];
+      const sdrFix = settings.value.hdrServerOnSdr && !!hdrKind(source) && !matchMedia('(dynamic-range: high)').matches;
       const p = await srv.playback(it, {
         quality: c.quality,
-        forceTranscode: c.force || !settings.value.directPlay,
+        forceTranscode: c.force || !settings.value.directPlay || sdrFix,
         audioStreamId: c.audio || undefined,
         subtitleStreamId: c.sub || undefined,
         canPlay: (mime) => !!v.canPlayType(mime),
-        hevc: canDecodeHevc(),
+        hevc: canDecodeHevc() && !sdrFix,
         mediaIndex: c.media,
       });
       if (mine !== gen.current) return;
@@ -250,7 +253,7 @@ export function Player({ id }: { id: string }) {
       `Source vidéo : ${[media?.videoCodec?.toUpperCase(), vs?.profile, vs?.width && `${vs.width}×${vs.height}`, vs?.bitDepth && `${vs.bitDepth} bits`, hdr || 'SDR', vs?.frameRate && `${Math.round(vs.frameRate * 100) / 100} i/s`].filter(Boolean).join(' · ')}`,
       `Source audio : ${[as?.codec?.toUpperCase(), as?.audioChannelLayout ?? (as?.channels && `${as.channels} canaux`), pl.audio === 'transcode' ? 'converti en AAC' : 'tel quel'].filter(Boolean).join(' · ')}`,
       `Image décodée : ${el.videoWidth}×${el.videoHeight}${pl.mode === 'hls' ? ` (${pl.video === 'copy' ? 'copie' : 'conversion'} serveur)` : ''}`,
-      `Écran : ${hdrScreen ? 'HDR' : 'SDR'}${hdr && !hdrScreen ? ' — le navigateur adapte le HDR à l’écran' : ''}`,
+      `Écran : ${hdrScreen ? 'HDR' : 'SDR'}${hdr && !hdrScreen ? (pl.video === 'transcode' ? ' — HDR converti par le serveur' : ' — HDR adapté par le navigateur (image sombre ? voir Réglages → Lecture, ou l’application de bureau)') : ''}`,
       q ? `Images perdues : ${q.droppedVideoFrames} / ${q.totalVideoFrames}` : '',
       `Tampon : ${ahead.toFixed(1)} s · vitesse ×${el.playbackRate}`,
     ].filter(Boolean);

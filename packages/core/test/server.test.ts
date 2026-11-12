@@ -49,6 +49,7 @@ const routes: Record<string, (q: URLSearchParams) => unknown> = {
   '/library/metadata/10': () => ({ Metadata: [movie] }),
   '/library/metadata/404': () => ({}),
   '/library/metadata/20/children': () => ({ Metadata: [movie] }),
+  '/library/all': (q) => ({ Metadata: q.get('guid') === 'plex://movie/aaaaaaaaaaaaaaaaaaaaaaaa' ? [movie] : [] }),
   '/hubs/search': () => ({ Hub: [{ hubIdentifier: 'movie', title: 'Films', type: 'movie', Metadata: [movie] }] }),
   '/:/timeline': () => ({}),
   '/status/sessions': () => ({
@@ -137,6 +138,12 @@ describe('PlexServer contre un faux PMS', () => {
     expect(await srv.children('20')).toHaveLength(1);
     expect(await srv.search('fil m&x')).toHaveLength(1);
     expect(last().q.get('query')).toBe('fil m&x');
+  });
+
+  it('retrouve un élément par son identifiant Plex universel', async () => {
+    expect((await srv.findByGuid('plex://movie/aaaaaaaaaaaaaaaaaaaaaaaa'))?.ratingKey).toBe('10');
+    expect(last().q.get('guid')).toBe('plex://movie/aaaaaaaaaaaaaaaaaaaaaaaa');
+    expect(await srv.findByGuid('plex://movie/bbbbbbbbbbbbbbbbbbbbbbbb')).toBeUndefined();
   });
 
   it('ne divulgue pas le jeton dans les erreurs', async () => {

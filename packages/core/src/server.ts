@@ -76,6 +76,10 @@ export class PlexServer implements MediaServer {
     return m;
   }
 
+  async findByGuid(guid: string): Promise<Metadata | undefined> {
+    return (await this.mc<{ Metadata?: Metadata[] }>('/library/all', { guid })).Metadata?.[0];
+  }
+
   async children(ratingKey: string): Promise<Metadata[]> {
     return (await this.mc<{ Metadata?: Metadata[] }>(`/library/metadata/${ratingKey}/children`)).Metadata ?? [];
   }

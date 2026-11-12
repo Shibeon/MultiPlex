@@ -1,0 +1,22 @@
+{
+  "id": "christ-cosmique",
+  "name": "Christ cosmique",
+  "author": "Fan-club de Bugarach",
+  "description": "Violet intergalactique et or du Grand Monarque. Hommage amusé à Sylvain Durif.",
+  "mode": "dark",
+  "vars": {
+    "--bg": "#0d0620",
+    "--surface": "#170b33",
+    "--surface-2": "#27145a",
+    "--text": "#f4ecff",
+    "--muted": "#a996cf",
+    "--accent": "#ffd24a",
+    "--on-accent": "#1c0d3d",
+    "--backdrop-opacity": "0.65"
+  },
+  "radius": 22,
+  "image": "christ-cosmique.webp",
+  "imageCredit": "D’après « Sylvain Durif, sur une aire d’autoroute, en 2013 », chatzefratz, CC BY 3.0, via Wikimedia Commons (image retouchée)",
+  "effect": "aura",
+  "motto": "Le Grand Monarque veille sur votre bibliothèque"
+}

@@ -1,0 +1,15 @@
+{
+  "id": "ambre-classique",
+  "name": "Ambre classique",
+  "author": "MultiPlex",
+  "description": "Gris anthracite et ambre chaleureux, pour les habitués.",
+  "mode": "dark",
+  "vars": {
+    "--bg": "#1f2326",
+    "--surface": "#282d31",
+    "--surface-2": "#343a40",
+    "--text": "#eef0f2",
+    "--muted": "#9ba3ab",
+    "--accent": "#e5a00d"
+  }
+}

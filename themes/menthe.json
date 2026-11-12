@@ -1,0 +1,15 @@
+{
+  "id": "menthe",
+  "name": "Menthe",
+  "author": "MultiPlex",
+  "description": "Clair, frais, avec une pointe de vert.",
+  "mode": "light",
+  "vars": {
+    "--bg": "#f3f8f5",
+    "--surface": "#ffffff",
+    "--surface-2": "#dfece5",
+    "--text": "#14241c",
+    "--muted": "#56695f",
+    "--accent": "#0f9d6c"
+  }
+}

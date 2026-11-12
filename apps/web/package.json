@@ -4,10 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
+    "dev": "node ../../scripts/build-themes.mjs && vite",
+    "build": "node ../../scripts/build-themes.mjs && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "node ../../scripts/build-themes.mjs && tsc -p tsconfig.json"
   },
   "dependencies": {
     "@multiplex/core": "workspace:*",

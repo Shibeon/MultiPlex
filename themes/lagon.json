@@ -1,0 +1,15 @@
+{
+  "id": "lagon",
+  "name": "Lagon",
+  "author": "MultiPlex",
+  "description": "Bleu des profondeurs et turquoise.",
+  "mode": "dark",
+  "vars": {
+    "--bg": "#071a24",
+    "--surface": "#0d2733",
+    "--surface-2": "#143646",
+    "--text": "#e3f4f8",
+    "--muted": "#8fb3bf",
+    "--accent": "#22d3ee"
+  }
+}

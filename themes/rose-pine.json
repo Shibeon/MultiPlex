@@ -1,0 +1,15 @@
+{
+  "id": "rose-pine",
+  "name": "Rosé Pine",
+  "author": "Rosé Pine",
+  "description": "Tons sourds, rose et or pâle.",
+  "mode": "dark",
+  "vars": {
+    "--bg": "#191724",
+    "--surface": "#1f1d2e",
+    "--surface-2": "#26233a",
+    "--text": "#e0def4",
+    "--muted": "#908caa",
+    "--accent": "#ebbcba"
+  }
+}
