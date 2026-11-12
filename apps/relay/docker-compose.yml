@@ -1,0 +1,16 @@
+# Relais « Regarder ensemble » de MultiPlex, à lancer sur un NAS ou un serveur.
+# Il doit être joignable en HTTPS depuis Internet (proxy inverse du NAS, ou tunnel) :
+# voir README.md.
+services:
+  multiplex-relay:
+    build: .
+    container_name: multiplex-relay
+    restart: unless-stopped
+    ports:
+      - "8787:8787"
+    environment:
+      - PORT=8787
+      - MAX_PEERS=16
+    read_only: true
+    security_opt:
+      - no-new-privileges:true

@@ -1,0 +1,47 @@
+# Relais « Regarder ensemble » + HTTPS automatique (Caddy, certificat Let's Encrypt).
+#
+# À utiliser quand le NAS n'a pas de proxy inverse intégré (Asustor, par exemple).
+# Prérequis : un nom (DDNS) qui pointe vers votre box, et les ports 80 et 443 de la box
+# redirigés vers le NAS. Voir README.md.
+#
+# Lancement :  RELAY_DOMAIN=mon-nom.myasustor.com docker compose -f docker-compose.https.yml up -d
+# (ou mettre RELAY_DOMAIN=… dans un fichier .env à côté de ce fichier)
+services:
+  multiplex-relay:
+    image: node:22-alpine
+    container_name: multiplex-relay
+    restart: unless-stopped
+    working_dir: /app
+    # Pas d'image à construire : les deux fichiers du relais sont montés, et sa seule dépendance
+    # (ws) est installée au premier démarrage dans un volume.
+    command: sh -c "npm install --omit=dev --no-audit --no-fund --loglevel=error && exec node server.mjs"
+    environment:
+      - PORT=8787
+      - MAX_PEERS=16
+    volumes:
+      - ./server.mjs:/app/server.mjs:ro
+      - ./package.json:/app/package.json:ro
+      - relay-modules:/app/node_modules
+    expose:
+      - "8787"
+
+  caddy:
+    image: caddy:2.8-alpine
+    container_name: multiplex-relay-https
+    restart: unless-stopped
+    depends_on:
+      - multiplex-relay
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - RELAY_DOMAIN=${RELAY_DOMAIN:?Indiquez RELAY_DOMAIN (ex. mon-nom.myasustor.com)}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  relay-modules:
+  caddy-data:
+  caddy-config:

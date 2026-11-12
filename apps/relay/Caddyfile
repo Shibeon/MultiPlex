@@ -1,0 +1,4 @@
+# HTTPS automatique pour le relais : Caddy obtient et renouvelle seul le certificat.
+{$RELAY_DOMAIN} {
+	reverse_proxy multiplex-relay:8787
+}

@@ -1,0 +1,59 @@
+name: relay-image
+
+# Image Docker du relais « Regarder ensemble », publiée sur ghcr.io/shibeon/multiplex-relay
+# pour qu'on puisse l'utiliser dans une stack sans rien compiler (voir apps/relay/compose.yml).
+# Construite pour les NAS Intel/AMD (amd64) et ARM (arm64).
+#
+# Publiée quand le dossier du relais change sur main, sur une étiquette `v1.2.3`, ou à la
+# demande (onglet Actions → « Run workflow »). Balises : `latest`, la version de
+# apps/relay/package.json, et la version de l'étiquette.
+#
+# Le dépôt du code étant privé, le paquet naît privé : le rendre public une fois pour toutes
+# (GitHub → Packages → multiplex-relay → Package settings → Change visibility → Public).
+
+on:
+  push:
+    branches: [main]
+    paths: ['apps/relay/**', '.github/workflows/relay-image.yml']
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Version du relais
+        id: v
+        run: echo "relay=$(node -p "require('./apps/relay/package.json').version")" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ghcr.io/shibeon/multiplex-relay
+          tags: |
+            type=raw,value=latest
+            type=raw,value=${{ steps.v.outputs.relay }}
+            type=semver,pattern={{version}}
+          labels: |
+            org.opencontainers.image.title=MultiPlex relay
+            org.opencontainers.image.description=Relais « Regarder ensemble » de MultiPlex (messages chiffrés de bout en bout)
+      - uses: docker/build-push-action@v6
+        with:
+          context: apps/relay
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

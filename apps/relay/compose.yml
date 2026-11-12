@@ -1,0 +1,26 @@
+# Relais « Regarder ensemble » de MultiPlex, prêt à coller dans une stack
+# (Portainer, Dockge, Container Manager…) : rien à compiler, l'image est publiée.
+#
+# Le relais écoute sur 8787. Votre proxy inverse le rend joignable en HTTPS depuis Internet,
+# WebSocket activé, par exemple : https://mon-nom.myasustor.com:1744 → http://<IP-du-NAS>:8787
+# Puis dans MultiPlex : Réglages → Relais « Regarder ensemble » → cette adresse → Tester.
+services:
+  multiplex-relay:
+    image: ghcr.io/shibeon/multiplex-relay:latest
+    container_name: multiplex-relay
+    restart: unless-stopped
+    ports:
+      - "8787:8787"
+    environment:
+      - PORT=8787
+      - MAX_PEERS=16   # personnes par séance
+      - MAX_ROOMS=500  # séances en même temps
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    # Si votre proxy tourne lui-même dans Docker, vous pouvez à la place retirer « ports »
+    # et brancher le relais sur le réseau du proxy (cible : http://multiplex-relay:8787) :
+    # networks: [proxy]
+# networks:
+#   proxy:
+#     external: true
