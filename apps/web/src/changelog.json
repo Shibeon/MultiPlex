@@ -1,6 +1,20 @@
 [
   {
     "versions": {
+      "desktop": "0.1.17",
+      "web": "0.1.17",
+      "android": "0.1.17",
+      "tv": "0.1.17"
+    },
+    "fr": [
+      "Verre liquide, à la manière d’iOS : les boutons, onglets et pilules s’éclairent sous la souris, gonflent à l’appui, suivent le doigt qui glisse et reviennent en place avec un petit rebond."
+    ],
+    "en": [
+      "Liquid glass, iOS style: buttons, tabs and pills light up under the pointer, swell when pressed, follow a sliding finger and spring back into place with a little bounce."
+    ]
+  },
+  {
+    "versions": {
       "desktop": "0.1.16",
       "web": "0.1.16",
       "android": "0.1.16",

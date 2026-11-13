@@ -1,6 +1,6 @@
 {
   "name": "@multiplex/desktop",
-  "version": "0.1.16",
+  "version": "0.1.17",
   "private": true,
   "description": "Coque de bureau MultiPlex (Windows, macOS, Linux)",
   "main": "main.cjs",
