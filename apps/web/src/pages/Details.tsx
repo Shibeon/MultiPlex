@@ -239,7 +239,6 @@ export function Details({ id }: { id: string }) {
           <PlayerTech badges={tech} />
         </div>
       </div>
-      <CastRow people={item.Role} title={t('item.cast')} />
       {hasKids && (
         <section class="children">
           <h2>{item.type === 'season' ? t('item.episodes') : item.type === 'show' ? t('item.seasons') : ''}</h2>
@@ -255,6 +254,8 @@ export function Details({ id }: { id: string }) {
           )}
         </section>
       )}
+      {/* Saisons (ou épisodes) d'abord : c'est ce qu'on vient chercher ; le casting ensuite. */}
+      <CastRow people={item.Role} title={t('item.cast')} />
       {(item.type === 'movie' || item.type === 'show') && <RelatedRows item={item} />}
     </div>
   );
