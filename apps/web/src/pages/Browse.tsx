@@ -144,6 +144,8 @@ const DEFAULT_PREFS: LibPrefs = { sort: 'titleSort', dir: 'asc', watch: 'all', g
 const MAIN_FILTERS = new Set(['unwatched', 'unwatchedLeaves', 'inProgress', 'genre', 'decade', 'resolution', 'hdr']);
 /** Personnes : des milliers de valeurs, illisible dans une liste (leur page reste accessible depuis une fiche). */
 const PEOPLE_FILTERS = new Set(['actor', 'director', 'writer', 'producer']);
+/** Emplacement (dossier du serveur) : sans intérêt pour choisir quoi regarder. */
+const HIDDEN_FILTERS = new Set(['location', 'folder']);
 /** Intitulés français des filtres courants ; les autres gardent celui du serveur. */
 const FILTER_LABEL: Record<string, string> = {
   year: 'lib.f.year',
@@ -214,7 +216,8 @@ export function LibraryPage({ id }: { id: string }) {
   const prefKey = `${srv.id}:${id}`;
   const [prefs, setPrefsState] = useState<LibPrefs>(() => libPrefs.get(prefKey) ?? DEFAULT_PREFS);
   const [opts, setOpts] = useState<LibOptions | null>(null);
-  const [more, setMore] = useState(() => Object.keys(prefs.extra).length > 0);
+  // Fermé à chaque arrivée sur la page ; le bouton indique combien de ces filtres sont actifs.
+  const [more, setMore] = useState(false);
   const [values, setValues] = useState<Record<string, Choice[]>>({});
   const [, render] = useState(0);
   const [error, setError] = useState<Error | null>(null);
@@ -257,7 +260,7 @@ export function LibraryPage({ id }: { id: string }) {
   const filtered = prefs.watch !== 'all' || !!prefs.genre || !!prefs.decade || !!prefs.quality || extraCount > 0;
 
   // « Plus de filtres » : tout ce que le serveur annonce d'autre, valeurs chargées à l'ouverture.
-  const extraFilters = (filters ?? []).filter((f) => !MAIN_FILTERS.has(f.filter) && !PEOPLE_FILTERS.has(f.filter));
+  const extraFilters = (filters ?? []).filter((f) => !MAIN_FILTERS.has(f.filter) && !PEOPLE_FILTERS.has(f.filter) && !HIDDEN_FILTERS.has(f.filter));
   useEffect(() => {
     if (!more || !srv.filterValues) return;
     let live = true;
@@ -312,7 +315,12 @@ export function LibraryPage({ id }: { id: string }) {
     ['watched', 'lib.watch.watched'],
   ];
   const qualities = showEpisodes ? (opts?.episodeRes ?? []) : [...(opts?.resolutions ?? []), ...(has('hdr') ? [{ key: 'hdr', title: 'HDR' }] : [])];
-  const setExtra = (k: string, v: string) => setPrefs({ extra: { ...prefs.extra, [k]: v } });
+  const setExtra = (k: string, v: string) => {
+    const extra = { ...prefs.extra };
+    if (v) extra[k] = v;
+    else delete extra[k];
+    setPrefs({ extra });
+  };
 
   const s = settings.value;
   return (

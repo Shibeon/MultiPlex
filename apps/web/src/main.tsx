@@ -22,6 +22,8 @@ if (isXrayWindow) {
 } else {
   initNav();
   render(<App />, document.getElementById('app')!);
+  // L'interface et son thème sont en place : le fond provisoire d'index.html n'a plus lieu d'être.
+  requestAnimationFrame(() => document.documentElement.removeAttribute('data-boot'));
   boot().catch(() => (status.value = 'login'));
 
   if (import.meta.env.PROD && 'serviceWorker' in navigator && location.protocol.startsWith('http')) {

@@ -629,8 +629,10 @@ function createWindow() {
     height: 820,
     minWidth: 420,
     minHeight: 320,
-    backgroundColor: '#000000',
+    backgroundColor: '#0f1115',
     autoHideMenuBar: true,
+    // Affichée seulement une fois la première image peinte : pas de rectangle vide au lancement.
+    show: false,
     ...(HIDDEN ? { x: -20000, y: -20000, skipTaskbar: true } : {}),
     webPreferences: {
       contextIsolation: true,
@@ -642,7 +644,17 @@ function createWindow() {
   });
   main = win;
   // L'application s'ouvre en grand ; les tests, eux, restent hors écran.
-  if (!HIDDEN) win.maximize();
+  const reveal = () => {
+    if (win.isDestroyed() || win.isVisible()) return;
+    if (HIDDEN) win.showInactive();
+    else {
+      win.maximize();
+      win.show();
+    }
+  };
+  win.once('ready-to-show', reveal);
+  // Page qui ne se peint pas (chargement raté) : la fenêtre s'affiche quand même.
+  setTimeout(reveal, 3000);
   registerPlayer(win);
 
   // Les liens externes (connexion Plex) s'ouvrent dans le navigateur du système,
