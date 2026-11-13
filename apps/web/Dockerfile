@@ -8,7 +8,7 @@ WORKDIR /src
 # Manifestes d'abord (couche d'installation réutilisée tant qu'ils ne changent pas). Tous ceux de
 # l'espace de travail sont copiés pour que le fichier de verrouillage reste valide, mais seules les
 # dépendances de la version web sont installées (ni Electron, ni Android).
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json versions.json ./
 COPY packages/core/package.json packages/core/
 COPY apps/web/package.json apps/web/
 COPY apps/desktop/package.json apps/desktop/
