@@ -1,6 +1,24 @@
 [
   {
     "versions": {
+      "desktop": "0.1.22",
+      "web": "0.1.22",
+      "android": "0.1.22",
+      "tv": "0.1.22"
+    },
+    "fr": [
+      "Bibliothèques : bouton « Plus de filtres » avec tous les autres filtres proposés par votre serveur Plex (chaîne, studio, classification, collection, pays, année, langues…).",
+      "Séries : filtre « Qualité des épisodes » (séries ayant des épisodes en 4K, 1080p…), à l’essai.",
+      "Fiche du média : les pastilles montrent de nouveau les caractéristiques du fichier ; ce qui est réellement restitué reste affiché dans le lecteur."
+    ],
+    "en": [
+      "Libraries: a “More filters” button with every other filter your Plex server offers (network, studio, content rating, collection, country, year, languages…).",
+      "TV shows: “Episode quality” filter (shows with episodes in 4K, 1080p…), experimental.",
+      "Details page: the badges show the file’s properties again; what is actually output is still shown in the player."
+    ]
+  },
+  {
+    "versions": {
       "desktop": "0.1.21",
       "web": "0.1.21",
       "android": "0.1.21",
