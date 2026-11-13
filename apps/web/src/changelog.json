@@ -1,6 +1,24 @@
 [
   {
     "versions": {
+      "desktop": "0.1.28",
+      "web": "0.1.28",
+      "android": "0.1.28",
+      "tv": "0.1.28"
+    },
+    "fr": [
+      "Nouvelle barre de navigation : recherche en tête, Amis et Hors ligne en icônes, réglages séparés par un filet.",
+      "Regarder ensemble : l’invitation est beaucoup plus courte (MPX-…@votre-relais). Vos amis doivent avoir cette version pour la lire.",
+      "Réglages : sur un grand écran, les sections se répartissent en colonnes."
+    ],
+    "en": [
+      "New navigation bar: search first, Friends and Offline as icons, settings set apart by a divider.",
+      "Watch together: the invitation is much shorter (MPX-…@your-relay). Your friends need this version to use it.",
+      "Settings: on large screens, sections are laid out in columns."
+    ]
+  },
+  {
+    "versions": {
       "desktop": "0.1.27",
       "web": "0.1.27",
       "android": "0.1.27",
