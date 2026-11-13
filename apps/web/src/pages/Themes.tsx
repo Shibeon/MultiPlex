@@ -1,4 +1,5 @@
 import { THEME_REQUIRED, getJson, parseGallery, parseTheme, type ThemeFile } from '@multiplex/core';
+import { tvDevice } from '../platform';
 import { useEffect, useState } from 'preact/hooks';
 import { t } from '../i18n';
 import { THEMES, settings, update } from '../settings';
@@ -159,6 +160,9 @@ export function ThemesPage() {
       <header class="page-head">
         <h1>{t('themes.title')}</h1>
         <span class="spacer" />
+        {/* Téléviseur : pas de fichiers à enregistrer ni à choisir. */}
+        {!tvDevice && (
+          <>
         <button class="btn" onClick={share}>
           {t('themes.share')}
         </button>
@@ -166,6 +170,8 @@ export function ThemesPage() {
           {t('themes.import')}
           <input type="file" accept="application/json,.json" hidden onChange={(e) => void importFile(e)} />
         </label>
+          </>
+        )}
       </header>
       <p class="muted">{t('themes.lead')}</p>
       {message && (

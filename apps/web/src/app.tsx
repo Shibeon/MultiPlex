@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef } from 'preact/hooks';
-import { t } from './i18n';
+import { tvDevice } from './platform';
+import { libraryTitle, t } from './i18n';
 import { ActivityPage } from './pages/Activity';
 import { LibraryPage, Home, SearchPage } from './pages/Browse';
 import { Details } from './pages/Details';
@@ -97,7 +98,8 @@ const DEEP = new Set(['item', 'discover', 'person', 'themes', 'profiles']);
 
 function BackBar() {
   const [kind] = route.value.parts;
-  if (!DEEP.has(kind)) return null;
+  // Téléviseur : la télécommande a sa touche Retour.
+  if (!DEEP.has(kind) || tvDevice) return null;
   return (
     <div class="page-back-bar">
       <button class="btn page-back" onClick={back} title={`${t('common.back')} (Retour arrière)`}>
@@ -183,7 +185,7 @@ function Routes() {
         <NavLink href="#/" icon="home" label={t('nav.home')} />
         {/* Les bibliothèques (Films, Séries…), puis Ma liste. */}
         {libraries.value.map((l) => (
-          <NavLink key={l.key} href={`#/library/${l.key}`} icon={l.type} label={l.title} />
+          <NavLink key={l.key} href={`#/library/${l.key}`} icon={l.type} label={libraryTitle(l)} />
         ))}
         {discover.value && <NavLink href="#/watchlist" icon="bookmark" label={t('nav.watchlist')} />}
         <div class="nav-sep" />

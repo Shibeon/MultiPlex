@@ -3,6 +3,7 @@
 // de la position (pour « Reprendre » et « vu »). Le transport appartient à la plateforme
 // (`native.cast`) : aujourd'hui l'application de bureau.
 import { randomId, type MediaServer, type Metadata } from '@multiplex/core';
+import { tvDevice } from './platform';
 import { signal } from '@preact/signals';
 import { t } from './i18n';
 import { native, type CastStatus } from './native';
@@ -14,7 +15,8 @@ import { androidCastApi, webCastApi, webCastPossible } from './webcast';
  * Qui envoie : l'application de bureau (son propre protocole), l'application Android (module
  * natif, kit de Google) ou un navigateur Chromium (kit de Google pour le web).
  */
-export const castApi = native?.cast ?? androidCastApi() ?? (webCastPossible() ? webCastApi() : undefined);
+// Un téléviseur ne « caste » pas vers un autre écran.
+export const castApi = tvDevice ? undefined : (native?.cast ?? androidCastApi() ?? (webCastPossible() ? webCastApi() : undefined));
 /** Faux si la plateforme ne peut finalement pas envoyer (Android sans services Google, Fire TV). */
 export const castEnabled = signal(!!castApi);
 if (castApi?.available) void castApi.available().then((ok) => (castEnabled.value = ok), () => (castEnabled.value = false));

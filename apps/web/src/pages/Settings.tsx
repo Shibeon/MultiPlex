@@ -1,4 +1,5 @@
 import { RelaySetting } from '../togetherui';
+import { tvDevice } from '../platform';
 import { QUALITIES } from '@multiplex/core';
 import type { ComponentChildren } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
@@ -224,6 +225,8 @@ export function SettingsPage() {
             <option value="side">{t('set.layout.side')}</option>
           </select>
         </Row>
+        {/* Téléviseur : un sélecteur de couleur ne se manie pas à la télécommande. */}
+        {!tvDevice && (
         <Row label={t('set.accent')}>
           <span class="inline">
             <input type="color" value={s.accent || s.customVars['--accent'] || THEMES[s.theme]?.vars['--accent'] || '#ffffff'} onInput={(e) => update({ accent: e.currentTarget.value })} />
@@ -234,6 +237,7 @@ export function SettingsPage() {
             )}
           </span>
         </Row>
+        )}
         <Range k="cardSize" label={t('set.cardSize')} min={100} max={260} step={10} unit=" px" />
         <Range k="radius" label={t('set.radius')} min={0} max={24} unit=" px" />
         <Range k="uiScale" label={t('set.uiScale')} min={80} max={160} step={5} unit=" %" />
@@ -296,12 +300,17 @@ export function SettingsPage() {
 
       <section>
         <h2>{t('set.advanced')}</h2>
+        {/* Téléviseur : ni code à taper, ni fichiers à enregistrer ou à choisir. */}
+        {!tvDevice && (
         <label class="set-col">
           <span>{t('set.customCss')}</span>
           <small class="muted">{t('set.customCssHelp')}</small>
           <textarea rows={6} spellcheck={false} value={s.customCss} placeholder=".card:focus-visible { transform: scale(1.08); }" onInput={(e) => update({ customCss: e.currentTarget.value })} />
         </label>
+        )}
         <div class="actions">
+          {!tvDevice && (
+            <>
           <button class="btn" onClick={exportFile}>
             {t('set.export')}
           </button>
@@ -309,6 +318,8 @@ export function SettingsPage() {
             {t('set.import')}
             <input type="file" accept="application/json,.json" hidden onChange={(e) => void importFile(e)} />
           </label>
+            </>
+          )}
           <button class="btn" onClick={() => (settings.value = { ...DEFAULTS })}>
             {t('set.reset')}
           </button>

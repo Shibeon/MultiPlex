@@ -2,6 +2,7 @@
 // l'application Plex : liste de suivi, partage, file d'attente, bande-annonce, listes de
 // lecture, vu / non vu, « Continuer à regarder », téléchargement et informations.
 import { discoverId, type Metadata } from '@multiplex/core';
+import { tvDevice } from './platform';
 import { signal } from '@preact/signals';
 import type { ComponentChildren } from 'preact';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
@@ -193,7 +194,8 @@ function Menu({ at }: { at: MenuTarget }) {
           }
         />
       )}
-      {did && <Entry icon="share" label={t('menu.share')} onClick={() => void copy(shareLink(did)).then(() => done(t('menu.copied')))} />}
+      {/* Téléviseur : pas de presse-papiers où coller le lien. */}
+      {did && !tvDevice && <Entry icon="share" label={t('menu.share')} onClick={() => void copy(shareLink(did)).then(() => done(t('menu.copied')))} />}
       {at.kind === 'item' && playable && (
         <>
           <Entry icon="next" label={t('menu.playNext')} onClick={() => void queue(true)} />

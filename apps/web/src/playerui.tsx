@@ -1,4 +1,5 @@
 import type { ComponentChildren } from 'preact';
+import { settings } from './settings';
 import { useEffect, useState } from 'preact/hooks';
 import { t } from './i18n';
 import { Icon } from './ui';
@@ -234,7 +235,7 @@ export function liveTechWeb(v: HTMLVideoElement | null, plan: { mode: 'direct' |
   return out;
 }
 
-const clockOf = (d: Date) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+const clockOf = (d: Date) => d.toLocaleTimeString(settings.value.lang, { hour: '2-digit', minute: '2-digit' });
 
 /** Heure qu'il est, et heure de fin estimée de la lecture. */
 export function PlayerClock({ remaining, speed = 1 }: { remaining: number; speed?: number }) {

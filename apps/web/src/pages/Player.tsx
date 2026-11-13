@@ -1,4 +1,5 @@
 import { lockLandscape, useLandscape } from '../orientation';
+import { tvDevice } from '../platform';
 import { PillMenu, PlayerClock, PlayerOutput, PlayerSub, Pill, SkipButton, liveTechWeb } from '../playerui';
 import { QUALITIES, hdrKind, srtToVtt, streamsOf, techBadges, type Media, type Metadata, type PlaybackPlan, type Stream } from '@multiplex/core';
 import type Hls from 'hls.js';
@@ -536,7 +537,7 @@ export function Player({ id }: { id: string }) {
     { id: 'speed', label: `${t('player.speed')} · ${choice.current.speed === 1 ? 'Normale' : `×${choice.current.speed}`}`, on: false },
     { id: 'stats', label: t('player.stats'), on: !!stats },
     remote.ok || castEnabled.value ? { id: 'cast', label: t('cast.title'), on: remote.on } : null,
-    document.pictureInPictureEnabled ? { id: 'pip', label: t('player.pip'), on: false } : null,
+    document.pictureInPictureEnabled && !tvDevice ? { id: 'pip', label: t('player.pip'), on: false } : null,
   ].filter((x): x is { id: string; label: string; on: boolean } => !!x);
   const menuItems: { id: number | string; label: string; on: boolean }[] =
     menu === 'audio'
@@ -678,17 +679,23 @@ export function Player({ id }: { id: string }) {
         </div>
         <div class="controls">
           <span class="side side-left">
-            <button class="btn icon-btn" aria-label="Volume" aria-pressed={ui.muted} onClick={() => (v().muted = !v().muted)}>
-              <Icon name={ui.muted ? 'mute' : 'volume'} />
-            </button>
+            {/* Téléviseur : le son se règle à la télécommande. */}
+            {!tvDevice && (
+              <button class="btn icon-btn" aria-label="Volume" aria-pressed={ui.muted} onClick={() => (v().muted = !v().muted)}>
+                <Icon name={ui.muted ? 'mute' : 'volume'} />
+              </button>
+            )}
           </span>
           {audioStreams.length > 0 && <PillMenu icon="audio" act="audio" label={t('player.audio')} open={menu === 'audio'} menu={menuList} onClick={openMenu('audio')} />}
           {subStreams.length > 0 && <PillMenu icon="subtitles" act="sub" label={t('player.subs')} open={menu === 'sub'} menu={menuList} onClick={openMenu('sub')} />}
           <PillMenu icon="plus" act="more" label={t('player.more')} open={!!menu && menu !== 'audio' && menu !== 'sub'} menu={menuList} onClick={() => setMenu(menu ? null : 'more')} />
           <span class="side">
-            <button class="btn icon-btn" aria-label={t('player.fullscreen')} title={t('player.fullscreen')} onClick={fullscreen}>
-              <Icon name="full" />
-            </button>
+            {/* Téléviseur : l'application occupe déjà tout l'écran. */}
+            {!tvDevice && (
+              <button class="btn icon-btn" aria-label={t('player.fullscreen')} title={t('player.fullscreen')} onClick={fullscreen}>
+                <Icon name="full" />
+              </button>
+            )}
           </span>
         </div>
       </div>

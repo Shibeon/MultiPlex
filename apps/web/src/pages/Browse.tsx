@@ -1,6 +1,6 @@
 import type { Hub, LibraryOptions, MediaServer, Metadata } from '@multiplex/core';
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { formatDuration, t } from '../i18n';
+import { formatDuration, libraryTitle, t } from '../i18n';
 import { go, route } from '../router';
 import { cardWidth, load, save, settings } from '../settings';
 import { libraries, server, useData } from '../store';
@@ -333,7 +333,7 @@ export function LibraryPage({ id }: { id: string }) {
   return (
     <div class="page">
       <header class="page-head">
-        <h1>{lib?.title ?? ''}</h1>
+        <h1>{lib ? libraryTitle(lib) : ''}</h1>
         {state.total >= 0 && (
           <span class="muted count">
             {state.total} {t('lib.count')}

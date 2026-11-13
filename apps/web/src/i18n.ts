@@ -4,6 +4,10 @@ type Dict = Record<string, string>;
 
 const fr: Dict = {
   'nav.home': 'Accueil',
+  'libname.movie': 'Films',
+  'libname.show': 'Séries',
+  'libname.artist': 'Musique',
+  'libname.photo': 'Photos',
   'nav.search': 'Recherche',
   'nav.settings': 'Réglages',
   'upd.title': 'Mises à jour',
@@ -464,6 +468,10 @@ const fr: Dict = {
 
 const en: Dict = {
   'nav.home': 'Home',
+  'libname.movie': 'Movies',
+  'libname.show': 'TV Shows',
+  'libname.artist': 'Music',
+  'libname.photo': 'Photos',
   'nav.search': 'Search',
   'nav.settings': 'Settings',
   'upd.title': 'Updates',
@@ -927,6 +935,22 @@ const dicts: Record<string, Dict> = { fr, en };
 /** Traduction réactive : relit le signal des réglages à chaque rendu. */
 export function t(key: string): string {
   return dicts[settings.value.lang]?.[key] ?? fr[key] ?? key;
+}
+
+/**
+ * Nom d'une bibliothèque dans la langue de l'interface. Seuls les noms par défaut (« Movies »,
+ * « Films », « TV Shows », « Séries »…) sont traduits ; un nom choisi (« Films 4K », « Animés »)
+ * reste tel quel.
+ */
+const DEFAULT_LIBRARY_NAMES: Record<string, string[]> = {
+  movie: ['movies', 'movie', 'films', 'film', 'películas', 'peliculas', 'filme', 'filmes'],
+  show: ['tv shows', 'tv show', 'shows', 'tv', 'series', 'séries', 'série', 'séries tv', 'series tv', 'serien', 'tv-serien'],
+  artist: ['music', 'musique', 'musik', 'música', 'musica'],
+  photo: ['photos', 'photo', 'pictures', 'images', 'fotos'],
+};
+export function libraryTitle(lib: { title: string; type: string }): string {
+  const names = DEFAULT_LIBRARY_NAMES[lib.type];
+  return names?.includes(lib.title.trim().toLowerCase()) ? t(`libname.${lib.type}`) : lib.title;
 }
 
 export function formatDuration(ms: number | undefined): string {
