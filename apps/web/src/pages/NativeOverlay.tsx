@@ -5,7 +5,7 @@ import { moveFocus } from '../nav';
 import { couchOn, settings } from '../settings';
 import { cancelXray, runXray, xrayAvailable } from '../xray';
 import { Icon, SeekPreview } from '../ui';
-import { PillMenu, PlayerClock, PlayerSub, PlayerTech, Pill, SkipButton } from '../playerui';
+import { PillMenu, PlayerClock, PlayerSub, PlayerTech, Pill, SkipButton, liveTechNative } from '../playerui';
 
 type Menu = null | 'audio' | 'sub' | 'speed' | 'chapter' | 'quality' | 'output' | 'more';
 
@@ -196,10 +196,6 @@ export function NativeOverlay() {
     return () => removeEventListener('keydown', onKey);
   }, [menu, volume, meta.hasNext]);
 
-  // Ce que mpv envoie réellement à la sortie audio : son brut (l'ampli décode) ou son décodé.
-  const out = (s['audio-out-params'] ?? null) as { format?: string; 'hr-channels'?: string; 'channel-count'?: number } | null;
-  const RAW: Record<string, string> = { 'spdif-ac3': 'Dolby Digital', 'spdif-eac3': 'Dolby Digital Plus', 'spdif-truehd': 'Dolby TrueHD', 'spdif-dts': 'DTS', 'spdif-dtshd': 'DTS-HD' };
-  const outLabel = !out?.format ? '' : s['ac3-encode'] && out.format === 'spdif-ac3' ? `${t('native.audioEncoded')} · Dolby Digital 5.1` : out.format.startsWith('spdif') ? `${t('native.audioRaw')} · ${RAW[out.format] ?? out.format.slice(6).toUpperCase()}` : `${t('native.audioDecoded')} · ${{ stereo: '2.0', mono: '1.0' }[out['hr-channels'] ?? ''] ?? out['hr-channels'] ?? `${out['channel-count'] ?? '?'} ch`}`;
 
   // À la pause : qui est à l'écran ? L'analyse attend que la pause soit installée, et s'efface à la reprise.
   const [xray, setXray] = useState<{ at: number; state: 'working' | 'done' | 'failed'; faces: number; onScreen: number[] } | null>(null);
@@ -350,16 +346,9 @@ export function NativeOverlay() {
         <div class="player-title">
           <strong>{meta.title}</strong>
           {meta.sub && <PlayerSub text={meta.sub} />}
-          <PlayerTech badges={meta.tech} />
+          <PlayerTech badges={liveTechNative(s, meta)} />
         </div>
         <PlayerClock remaining={duration - time} speed={speed} />
-        <span class="chips">
-          {outLabel && (
-            <span class={`chip${out?.format?.startsWith('spdif') ? ' raw' : ''}`} data-audio-out={out?.format}>
-              {outLabel}
-            </span>
-          )}
-        </span>
       </div>
 
       {/* À la pause : qui joue dans ce film. Un clic quitte la lecture (position gardée) pour la fiche de la personne. */}

@@ -9,7 +9,7 @@ const net = require('node:net');
 const path = require('node:path');
 
 /** Propriétés suivies en continu ; chaque changement est transmis à l'interface. */
-const OBSERVED = ['time-pos', 'duration', 'pause', 'paused-for-cache', 'aid', 'sid', 'eof-reached', 'volume', 'mute', 'speed', 'track-list', 'chapter-list', 'demuxer-cache-time', 'current-ao', 'container-fps', 'audio-device', 'audio-out-params'];
+const OBSERVED = ['time-pos', 'duration', 'pause', 'paused-for-cache', 'aid', 'sid', 'eof-reached', 'volume', 'mute', 'speed', 'track-list', 'chapter-list', 'demuxer-cache-time', 'current-ao', 'container-fps', 'audio-device', 'audio-out-params', 'video-params', 'video-target-params'];
 
 /**
  * Transmission du son à un ampli : du plus riche au plus simple. Quand la sortie refuse

@@ -1370,3 +1370,12 @@ input.search-input:focus-visible { background-color: var(--glass-2); }
 .shell.top .sidebar, .player .btn, .btn.toggle-pill, .social, .settings section, select { -webkit-backdrop-filter: blur(18px) saturate(1.8); backdrop-filter: blur(18px) saturate(1.8); }
 .shell.top .sidebar { box-shadow: inset 1px 1px 0 rgb(255 255 255 / 0.22), inset -1px -1px 0 rgb(255 255 255 / 0.06), 0 10px 40px rgb(0 0 0 / 0.35); }
 @media (prefers-reduced-motion: reduce) { .btn::before, .nav-link::before, .social::before, .profile::before { transition: none; } }
+
+/* Pastilles « formats restitués » : SDR, traitement (Direct Play, transcodage, passthrough,
+   réencodage) et ce qui n'est pas vérifiable (contour pointillé, petit « ? »). */
+.ptech .ptech-sdr { box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.4); color: rgba(255, 255, 255, 0.85); font-weight: 600; }
+.ptech .ptech-mode, .ptech .ptech-proc { background: rgba(255, 255, 255, 0.12); box-shadow: none; font-weight: 500; color: rgba(255, 255, 255, 0.9); }
+.ptech .ptech-proc { box-shadow: inset 0 0 0 1.5px rgba(124, 255, 107, 0.6); color: #b9ffad; background: rgba(0, 0, 0, 0.35); }
+.ptech li.unsure { box-shadow: none; outline: 1.5px dashed rgba(255, 255, 255, 0.45); outline-offset: -1.5px; opacity: 0.85; }
+.ptech li.unsure > i { font-style: normal; font-size: 0.75em; opacity: 0.75; margin-left: -0.1em; }
+.ptech .ptech-hdr.unsure { outline-color: #3ecbff; }

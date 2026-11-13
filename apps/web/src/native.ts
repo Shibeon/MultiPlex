@@ -47,8 +47,10 @@ export interface NativeMeta {
   /** Qualité en cours et choix proposés (« original » = fichier lu tel quel). */
   quality?: string;
   qualities?: { id: string; label: string }[];
-  /** Pastilles du fichier : définition, plage dynamique, son. */
+  /** Pastilles du fichier : définition, plage dynamique, son (pour reconnaître Atmos, Dolby Vision…). */
   tech?: { kind: string; label: string }[];
+  /** Fichier lu tel quel par mpv, ou converti par le serveur (qualité limitée). */
+  playMode?: 'direct' | 'transcode';
 }
 
 export type NativeCommand = 'toggle' | 'pause' | 'seek' | 'seekBy' | 'volume' | 'mute' | 'speed' | 'aid' | 'sid' | 'stats' | 'key' | 'audioDevice';

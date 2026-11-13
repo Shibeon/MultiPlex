@@ -154,6 +154,7 @@ export function NativePlayer({ id }: { id: string }) {
       quality: quality.current,
       qualities: QUALITIES.map((q) => ({ id: q.id, label: q.label })),
       tech: techBadges(it.Media?.[0]),
+      playMode: original ? 'direct' : 'transcode',
     });
   };
 

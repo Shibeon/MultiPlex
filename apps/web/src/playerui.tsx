@@ -19,18 +19,122 @@ export function SkipButton({ seconds, onClick, act }: { seconds: number; onClick
   );
 }
 
-/** Pastilles du fichier lu (définition, plage dynamique, son), sous le titre. */
-export function PlayerTech({ badges }: { badges: { kind: string; label: string }[] | undefined }) {
+/** Une pastille : `unsure` = déduite, pas vérifiée dans la chaîne de lecture ; `hint` = précision au survol. */
+export type TechBadge = { kind: string; label: string; unsure?: boolean; hint?: string };
+
+/** Pastilles sous le titre : ce qui est réellement restitué (voir liveTechNative / liveTechWeb). */
+export function PlayerTech({ badges }: { badges: TechBadge[] | undefined }) {
   if (!badges?.length) return null;
   return (
-    <ul class="ptech" aria-label="Caractéristiques techniques">
+    <ul class="ptech" aria-label={t('live.label')}>
       {badges.map((b) => (
-        <li key={b.kind + b.label} class={`ptech-${b.kind}`} data-tech={b.label}>
+        <li key={b.kind + b.label} class={`ptech-${b.kind}${b.unsure ? ' unsure' : ''}`} data-tech={b.label} title={b.unsure ? `${b.hint ?? b.label} — ${t('live.unsure')}` : b.hint}>
           {b.label}
+          {b.unsure && <i aria-hidden="true">?</i>}
         </li>
       ))}
     </ul>
   );
+}
+
+/** Définition d'après les dimensions réellement décodées (les films recadrés gardent leur largeur). */
+export function resolutionLabel(w: number, h: number): string {
+  if (w >= 3200 || h >= 1900) return '4K';
+  if (w >= 2300 || h >= 1300) return '1440p';
+  if (w >= 1700 || h >= 900) return '1080p';
+  if (w >= 1100 || h >= 650) return '720p';
+  return `${Math.round(h)}p`;
+}
+
+export function channelsLabel(n: number | undefined): string {
+  if (!n) return '';
+  return n >= 8 ? '7.1' : n >= 6 ? '5.1' : n === 2 ? t('live.stereo') : n === 1 ? 'Mono' : `${n} ch`;
+}
+
+const src = (tech: TechBadge[] | undefined, kind: string) => tech?.find((b) => b.kind === kind)?.label;
+const SPDIF: Record<string, string> = { 'spdif-ac3': 'Dolby Digital', 'spdif-eac3': 'Dolby Digital Plus', 'spdif-truehd': 'Dolby TrueHD', 'spdif-dts': 'DTS', 'spdif-dtshd': 'DTS-HD' };
+
+/**
+ * Lecteur natif (mpv) : ce qui sort vraiment.
+ * - définition : image décodée (`video-params`), donc après un éventuel transcodage ;
+ * - plage dynamique : ce que mpv envoie à l'écran (`video-target-params` : PQ = HDR10, HLG, sinon
+ *   SDR). Sans cette information (mpv ancien), la plage de la source est donnée comme non vérifiée ;
+ * - son : format remis à la sortie (`audio-out-params`) : flux brut vers l'ampli, réencodé en
+ *   Dolby Digital, ou PCM décodé avec son nombre de canaux ;
+ * - traitement : lecture directe ou transcodage par le serveur, passthrough ou réencodage.
+ */
+export function liveTechNative(s: Record<string, unknown>, meta: { tech?: TechBadge[]; playMode?: 'direct' | 'transcode' }): TechBadge[] {
+  const out: TechBadge[] = [];
+  const vp = s['video-params'] as { dw?: number; dh?: number; w?: number; h?: number; gamma?: string } | undefined;
+  const w = vp?.dw ?? vp?.w;
+  const h = vp?.dh ?? vp?.h;
+  if (w && h) out.push({ kind: 'resolution', label: resolutionLabel(w, h) });
+
+  const srcHdr = src(meta.tech, 'hdr');
+  const target = s['video-target-params'] as { gamma?: string } | undefined;
+  if (vp?.gamma) {
+    const srcIsHdr = vp.gamma === 'pq' || vp.gamma === 'hlg';
+    if (target?.gamma) {
+      if (target.gamma === 'pq') out.push({ kind: 'hdr', label: 'HDR10', hint: srcHdr && srcHdr !== 'HDR10' ? t('live.hdrAs').replace('{s}', srcHdr) : undefined });
+      else if (target.gamma === 'hlg') out.push({ kind: 'hdr', label: 'HLG' });
+      else out.push({ kind: 'sdr', label: 'SDR', hint: srcIsHdr ? t('live.toSdr').replace('{s}', srcHdr ?? 'HDR') : undefined });
+    } else if (srcIsHdr) {
+      // mpv n'envoie jamais de Dolby Vision à l'écran (il l'applique lui-même) : au mieux du HDR10.
+      const label = vp.gamma === 'hlg' ? 'HLG' : 'HDR10';
+      out.push({ kind: 'hdr', label, unsure: true, hint: `${srcHdr && srcHdr !== label ? `${t('live.hdrAs').replace('{s}', srcHdr)} ; ` : ''}${t('live.screenUnknown')}` });
+    }
+    else out.push({ kind: 'sdr', label: 'SDR' });
+  }
+
+  const ao = s['audio-out-params'] as { format?: string; 'channel-count'?: number } | undefined;
+  const proc: TechBadge[] = [];
+  if (ao?.format?.startsWith('spdif')) {
+    if (s['ac3-encode'] && ao.format === 'spdif-ac3') {
+      out.push({ kind: 'audio', label: 'Dolby Digital' }, { kind: 'channels', label: '5.1' });
+      proc.push({ kind: 'proc', label: t('native.audioEncoded') });
+    } else {
+      const srcAudio = src(meta.tech, 'audio');
+      // Atmos voyage dans le flux Dolby Digital+ ou TrueHD transmis tel quel.
+      const atmos = srcAudio === 'Dolby Atmos' && (ao.format === 'spdif-eac3' || ao.format === 'spdif-truehd');
+      const dtsCore = ao.format === 'spdif-dts' && !!srcAudio && srcAudio !== 'DTS';
+      out.push({ kind: 'audio', label: atmos ? 'Dolby Atmos' : SPDIF[ao.format] ?? ao.format.slice(6).toUpperCase(), hint: atmos ? t('live.atmosSent') : dtsCore ? t('live.dtsCore') : undefined });
+      // Le nombre de canaux d'un flux brut est celui de la source (sauf le cœur DTS d'une piste DTS-HD).
+      const ch = src(meta.tech, 'channels');
+      if (ch && !dtsCore) out.push({ kind: 'channels', label: ch });
+      proc.push({ kind: 'proc', label: 'Passthrough' });
+    }
+  } else if (ao?.format) {
+    out.push({ kind: 'audio', label: 'PCM' });
+    const ch = channelsLabel(ao['channel-count']);
+    if (ch) out.push({ kind: 'channels', label: ch });
+  }
+  if (meta.playMode) out.push({ kind: 'mode', label: meta.playMode === 'direct' ? 'Direct Play' : t('live.transcoding') });
+  return [...out, ...proc];
+}
+
+/**
+ * Lecteur web (navigateur, Android, TV) : le navigateur en dit moins. Sont sûrs la définition
+ * de l'image reçue et ce que fait le serveur ; la plage dynamique et le son restitués ne le sont
+ * pas (le navigateur ou le téléviseur décident), ils sont donnés comme non vérifiés.
+ */
+export function liveTechWeb(v: HTMLVideoElement | null, plan: { mode: 'direct' | 'hls'; video?: 'copy' | 'transcode'; audio?: 'copy' | 'transcode' } | null, tech: TechBadge[]): TechBadge[] {
+  if (!plan) return [];
+  const out: TechBadge[] = [];
+  if (v?.videoWidth && v.videoHeight) out.push({ kind: 'resolution', label: resolutionLabel(v.videoWidth, v.videoHeight) });
+  const srcHdr = src(tech, 'hdr');
+  if (srcHdr) {
+    // Converti par le serveur : en général en SDR, mais le navigateur ne le confirme pas.
+    if (plan.video === 'transcode') out.push({ kind: 'sdr', label: 'SDR', unsure: true, hint: t('live.toSdr').replace('{s}', srcHdr) });
+    else out.push({ kind: 'hdr', label: srcHdr, unsure: true, hint: t('live.screenUnknown') });
+  } else if (src(tech, 'resolution')) out.push({ kind: 'sdr', label: 'SDR' });
+  if (plan.audio === 'transcode') out.push({ kind: 'audio', label: 'AAC', hint: t('live.serverAudio') });
+  else {
+    const a = src(tech, 'audio');
+    if (a) out.push({ kind: 'audio', label: a, unsure: true, hint: t('live.browserAudio') });
+  }
+  const mode = plan.mode === 'direct' ? 'Direct Play' : plan.video === 'copy' ? 'Direct Stream' : t('live.transcoding');
+  out.push({ kind: 'mode', label: mode });
+  return out;
 }
 
 const clockOf = (d: Date) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
