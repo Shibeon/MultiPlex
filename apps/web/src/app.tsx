@@ -176,13 +176,14 @@ function Routes() {
           Multi<span>Plex</span>
         </a>
         <NavLink href="#/" icon="home" label={t('nav.home')} />
-        {discover.value && <NavLink href="#/watchlist" icon="bookmark" label={t('nav.watchlist')} />}
-        <NavLink href="#/activity" icon="live" label={t('nav.live')} />
-        {offlineApi && <NavLink href="#/offline" icon="download" label={t('nav.offline')} />}
-        <div class="nav-sep" />
+        {/* Les bibliothèques (Films, Séries…) d'abord, puis Ma liste, Amis et Hors ligne. */}
         {libraries.value.map((l) => (
           <NavLink key={l.key} href={`#/library/${l.key}`} icon={l.type} label={l.title} />
         ))}
+        <div class="nav-sep" />
+        {discover.value && <NavLink href="#/watchlist" icon="bookmark" label={t('nav.watchlist')} />}
+        <NavLink href="#/activity" icon="live" label={t('nav.live')} />
+        {offlineApi && <NavLink href="#/offline" icon="download" label={t('nav.offline')} />}
         <div class="nav-sep grow" />
         <NavLink href="#/search" icon="search" label={t('nav.search')} iconOnly />
         <NavLink href="#/settings" icon="settings" label={t('nav.settings')} iconOnly />
