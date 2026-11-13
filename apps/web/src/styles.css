@@ -129,7 +129,7 @@ input[type='color'] { padding: 0; width: 3em; height: 2em; }
   position: absolute; top: 6px; right: 6px; min-width: 1.5em; padding: 0.1em 0.45em; border-radius: 99px;
   background: var(--accent); color: var(--on-accent); font-size: 0.75rem; font-weight: 700; text-align: center;
 }
-.badge.dot { min-width: 0; width: 0.7em; height: 0.7em; padding: 0; }
+.badge.seen { display: grid; place-items: center; min-width: 0; width: 1.5rem; height: 1.5rem; padding: 0; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45); }
 .progress { position: absolute; inset: auto 0 0 0; height: 4px; background: rgba(0, 0, 0, 0.55); }
 .progress i { display: block; height: 100%; background: var(--accent); }
 .skeleton { aspect-ratio: 2 / 3; background: var(--surface); border-radius: var(--radius); }
@@ -783,6 +783,9 @@ button.cast-card { border: 0; background: none; cursor: pointer; font: inherit; 
 /* ---------- menu d'un titre (clic droit, bouton « ⋯ ») ---------- */
 .card-more { position: absolute; top: 0.4rem; right: 0.4rem; z-index: 2; display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: 50%; background: rgba(10, 10, 14, 0.72); color: #fff; opacity: 0; transition: opacity var(--speed), background var(--speed); cursor: pointer; }
 .card:hover .card-more, .card:focus-visible .card-more, .card-more:focus-visible { opacity: 1; }
+/* Le bouton « ⋯ » prend la place du compteur ou de la coche pendant le survol. */
+.badge { transition: opacity 0.15s; }
+.card:hover .badge, .card:focus-visible .badge { opacity: 0; }
 .card-more:hover { background: var(--accent); color: #000; }
 @media (hover: none) { .card-more { opacity: 1; } }
 .menu { position: fixed; z-index: 300; min-width: 15rem; max-width: 20rem; padding: 0.35rem; border-radius: calc(var(--radius) * 0.9); background: var(--surface); box-shadow: 0 18px 60px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.06); animation: menu-in 0.12s ease-out; }

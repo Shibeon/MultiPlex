@@ -286,7 +286,13 @@ export function Card({ item }: { item: Metadata }) {
       <div class="poster">
         <span class="poster-fallback">{title}</span>
         {thumb && <img loading="lazy" decoding="async" src={srv.image(thumb, w, Math.round(w * 1.5))} alt="" />}
-        {remaining > 0 ? <span class="badge">{remaining}</span> : !isWatched(item) && !progress ? <span class="badge dot" /> : null}
+        {remaining > 0 ? (
+          <span class="badge">{remaining}</span>
+        ) : isWatched(item) ? (
+          <span class="badge seen" title={t('item.seen')}>
+            <Icon name="check" size={16} />
+          </span>
+        ) : null}
         {progress > 0 && (
           <span class="progress">
             <i style={{ width: `${progress * 100}%` }} />
