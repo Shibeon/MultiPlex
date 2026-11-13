@@ -215,7 +215,9 @@ jobs:
             gh release view "$t" --repo "$repo" --json body -q .body > old-body.json || continue
             rm -f fixed-body.md
             node scripts/versions.mjs body "${t#v}" fixed-body.md < old-body.json
-            if [ -s fixed-body.md ]; then gh release edit "$t" --repo "$repo" --notes-file fixed-body.md; fi
+            # Une page qui refuse la modification (ancienne version en double, par exemple) est
+            # laissée telle quelle : ce n'est pas une raison pour arrêter la publication.
+            if [ -s fixed-body.md ]; then gh release edit "$t" --repo "$repo" --notes-file fixed-body.md || echo "$t : page laissée telle quelle."; fi
           done
       - name: Étiqueter le commit publié
         if: env.UNPUBLISHED != '1'
