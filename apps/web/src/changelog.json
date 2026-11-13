@@ -1,6 +1,26 @@
 [
   {
     "versions": {
+      "desktop": "0.1.20",
+      "web": "0.1.20",
+      "android": "0.1.20",
+      "tv": "0.1.20"
+    },
+    "fr": [
+      "Lecteur : le bouton Lecture reste toujours au centre, qu’il y ait un épisode précédent, un épisode suivant, les deux ou aucun.",
+      "Téléphone : la lecture passe automatiquement en paysage (le lecteur ne s’affiche plus en portrait), avec une mise en page adaptée ; un grand téléphone en paysage n’est plus pris pour un téléviseur.",
+      "Fiche : plus de petit cercle vide au survol des affiches des saisons et des séries associées.",
+      "Ordinateur : correction de la mise à jour à chaud, qui repassait par l’installation à la fermeture. Cette version s’installe encore à l’ancienne ; les suivantes se feront pendant que MultiPlex est ouvert, avec « Redémarrer »."
+    ],
+    "en": [
+      "Player: the Play button now always stays in the centre, whether there is a previous episode, a next one, both or neither.",
+      "Phone: playback switches to landscape automatically (the player is never shown in portrait), with a layout made for it; a large phone in landscape is no longer mistaken for a TV.",
+      "Details page: no more small empty circle when hovering season and related-show posters.",
+      "Computer: fixed the hot update, which fell back to installing on quit. This version still installs the old way; the next ones will install while MultiPlex is open, with “Restart”."
+    ]
+  },
+  {
+    "versions": {
       "desktop": "0.1.19",
       "web": "0.1.19",
       "android": "0.1.19",
