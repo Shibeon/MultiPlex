@@ -198,6 +198,7 @@ export function SettingsPage() {
   return (
     <div class="page settings">
       <h1>{t('nav.settings')}</h1>
+      <div class="settings-cols">
 
       <section>
         <h2>{t('set.appearance')}</h2>
@@ -349,6 +350,7 @@ export function SettingsPage() {
         </div>
         <p class="muted small">{t('set.about')}</p>
       </section>
+      </div>
     </div>
   );
 }
