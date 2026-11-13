@@ -126,7 +126,7 @@ class MpvPlayer {
       '--save-position-on-quit=no',
       `--force-media-title=${opts.title ?? 'MultiPlex'}`,
       // Échap et Retour quittent la lecture et rendent la main à l'interface.
-      `--input-conf=${path.join(__dirname, 'mpv-input.conf').replace('app.asar', 'app.asar.unpacked')}`,
+      `--input-conf=${__dirname.includes('.asar') ? path.join(process.resourcesPath, 'app.asar.unpacked', 'mpv-input.conf') : path.join(__dirname, 'mpv-input.conf')}`,
     ];
     // Transmission du flux audio brut à un ampli ou une barre de son (Dolby, DTS, Atmos).
     // Si la sortie refuse ce flux (casque, écran, enceintes), mpv se fige en cherchant son

@@ -4,7 +4,9 @@
 const { execFile, execFileSync } = require('node:child_process');
 const path = require('node:path');
 
-const SCRIPT = path.join(__dirname, 'display-mode.ps1').replace('app.asar', 'app.asar.unpacked');
+// Hors de l'archive (PowerShell ne lit pas l'asar) : toujours la copie de la base installée,
+// même quand le code tourne depuis une mise à jour à chaud.
+const SCRIPT = __dirname.includes('.asar') ? path.join(process.resourcesPath, 'app.asar.unpacked', 'display-mode.ps1') : path.join(__dirname, 'display-mode.ps1');
 const supported = process.platform === 'win32';
 
 /** Windows annonce 23, 59 ou 119 Hz pour les fréquences « télé » 23,976, 59,94 ou 119,88. */

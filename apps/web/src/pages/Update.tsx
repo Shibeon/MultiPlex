@@ -191,7 +191,7 @@ export function UpdateSettings() {
         : u.status === 'error'
           ? t('upd.error')
           : u.status === 'ready' && settings.value.autoUpdate
-            ? t(u.when === 'launch' ? 'upd.onLaunch' : 'upd.onQuit').replace('{v}', u.version ?? '')
+            ? t(u.when === 'restart' ? 'upd.onRestart' : u.when === 'launch' ? 'upd.onLaunch' : 'upd.onQuit').replace('{v}', u.version ?? '')
             : u.status === 'available' || u.status === 'downloading' || u.status === 'ready'
             ? `${t('upd.available')} ${u.version}`
             : '';

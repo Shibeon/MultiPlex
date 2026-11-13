@@ -66,7 +66,7 @@ export interface UpdateState {
   notes?: string;
   message?: string;
   /** Mise à jour silencieuse prête : installée au prochain lancement, ou à la fermeture (anciennes versions). */
-  when?: 'launch' | 'quit';
+  when?: 'launch' | 'quit' | 'restart';
 }
 
 export interface NativeApi {

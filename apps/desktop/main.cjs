@@ -7,13 +7,16 @@ const { MpvPlayer, listAudioDevices, findMpv } = require('./mpv.cjs');
 const { OfflineLibrary } = require('./offline.cjs');
 const { discover: castDiscover, CastSession } = require('./cast.cjs');
 const { Thumbnailer } = require('./thumbs.cjs');
-const { setupUpdater, installPendingAtLaunch } = require('./updater.cjs');
+const { setupUpdater, installPendingAtLaunch, hotBooted } = require('./updater.cjs');
 const { RefreshMatcher } = require('./display.cjs');
 
-// Empaquetée, l'app embarque le build web dans ses ressources.
-const INDEX = app.isPackaged
-  ? path.join(process.resourcesPath, 'web', 'index.html')
-  : path.join(__dirname, '..', 'web', 'dist', 'index.html');
+// Empaquetée, l'app embarque le build web dans ses ressources ; une mise à jour à chaud
+// (boot.cjs) apporte le sien, à côté de ce fichier.
+const INDEX = !app.isPackaged
+  ? path.join(__dirname, '..', 'web', 'dist', 'index.html')
+  : fs.existsSync(path.join(__dirname, 'web', 'index.html'))
+    ? path.join(__dirname, 'web', 'index.html')
+    : path.join(process.resourcesPath, 'web', 'index.html');
 
 const arg = (name) => process.argv.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3);
 /** Tests automatiques : fenêtres hors de l'écran et son coupé, pour ne pas déranger. */
@@ -659,6 +662,8 @@ function createWindow() {
   });
 
   win.loadFile(INDEX);
+  // Mise à jour à chaud : l'interface s'est chargée, ce code est sain (voir boot.cjs).
+  win.webContents.once('did-finish-load', hotBooted);
 
   // Test de fumée : `--smoke=capture.png` charge l'app, enregistre une capture
   // et quitte avec un code d'erreur si le chargement a échoué.

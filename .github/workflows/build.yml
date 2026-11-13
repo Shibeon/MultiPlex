@@ -149,9 +149,18 @@ jobs:
           publish=never
           if [[ "$PUBLISH" == true ]]; then publish=always; fi
           node ../../scripts/versions.mjs notes desktop release-notes.txt
+          # Clé de la base (embarquée dans l'app) et paquet de mise à jour à chaud (voir boot.cjs).
+          node ../../scripts/hot-bundle.mjs
           pnpm exec electron-builder --publish "$publish" -c.releaseInfo.releaseNotesFile=release-notes.txt
+          # Le paquet à chaud rejoint la version en brouillon : une app installée sur la même base
+          # le téléchargera pendant qu'elle tourne, et « Redémarrer » suffira.
+          if [[ "$PUBLISH" == true ]]; then
+            repo=$(node -p "const p = require('./package.json').build.publish[0]; p.owner + '/' + p.repo")
+            gh release upload "$TAG" hot-out/hot-*.json hot-out/MultiPlex-hot-*.asar --repo "$repo" --clobber
+          fi
         env:
           PUBLISH: ${{ needs.release.outputs.desktop }}
+          TAG: ${{ needs.release.outputs.tag }}
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
 

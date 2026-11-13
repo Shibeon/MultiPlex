@@ -3,10 +3,10 @@
   "version": "0.1.17",
   "private": true,
   "description": "Coque de bureau MultiPlex (Windows, macOS, Linux)",
-  "main": "main.cjs",
+  "main": "boot.cjs",
   "scripts": {
     "start": "electron .",
-    "typecheck": "node --check main.cjs && node --check mpv.cjs && node --check updater.cjs && node --check preload.cjs && node --check display.cjs && node --check thumbs.cjs && node --check offline.cjs && node --check cast.cjs",
+    "typecheck": "node --check boot.cjs && node --check main.cjs && node --check mpv.cjs && node --check updater.cjs && node --check preload.cjs && node --check display.cjs && node --check thumbs.cjs && node --check offline.cjs && node --check cast.cjs",
     "dist": "electron-builder"
   },
   "devDependencies": {
@@ -24,6 +24,8 @@
       "output": "release"
     },
     "files": [
+      "boot.cjs",
+      "base.json",
       "main.cjs",
       "mpv.cjs",
       "updater.cjs",
