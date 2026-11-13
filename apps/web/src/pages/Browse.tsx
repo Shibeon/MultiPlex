@@ -137,6 +137,8 @@ interface LibPrefs {
   quality: string;
   /** Autres filtres annoncés par le serveur (« Plus de filtres ») : paramètre → valeur. */
   extra: Record<string, string>;
+  /** « Plus de filtres » ouvert au dernier passage sur la page. */
+  more?: boolean;
 }
 const DEFAULT_PREFS: LibPrefs = { sort: 'titleSort', dir: 'asc', watch: 'all', genre: '', decade: '', quality: '', extra: {} };
 
@@ -216,13 +218,18 @@ export function LibraryPage({ id }: { id: string }) {
   const prefKey = `${srv.id}:${id}`;
   const [prefs, setPrefsState] = useState<LibPrefs>(() => libPrefs.get(prefKey) ?? DEFAULT_PREFS);
   const [opts, setOpts] = useState<LibOptions | null>(null);
-  // Fermé à chaque arrivée sur la page ; le bouton indique combien de ces filtres sont actifs.
-  const [more, setMore] = useState(false);
+  // « Plus de filtres » : ouvert si l'un de ses filtres est actif, sinon comme on l'a laissé.
+  const [more, setMoreState] = useState(() => !!prefs.more || Object.values(prefs.extra).some(Boolean));
+  const setMore = (open: boolean) => {
+    setMoreState(open);
+    const p = libPrefs.get(prefKey) ?? prefs;
+    libPrefs.set(prefKey, { ...p, more: open });
+  };
   const [values, setValues] = useState<Record<string, Choice[]>>({});
   const [, render] = useState(0);
   const [error, setError] = useState<Error | null>(null);
   const setPrefs = (p: Partial<LibPrefs>) => {
-    const next = { ...prefs, ...p };
+    const next = { ...prefs, more, ...p };
     libPrefs.set(prefKey, next);
     setPrefsState(next);
   };
