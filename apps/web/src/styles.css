@@ -573,7 +573,9 @@ video::cue { font-family: inherit; }
 .seek-mark.credits::after { left: auto; right: 0; }
 
 /* ---------- « Ma liste » : titres pas encore disponibles ---------- */
-.card.pending .poster img { filter: grayscale(0.7) brightness(0.55); }
+/* Un voile posé sur l'affiche, pas un filtre sur l'image : sous Windows, l'application de bureau
+   (DirectComposition coupée pour mpv) ne dessinait une image filtrée qu'au survol de la souris. */
+.card.pending .poster::before { content: ''; position: absolute; inset: 0; z-index: 1; pointer-events: none; background: rgba(12, 12, 16, 0.55); }
 .soon { position: absolute; left: 0; right: 0; bottom: 0; z-index: 1; padding: 1.6rem 0.5rem 0.55rem; text-align: center; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #fff; background: linear-gradient(transparent, rgba(0, 0, 0, 0.9)); }
 
 /* ---------- nouveautés après une mise à jour ---------- */
@@ -861,7 +863,7 @@ button.cast-card { border: 0; background: none; cursor: pointer; font: inherit; 
 .off-card { position: relative; flex: 0 0 var(--card-w); width: var(--card-w); }
 .off-card .poster { display: block; width: 100%; padding: 0; border: 0; cursor: pointer; font: inherit; color: inherit; }
 .off-card .poster:disabled { cursor: default; }
-.off-card.pending .poster img { filter: grayscale(0.6) brightness(0.6); }
+.off-card.pending .poster::before { content: ''; position: absolute; inset: 0; z-index: 1; pointer-events: none; background: rgba(12, 12, 16, 0.5); }
 .off-card:hover .poster:not(:disabled), .off-card .poster:focus-visible { transform: scale(1.04); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); outline: none; }
 .off-play { position: absolute; inset: 0; z-index: 1; display: grid; place-items: center; color: #fff; opacity: 0; background: rgba(0, 0, 0, 0.35); transition: opacity var(--speed); }
 .off-card .poster:hover .off-play, .off-card .poster:focus-visible .off-play { opacity: 1; }
