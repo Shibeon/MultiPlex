@@ -224,10 +224,10 @@ function network(title: string, url: string): string {
   return 'web';
 }
 
-/** Logo d'un réseau social, dessiné simplement (pas d'images externes), dans sa couleur. */
+/** Logo d'un réseau social, dessiné simplement (pas d'images externes), d'une seule couleur comme les autres icônes. */
 export function SocialLogo({ title, url }: { title: string; url: string }) {
   const n = network(title, url);
-  const W = '#fff';
+  const W = 'currentColor';
   const body: Record<string, preact.JSX.Element> = {
     facebook: <path fill={W} d="M13.4 21v-7h2.4l.4-2.8h-2.8V9.5c0-.8.3-1.4 1.4-1.4h1.5V5.6c-.3 0-1.1-.1-2.1-.1-2.1 0-3.4 1.2-3.4 3.5v2.2H8.4V14h2.4v7z" />,
     instagram: (
@@ -245,15 +245,12 @@ export function SocialLogo({ title, url }: { title: string; url: string }) {
     ),
     tiktok: <path fill={W} d="M13.6 5h2.3c.2 1.7 1.4 2.9 3 3.1v2.3c-1.1 0-2.1-.3-3-.9v5.1a4.4 4.4 0 1 1-4.4-4.4h.3v2.4h-.3a2 2 0 1 0 2.1 2z" />,
     youtube: (
-      <g>
-        <rect x="4.5" y="7" width="15" height="10" rx="3" fill={W} />
-        <path d="M10.6 9.6v4.8l4-2.4z" fill="#ff0033" />
-      </g>
+      <path fill={W} fill-rule="evenodd" d="M7.5 7h9a3 3 0 0 1 3 3v4a3 3 0 0 1-3 3h-9a3 3 0 0 1-3-3v-4a3 3 0 0 1 3-3zm3.1 2.6v4.8l4-2.4z" />
     ),
     threads: <text x="12" y="16.6" text-anchor="middle" font-size="13" font-weight="700" fill={W} font-family="system-ui, sans-serif">@</text>,
     bluesky: <path fill={W} d="M7.6 6.6c1.8 1.3 3.7 4 4.4 5.4.7-1.4 2.6-4.1 4.4-5.4 1.3-1 3.4-1.7 3.4.7 0 .5-.3 3.9-.4 4.5-.6 2-2.6 2.5-4.4 2.2 3.1.5 3.9 2.3 2.2 4-3.2 3.3-4.6-.8-5-1.9l-.2-.5-.2.5c-.4 1.1-1.8 5.2-5 1.9-1.7-1.7-.9-3.5 2.2-4-1.8.3-3.8-.2-4.4-2.2-.1-.6-.4-4-.4-4.5 0-2.4 2.1-1.7 3.4-.7z" />,
-    imdb: <text x="12" y="15.2" text-anchor="middle" font-size="7.4" font-weight="900" fill="#000" font-family="system-ui, sans-serif">IMDb</text>,
-    wikipedia: <text x="12" y="16.4" text-anchor="middle" font-size="12" font-family="Georgia, 'Times New Roman', serif" fill="#000">W</text>,
+    imdb: <text x="12" y="15.2" text-anchor="middle" font-size="7.4" font-weight="900" fill={W} font-family="system-ui, sans-serif">IMDb</text>,
+    wikipedia: <text x="12" y="16.4" text-anchor="middle" font-size="12" font-family="Georgia, 'Times New Roman', serif" fill={W}>W</text>,
     web: <text x="12" y="16.2" text-anchor="middle" font-size="11" font-weight="700" fill={W} font-family="system-ui, sans-serif">{(title.trim()[0] ?? '?').toUpperCase()}</text>,
   };
   return (
