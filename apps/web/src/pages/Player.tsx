@@ -1,5 +1,5 @@
 import { lockLandscape, useLandscape } from '../orientation';
-import { PillMenu, PlayerClock, PlayerSub, PlayerTech, Pill, SkipButton, liveTechWeb, rememberTech, techContext } from '../playerui';
+import { PillMenu, PlayerClock, PlayerSub, PlayerTech, Pill, SkipButton, liveTechWeb } from '../playerui';
 import { QUALITIES, hdrKind, srtToVtt, streamsOf, techBadges, type Media, type Metadata, type PlaybackPlan, type Stream } from '@multiplex/core';
 import type Hls from 'hls.js';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
@@ -524,14 +524,6 @@ export function Player({ id }: { id: string }) {
     else leave();
   };
 
-  const source = item ? techBadges(item.Media?.[choice.current.media]) : undefined;
-  const live = source ? liveTechWeb(video.current, plan.current, source) : undefined;
-  const liveKey = JSON.stringify(live ?? []);
-  // Ce que la lecture a vraiment donné : la fiche du média le reprendra.
-  const settled = ui.time > 15;
-  useEffect(() => {
-    if (settled && live) rememberTech(source, live, techContext(false, false, ''));
-  }, [settled, liveKey]);
   const marker = (item?.Marker ?? []).find((m) => ui.time * 1000 >= m.startTimeOffset && ui.time * 1000 < m.endTimeOffset - 1000 && (m.type === 'intro' || m.type === 'credits'));
   const head = item ? labels(item) : { title: '', sub: '' };
   const chapters = item?.Chapter ?? [];
@@ -637,7 +629,7 @@ export function Player({ id }: { id: string }) {
         <div class="player-title">
           <strong>{head.title}</strong>
           {head.sub && <PlayerSub text={head.sub} />}
-          <PlayerTech badges={live} />
+          <PlayerTech badges={item ? liveTechWeb(video.current, plan.current, techBadges(item.Media?.[choice.current.media])) : undefined} />
         </div>
         <PlayerClock remaining={ui.duration - ui.time} speed={choice.current.speed} />
       </div>
