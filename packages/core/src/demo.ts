@@ -160,6 +160,12 @@ export class DemoServer implements MediaServer {
     if (f.genre) list = list.filter((m) => m.Genre?.some((g) => g.tag === f.genre));
     if (f.decade) list = list.filter((m) => Math.floor((m.year ?? 0) / 10) * 10 === Number(f.decade));
     if (f.resolution) list = list.filter((m) => m.Media?.[0]?.videoResolution === String(f.resolution));
+    if (f.year) list = list.filter((m) => m.year === Number(f.year));
+    const epRes = f['episode.resolution'];
+    if (epRes) {
+      const eps = this.all((e) => e.type === 'episode' && e.Media?.[0]?.videoResolution === String(epRes));
+      list = list.filter((m) => eps.some((e) => e.grandparentRatingKey === m.ratingKey));
+    }
     const [field, dir] = (q.sort ?? 'titleSort').split(':');
     const val = (m: Metadata) =>
       field === 'year' || field === 'originallyAvailableAt'
@@ -188,7 +194,8 @@ export class DemoServer implements MediaServer {
       { filter: 'inProgress', filterType: 'boolean', key: '', title: 'In Progress' },
       { filter: 'genre', filterType: 'string', key: `${base}/genre`, title: 'Genre' },
       { filter: 'decade', filterType: 'integer', key: `${base}/decade`, title: 'Decade' },
-      ...(show ? [] : [{ filter: 'resolution', filterType: 'string', key: `${base}/resolution`, title: 'Resolution' }]),
+      ...(show && type !== 4 ? [] : [{ filter: 'resolution', filterType: 'string', key: `${base}/resolution`, title: 'Resolution' }]),
+      { filter: 'year', filterType: 'integer', key: `${base}/year`, title: 'Year' },
     ];
     const sorts = ['titleSort', 'addedAt', 'year', 'originallyAvailableAt', 'rating', 'audienceRating', 'lastViewedAt', ...(show ? [] : ['duration'])].map((k) => ({
       key: k,
@@ -205,7 +212,11 @@ export class DemoServer implements MediaServer {
     const uniq = (v: (string | undefined)[]) => [...new Set(v.filter((x): x is string => !!x))].sort();
     if (what === 'genre') return uniq(list.flatMap((m) => m.Genre?.map((g) => g.tag) ?? [])).map((g) => ({ key: g, title: g }));
     if (what === 'decade') return uniq(list.map((m) => (m.year ? String(Math.floor(m.year / 10) * 10) : undefined))).reverse().map((d) => ({ key: d, title: `${d}s` }));
-    if (what === 'resolution') return uniq(list.map((m) => m.Media?.[0]?.videoResolution)).map((r) => ({ key: r, title: r === '4k' ? '4K' : `${r}p` }));
+    if (what === 'resolution') {
+      const src = key.split('/')[3] === '4' ? this.all((m) => m.type === 'episode') : list;
+      return uniq(src.map((m) => m.Media?.[0]?.videoResolution)).map((r) => ({ key: r, title: r === '4k' ? '4K' : `${r}p` }));
+    }
+    if (what === 'year') return uniq(list.map((m) => (m.year ? String(m.year) : undefined))).reverse().map((y) => ({ key: y, title: y }));
     return [];
   }
 

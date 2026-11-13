@@ -135,8 +135,30 @@ interface LibPrefs {
   decade: string;
   /** Résolution du serveur (`4k`, `1080`…) ou `hdr`. */
   quality: string;
+  /** Autres filtres annoncés par le serveur (« Plus de filtres ») : paramètre → valeur. */
+  extra: Record<string, string>;
 }
-const DEFAULT_PREFS: LibPrefs = { sort: 'titleSort', dir: 'asc', watch: 'all', genre: '', decade: '', quality: '' };
+const DEFAULT_PREFS: LibPrefs = { sort: 'titleSort', dir: 'asc', watch: 'all', genre: '', decade: '', quality: '', extra: {} };
+
+/** Filtres déjà présentés à part (visionnage, genre, décennie, qualité). */
+const MAIN_FILTERS = new Set(['unwatched', 'unwatchedLeaves', 'inProgress', 'genre', 'decade', 'resolution', 'hdr']);
+/** Personnes : des milliers de valeurs, illisible dans une liste (leur page reste accessible depuis une fiche). */
+const PEOPLE_FILTERS = new Set(['actor', 'director', 'writer', 'producer']);
+/** Intitulés français des filtres courants ; les autres gardent celui du serveur. */
+const FILTER_LABEL: Record<string, string> = {
+  year: 'lib.f.year',
+  contentRating: 'lib.f.contentRating',
+  collection: 'lib.f.collection',
+  studio: 'lib.f.studio',
+  network: 'lib.f.network',
+  country: 'lib.f.country',
+  label: 'lib.f.label',
+  audioLanguage: 'lib.f.audioLanguage',
+  subtitleLanguage: 'lib.f.subtitleLanguage',
+  editionTitle: 'lib.f.edition',
+  duplicate: 'lib.f.duplicate',
+  unmatched: 'lib.f.unmatched',
+};
 
 interface LibState {
   items: (Metadata | undefined)[];
@@ -149,6 +171,8 @@ interface LibOptions {
   genres: Choice[];
   decades: Choice[];
   resolutions: Choice[];
+  /** Séries : résolutions des épisodes (filtre `episode.resolution`). */
+  episodeRes: Choice[];
 }
 // Conservés hors du composant : un retour arrière retrouve la grille telle quelle.
 const libStates = new Map<string, LibState>();
@@ -157,7 +181,7 @@ const libOptions = new Map<string, Promise<LibOptions>>();
 
 /** Filtres et tris que le serveur accepte, avec les valeurs des listes (genres, décennies, résolutions). */
 function loadOptions(srv: MediaServer, section: string, type: number | undefined): Promise<LibOptions> {
-  const none: LibOptions = { options: null, genres: [], decades: [], resolutions: [] };
+  const none: LibOptions = { options: null, genres: [], decades: [], resolutions: [], episodeRes: [] };
   if (!type || !srv.libraryOptions) return Promise.resolve(none);
   return srv
     .libraryOptions(section, type)
@@ -166,8 +190,14 @@ function loadOptions(srv: MediaServer, section: string, type: number | undefined
         const f = options.filters.find((x) => x.filter === name);
         return f?.key && srv.filterValues ? srv.filterValues(f.key).catch(() => []) : Promise.resolve([]);
       };
-      const [genres, decades, resolutions] = await Promise.all([values('genre'), values('decade'), values('resolution')]);
-      return { options, genres, decades, resolutions };
+      // Une série n'a pas de résolution, ses épisodes si : on filtre les séries sur celle de leurs épisodes.
+      const episodeRes = async () => {
+        if (type !== 2) return [];
+        const ep = (await srv.libraryOptions!(section, 4).catch(() => null))?.filters.find((x) => x.filter === 'resolution');
+        return ep?.key && srv.filterValues ? srv.filterValues(ep.key).catch(() => []) : [];
+      };
+      const [genres, decades, resolutions, epRes] = await Promise.all([values('genre'), values('decade'), values('resolution'), episodeRes()]);
+      return { options, genres, decades, resolutions, episodeRes: epRes };
     })
     .catch(() => none);
 }
@@ -184,6 +214,8 @@ export function LibraryPage({ id }: { id: string }) {
   const prefKey = `${srv.id}:${id}`;
   const [prefs, setPrefsState] = useState<LibPrefs>(() => libPrefs.get(prefKey) ?? DEFAULT_PREFS);
   const [opts, setOpts] = useState<LibOptions | null>(null);
+  const [more, setMore] = useState(() => Object.keys(prefs.extra).length > 0);
+  const [values, setValues] = useState<Record<string, Choice[]>>({});
   const [, render] = useState(0);
   const [error, setError] = useState<Error | null>(null);
   const setPrefs = (p: Partial<LibPrefs>) => {
@@ -216,10 +248,30 @@ export function LibraryPage({ id }: { id: string }) {
   if (prefs.watch === 'progress') filter.inProgress = 1;
   if (prefs.genre) filter.genre = prefs.genre;
   if (prefs.decade) filter.decade = prefs.decade;
+  const showEpisodes = lib?.type === 'show' && !has('resolution');
   if (prefs.quality === 'hdr') filter.hdr = 1;
-  else if (prefs.quality) filter.resolution = prefs.quality;
+  else if (prefs.quality) filter[showEpisodes ? 'episode.resolution' : 'resolution'] = prefs.quality;
+  for (const [k, v] of Object.entries(prefs.extra)) if (v) filter[k] = v;
   const sort = prefs.dir === 'desc' ? (sortDef?.descKey ?? `${prefs.sort}:desc`) : prefs.sort;
-  const filtered = prefs.watch !== 'all' || !!prefs.genre || !!prefs.decade || !!prefs.quality;
+  const extraCount = Object.values(prefs.extra).filter(Boolean).length;
+  const filtered = prefs.watch !== 'all' || !!prefs.genre || !!prefs.decade || !!prefs.quality || extraCount > 0;
+
+  // « Plus de filtres » : tout ce que le serveur annonce d'autre, valeurs chargées à l'ouverture.
+  const extraFilters = (filters ?? []).filter((f) => !MAIN_FILTERS.has(f.filter) && !PEOPLE_FILTERS.has(f.filter));
+  useEffect(() => {
+    if (!more || !srv.filterValues) return;
+    let live = true;
+    for (const f of extraFilters) {
+      if (f.filterType === 'boolean' || !f.key || values[f.filter]) continue;
+      void srv
+        .filterValues(f.key)
+        .catch(() => [])
+        .then((list) => live && setValues((v) => ({ ...v, [f.filter]: list })));
+    }
+    return () => {
+      live = false;
+    };
+  }, [more, opts]);
 
   const key = `${prefKey}:${sort}:${JSON.stringify(filter)}`;
   let state = libStates.get(key);
@@ -259,7 +311,8 @@ export function LibraryPage({ id }: { id: string }) {
     ...(!filters || has('inProgress') ? ([['progress', 'lib.watch.progress']] as [Watch, string][]) : []),
     ['watched', 'lib.watch.watched'],
   ];
-  const qualities = [...(opts?.resolutions ?? []), ...(has('hdr') ? [{ key: 'hdr', title: 'HDR' }] : [])];
+  const qualities = showEpisodes ? (opts?.episodeRes ?? []) : [...(opts?.resolutions ?? []), ...(has('hdr') ? [{ key: 'hdr', title: 'HDR' }] : [])];
+  const setExtra = (k: string, v: string) => setPrefs({ extra: { ...prefs.extra, [k]: v } });
 
   const s = settings.value;
   return (
@@ -303,7 +356,7 @@ export function LibraryPage({ id }: { id: string }) {
           )}
           {qualities.length > 0 && (
             <select class={prefs.quality ? 'on' : ''} aria-label={t('lib.quality')} value={prefs.quality} onChange={(e) => setPrefs({ quality: e.currentTarget.value })}>
-              <option value="">{t('lib.quality.all')}</option>
+              <option value="">{showEpisodes ? t('lib.quality.episodes') : t('lib.quality.all')}</option>
               {qualities.map((q) => (
                 <option key={q.key} value={q.key}>
                   {q.title}
@@ -311,8 +364,14 @@ export function LibraryPage({ id }: { id: string }) {
               ))}
             </select>
           )}
+          {extraFilters.length > 0 && (
+            <button class={`btn lib-more-btn${more ? ' on' : ''}`} aria-expanded={more} onClick={() => setMore(!more)}>
+              <Icon name="plus" size={16} /> {t('lib.more')}
+              {extraCount > 0 && <b class="lib-badge">{extraCount}</b>}
+            </button>
+          )}
           {filtered && (
-            <button class="btn lib-reset" onClick={() => setPrefs({ watch: 'all', genre: '', decade: '', quality: '' })}>
+            <button class="btn lib-reset" onClick={() => setPrefs({ watch: 'all', genre: '', decade: '', quality: '', extra: {} })}>
               <Icon name="close" size={16} /> {t('lib.reset')}
             </button>
           )}
@@ -335,6 +394,33 @@ export function LibraryPage({ id }: { id: string }) {
           </button>
         </div>
       </div>
+      {more && extraFilters.length > 0 && (
+        <div class="lib-more">
+          {extraFilters.map((f) => {
+            const label = FILTER_LABEL[f.filter] ? t(FILTER_LABEL[f.filter]) : f.title;
+            const v = prefs.extra[f.filter] ?? '';
+            if (f.filterType === 'boolean')
+              return (
+                <button key={f.filter} class={`btn toggle-pill${v ? ' on' : ''}`} aria-pressed={!!v} onClick={() => setExtra(f.filter, v ? '' : '1')}>
+                  {v && <Icon name="check" size={16} />}
+                  {label}
+                </button>
+              );
+            const list = values[f.filter];
+            if (list && !list.length) return null;
+            return (
+              <select key={f.filter} class={v ? 'on' : ''} aria-label={label} value={v} disabled={!list} onChange={(e) => setExtra(f.filter, e.currentTarget.value)}>
+                <option value="">{label}</option>
+                {list?.map((c) => (
+                  <option key={c.key} value={c.key}>
+                    {label} : {c.title}
+                  </option>
+                ))}
+              </select>
+            );
+          })}
+        </div>
+      )}
       {error && <ErrorBox error={error} retry={() => (setError(null), loadPage(0))} />}
       {state.total < 0 && !error && <Spinner />}
       {state.total === 0 && <p class="muted">{filtered ? t('lib.noMatch') : t('common.empty')}</p>}
