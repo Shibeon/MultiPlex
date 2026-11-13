@@ -21,11 +21,24 @@ if (existsSync(join(dest, 'mpv.exe')) && !process.argv.includes('--force')) {
   process.exit(0);
 }
 
-const api = 'https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/releases/latest';
-const release = await (await fetch(api, { headers: { Accept: 'application/vnd.github+json' } })).json();
+// Version figée : mpv fait partie de la « base » de l'app (voir scripts/hot-bundle.mjs). La
+// changer impose une mise à jour complète ; la garder permet les mises à jour à chaud.
+// Pour passer à un mpv plus récent : changer MPV_TAG (une publication de shinchiro).
+const MPV_TAG = '20261111';
+const api = `https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/releases/tags/${MPV_TAG}`;
+const get = async (url) => {
+  const r = await fetch(url, { headers: { Accept: 'application/vnd.github+json' } });
+  return r.ok ? r.json() : null;
+};
+let release = await get(api);
+if (!release?.assets) {
+  // Publication retirée : la plus récente, mais la base change (prochaine mise à jour complète).
+  console.warn(`::warning::mpv ${MPV_TAG} introuvable : dernière version utilisée (la mise à jour suivante sera complète, pas à chaud).`);
+  release = await get('https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/releases/latest');
+}
 // Build x86-64 de base : tourne sur tous les processeurs 64 bits (la variante « v3 » exige AVX2).
 const asset = release.assets?.find((a) => /^mpv-x86_64-\d{8}-git-.*\.7z$/.test(a.name));
-if (!asset) throw new Error('Archive mpv introuvable dans la dernière publication');
+if (!asset) throw new Error(`Archive mpv introuvable dans la publication ${MPV_TAG}`);
 
 console.log(`Téléchargement de ${asset.name} (${(asset.size / 1e6).toFixed(0)} Mo)…`);
 const res = await fetch(asset.browser_download_url);
