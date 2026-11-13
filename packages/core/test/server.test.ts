@@ -215,8 +215,11 @@ describe('PlexServer contre un faux PMS', () => {
 
   it('liste les lectures en cours', async () => {
     const [a, b] = await srv.sessions();
-    expect([a.id, a.user, a.state, a.player, a.platform, a.transcoding, a.item.viewOffset]).toEqual(['abc', 'Ami', 'paused', 'Salon', 'Android', true, 600000]);
-    expect([b.id, b.user, b.state, b.player, b.transcoding]).toEqual(['6', '?', 'playing', 'Plex Web', false]);
+    expect([a.id, a.user, a.state, a.item.viewOffset]).toEqual(['abc', 'Ami', 'paused', 600000]);
+    expect([b.id, b.user, b.state]).toEqual(['6', '?', 'playing']);
+    // Ni appareil, ni adresse, ni mode de lecture : rien qui permette de suivre un ami.
+    const raw = a.item as unknown as Record<string, unknown>;
+    expect([raw.Player, raw.Session, raw.TranscodeSession]).toEqual([undefined, undefined, undefined]);
   });
 
   it('envoie progression, vu / non vu et choix de pistes', async () => {

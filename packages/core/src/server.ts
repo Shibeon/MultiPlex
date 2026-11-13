@@ -209,10 +209,9 @@ export class PlexServer implements MediaServer {
       user: m.User?.title ?? '?',
       userThumb: m.User?.thumb,
       state: m.Player?.state ?? 'playing',
-      player: m.Player?.title || m.Player?.product || '',
-      platform: m.Player?.platform || m.Player?.product,
-      transcoding: m.TranscodeSession?.videoDecision === 'transcode' || m.TranscodeSession?.audioDecision === 'transcode',
-      item: m,
+      // Ni l'appareil, ni l'adresse, ni la façon de lire : on montre ce que regarde un ami,
+      // pas d'où ni comment (ces informations ne sont pas gardées).
+      item: { ...m, Player: undefined, Session: undefined, TranscodeSession: undefined } as Metadata,
     }));
   }
 

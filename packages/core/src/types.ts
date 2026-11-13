@@ -278,10 +278,6 @@ export interface ActiveSession {
   user: string;
   userThumb?: string;
   state: 'playing' | 'paused' | 'buffering' | string;
-  /** Nom de l'appareil ou de l'application de lecture. */
-  player: string;
-  platform?: string;
-  transcoding: boolean;
   /** L'élément lu ; viewOffset y donne la position actuelle. */
   item: Metadata;
 }

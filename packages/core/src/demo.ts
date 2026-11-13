@@ -268,21 +268,18 @@ export class DemoServer implements MediaServer {
   async sessions(): Promise<ActiveSession[]> {
     // Trois amis fictifs dont la lecture avance en temps réel.
     const elapsed = Date.now() - this.started;
-    const cast: [string, string, string, string, string, boolean][] = [
-      ['Camille', '7', 'playing', 'Salon', 'Android TV', false],
-      ['Noah', '245', 'paused', 'iPhone', 'iOS', true],
-      ['Inès', '42', 'playing', 'Chrome', 'Web', false],
+    const cast: [string, string, string][] = [
+      ['Camille', '7', 'playing'],
+      ['Noah', '245', 'paused'],
+      ['Inès', '42', 'playing'],
     ];
-    return cast.map(([user, key, state, player, platform, transcoding], i) => {
+    return cast.map(([user, key, state], i) => {
       const m = this.db.get(key)!;
       const base = (i + 1) * 11 * 60000;
       return {
         id: 'demo-' + i,
         user,
         state,
-        player,
-        platform,
-        transcoding,
         item: { ...m, viewOffset: Math.min((m.duration ?? 0) - 1000, base + (state === 'playing' ? elapsed : 0)) },
       };
     });

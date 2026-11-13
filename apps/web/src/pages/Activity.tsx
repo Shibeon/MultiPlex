@@ -39,7 +39,6 @@ function LiveCard({ s }: { s: ActiveSession }) {
         <small class="muted">
           <span class={`live-state state-${s.state}`}>{t(s.state === 'paused' ? 'live.paused' : s.state === 'buffering' ? 'live.buffering' : 'live.playing')}</span>
           {dur > 0 && ` · ${formatClock(pos)} / ${formatClock(dur)}`}
-          {` · ${[s.player, t(s.transcoding ? 'live.transcode' : 'live.direct')].filter(Boolean).join(' · ')}`}
         </small>
       </div>
     </a>
