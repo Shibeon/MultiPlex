@@ -1457,3 +1457,12 @@ input.search-input:focus-visible { background-color: var(--glass-2); }
   .ptech-info { width: 1.6rem; height: 1.6rem; }
   .ptech-panel { font-size: 0.8rem; }
 }
+
+/* Page en préparation : rien ne s'affiche avant que ses images visibles soient là, puis tout
+   apparaît d'un coup. Un indicateur de chargement n'apparaît que si l'attente se prolonge. */
+.page-gate { position: relative; }
+.page-gate:not(.ready) > * { opacity: 0; pointer-events: none; }
+.page-gate.ready > * { opacity: 1; transition: opacity 0.18s ease-out; }
+.page-gate:not(.ready)::after { content: ''; position: fixed; left: 50%; top: 45%; width: 2.2rem; height: 2.2rem; margin: -1.1rem 0 0 -1.1rem; border-radius: 50%; border: 3px solid color-mix(in srgb, var(--text) 18%, transparent); border-top-color: var(--accent); opacity: 0; animation: gate-spin 0.8s linear infinite, gate-show 0.2s 0.5s forwards; }
+@keyframes gate-spin { to { transform: rotate(360deg); } }
+@keyframes gate-show { to { opacity: 1; } }

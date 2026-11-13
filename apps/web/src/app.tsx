@@ -21,6 +21,7 @@ import { back, route } from './router';
 import { settings } from './settings';
 import { auth, discover, home, libraries, server, status } from './store';
 import { Icon } from './ui';
+import { ReadyGate } from './ready';
 import { CastBar, CastPicker } from './castui';
 import { TogetherBar, TogetherDialog } from './togetherui';
 
@@ -192,7 +193,9 @@ function Routes() {
       <div class="theme-art" aria-hidden="true" />
       <main class="content">
         <BackBar />
-        <Page />
+        <ReadyGate key={route.value.parts.join('/')}>
+          <Page />
+        </ReadyGate>
       </main>
       <ResumePill />
       <UpdateBanner />
