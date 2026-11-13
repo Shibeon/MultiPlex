@@ -1,5 +1,5 @@
 import { THEME_EFFECTS, isThemeImage, luminance } from '@multiplex/core';
-import { effect, signal } from '@preact/signals';
+import { computed, effect, signal } from '@preact/signals';
 import { isOverlayWindow } from './native';
 
 export interface Theme {
@@ -73,8 +73,6 @@ export interface Settings {
   askProfile: boolean;
   /** Lecteur natif : aperçu en image au survol de la barre de lecture. */
   seekPreview: boolean;
-  /** Mode TV : interface agrandie pour être lue depuis le canapé, pilotée au clavier ou à la télécommande. */
-  couch: boolean;
   /** Lecteur natif : à la pause, reconnaître les acteurs présents à l'image (calcul local). */
   xray: boolean;
   /** Garder les recherches récentes sur cet appareil. */
@@ -119,7 +117,6 @@ export const DEFAULTS: Settings = {
   communityMarkers: true,
   askProfile: false,
   seekPreview: true,
-  couch: false,
   xray: true,
   searchHistory: true,
   togetherRelay: '',
@@ -178,63 +175,24 @@ export function sanitize(input: unknown): Partial<Settings> {
   return out as Partial<Settings>;
 }
 
-/** Agrandissement du mode TV : ce qui se lit à 60 cm doit se lire à 3 m. */
+/** Agrandissement de l'interface : ce qui se lit à 60 cm doit se lire à 3 m. */
 const COUCH_SCALE = 1.4;
 
 const isTv = () => innerHeight <= 620 && innerWidth >= 900;
-const viewport = signal({ tv: typeof window !== 'undefined' && isTv() });
+/** Petits écrans (téléphones) : l'interface garde sa taille normale. */
+const isWide = () => innerWidth >= 900;
+const viewport = signal({ tv: typeof window !== 'undefined' && isTv(), wide: typeof window === 'undefined' || isWide() });
+
+/**
+ * Affichage « TV » : interface agrandie, focus marqué, souris qui s'efface. C'est l'affichage
+ * de toujours sur ordinateur et téléviseur ; sur téléphone, l'interface reste à taille normale.
+ * Le plein écran, lui, ne se demande que dans le lecteur.
+ */
+export const couchOn = computed(() => viewport.value.wide);
 
 /** Largeur d'affiche effective, réduite sur téléviseur. */
 export function cardWidth(): number {
-  return Math.round(settings.value.cardSize * (viewport.value.tv ? 0.72 : 1) * (settings.value.couch ? COUCH_SCALE : 1));
-}
-
-/**
- * Passage animé d'une interface à l'autre : l'image actuelle se fige, le changement (taille du
- * texte, plein écran) se fait derrière, puis la nouvelle interface arrive par un zoom fondu.
- * Sans prise en charge (ou avec « réduire les animations »), le changement est immédiat.
- */
-function couchTransition(on: boolean, apply: () => void): void {
-  const root = document.documentElement;
-  root.dataset.couchSwitch = on ? 'in' : 'out';
-  const start = (document as Document & { startViewTransition?(cb: () => Promise<void>): { finished: Promise<void> } }).startViewTransition;
-  if (!start || matchMedia('(prefers-reduced-motion: reduce)').matches || document.visibilityState !== 'visible') {
-    apply();
-    return;
-  }
-  const vt = start.call(document, async () => {
-    apply();
-    // Le temps que la fenêtre passe en plein écran (ou en sorte) sous l'image figée.
-    await new Promise((r) => setTimeout(r, 160));
-  });
-  void vt.finished.finally(() => delete root.dataset.couchSwitch);
-}
-
-/** Entre dans le mode TV ou en sort ; en y entrant, la fenêtre passe en plein écran. */
-export function setCouch(on: boolean): void {
-  couchTransition(on, () => applyCouch(on));
-}
-
-function applyCouch(on: boolean): void {
-  update({ couch: on });
-  const native = (window as unknown as { multiplexNative?: { setFullscreen?(on: boolean): void } }).multiplexNative;
-  if (native?.setFullscreen) native.setFullscreen(on);
-  else if (on) void document.documentElement.requestFullscreen?.().catch(() => {});
-  else if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
-}
-
-/** Au lancement : remet la fenêtre en plein écran si le mode TV était resté actif. */
-function restoreCouch(): void {
-  const native = (window as unknown as { multiplexNative?: { setFullscreen?(on: boolean): void } }).multiplexNative;
-  if (native?.setFullscreen) return native.setFullscreen(true);
-  if (document.fullscreenElement || !document.documentElement.requestFullscreen) return;
-  const once = () => {
-    removeEventListener('pointerdown', once, true);
-    removeEventListener('keydown', once, true);
-    if (settings.value.couch && !document.fullscreenElement) void document.documentElement.requestFullscreen().catch(() => {});
-  };
-  addEventListener('pointerdown', once, true);
-  addEventListener('keydown', once, true);
+  return Math.round(settings.value.cardSize * (viewport.value.tv ? 0.72 : 1) * (couchOn.value ? COUCH_SCALE : 1));
 }
 
 /** Applique thème, variables et CSS personnalisé au document, et persiste. */
@@ -243,24 +201,15 @@ export function initSettings(): void {
   style.id = 'custom-css';
   document.head.appendChild(style);
   let applied: string[] = [];
-  // Mode TV laissé actif au dernier lancement : on le reprend tel quel, plein écran compris
-  // (dans un navigateur, le plein écran attend un premier geste : le navigateur l'exige).
-  if (settings.value.couch && !isOverlayWindow) restoreCouch();
   addEventListener('resize', () => {
-    if (viewport.value.tv !== isTv()) viewport.value = { tv: isTv() };
+    if (viewport.value.tv !== isTv() || viewport.value.wide !== isWide()) viewport.value = { tv: isTv(), wide: isWide() };
   });
-  // Mode TV : la souris s'efface quand on ne s'en sert pas, et F10 bascule le mode.
+  // Affichage TV : la souris s'efface quand on ne s'en sert pas.
   let idle = 0;
   addEventListener('mousemove', () => {
     document.documentElement.classList.remove('idle');
     clearTimeout(idle);
     idle = window.setTimeout(() => document.documentElement.classList.add('idle'), 3000);
-  });
-  addEventListener('keydown', (e) => {
-    if (e.key === 'F10') {
-      e.preventDefault();
-      setCouch(!settings.value.couch);
-    }
   });
   // Un réglage changé dans une autre fenêtre (lecteur ↔ fenêtre principale) s'applique ici aussitôt.
   let lastSaved = '';
@@ -269,9 +218,7 @@ export function initSettings(): void {
     try {
       lastSaved = e.newValue;
       const next = { ...settings.value, ...(JSON.parse(e.newValue) as Partial<Settings>) };
-      // Mode TV basculé depuis l'autre fenêtre : même transition qu'ici.
-      if (next.couch !== settings.value.couch) couchTransition(next.couch, () => (settings.value = next));
-      else settings.value = next;
+      settings.value = next;
     } catch {
       /* valeur illisible : on garde la nôtre */
     }
@@ -300,11 +247,11 @@ export function initSettings(): void {
     // celle de la fenêtre (référence : 1920×1080), quelle que soit la mise à l'échelle de Windows.
     // Sans cela, un téléviseur réglé à 200 % (960×540 logiques) les affiche deux fois trop grandes.
     root.style.fontSize =
-      isOverlayWindow && s.couch
+      isOverlayWindow && couchOn.value
         ? `calc(${(s.uiScale / 100) * COUCH_SCALE} * min(${(100 / 1920) * 16}vw, ${(100 / 1080) * 16}vh))`
-        : `${s.uiScale * (viewport.value.tv ? 0.72 : 1) * (s.couch ? COUCH_SCALE : 1)}%`;
+        : `${s.uiScale * (viewport.value.tv ? 0.72 : 1) * (couchOn.value ? COUCH_SCALE : 1)}%`;
     root.classList.toggle('tv', viewport.value.tv);
-    root.classList.toggle('couch', s.couch);
+    root.classList.toggle('couch', couchOn.value);
     // Illustration du thème : uniquement une image embarquée, jamais une adresse à charger
   // (des réglages importés pourraient en contenir une).
     const art = isThemeImage(s.themeImage) ? s.themeImage : '';

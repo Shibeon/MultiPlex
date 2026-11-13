@@ -3,7 +3,7 @@ import { QUALITIES } from '@multiplex/core';
 import type { ComponentChildren } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { t } from '../i18n';
-import { DEFAULTS, THEMES, load, sanitize, setCouch, settings, update, type Settings } from '../settings';
+import { DEFAULTS, THEMES, load, sanitize, settings, update, type Settings } from '../settings';
 import { native, nativeAvailable } from '../native';
 import { auth, home, logout, server, switchServer } from '../store';
 import { Icon } from '../ui';
@@ -232,9 +232,6 @@ export function SettingsPage() {
               </button>
             )}
           </span>
-        </Row>
-        <Row label={t('couch.setting')}>
-          <input class="switch" type="checkbox" role="switch" checked={s.couch} onChange={(e) => setCouch(e.currentTarget.checked)} />
         </Row>
         <Range k="cardSize" label={t('set.cardSize')} min={100} max={260} step={10} unit=" px" />
         <Range k="radius" label={t('set.radius')} min={0} max={24} unit=" px" />

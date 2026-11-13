@@ -316,7 +316,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter'
   /* Barre trop large pour l'écran (voir fitNav) : boutons resserrés, puis icônes seules. */
   .shell.top .sidebar.nav-tight .nav-link { padding-inline: 0.7rem; }
   .shell.top .sidebar.nav-tight .nav-link.icon-only { padding-inline: 0.5rem; }
-  .shell.top .sidebar.nav-tight .nav-link.couch-on span,
   .shell.top .sidebar.nav-icons .nav-link span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   .shell.top .sidebar.nav-small .nav-link { font-size: 0.86em; padding-inline: 0.55rem; }
   .shell.top .sidebar.nav-icons .nav-link { font-size: inherit; }
@@ -879,38 +878,6 @@ button.cast-card { border: 0; background: none; cursor: pointer; font: inherit; 
 .off-ep-text { flex: 1; min-width: 0; display: grid; }
 .off-ep-text strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* Mode TV : passage animé (l'ancienne interface s'efface, la nouvelle arrive en zoom fondu). */
-::view-transition-old(root), ::view-transition-new(root) { animation-duration: 520ms; animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1); }
-:root[data-couch-switch='in']::view-transition-old(root) { animation-name: couch-old-in; }
-:root[data-couch-switch='in']::view-transition-new(root) { animation-name: couch-new-in; }
-:root[data-couch-switch='out']::view-transition-old(root) { animation-name: couch-old-out; }
-:root[data-couch-switch='out']::view-transition-new(root) { animation-name: couch-new-out; }
-@keyframes couch-old-in { to { opacity: 0; transform: scale(1.12); filter: blur(6px); } }
-@keyframes couch-new-in { from { opacity: 0; transform: scale(0.9); } }
-@keyframes couch-old-out { to { opacity: 0; transform: scale(0.9); filter: blur(6px); } }
-@keyframes couch-new-out { from { opacity: 0; transform: scale(1.1); } }
-
-/* Mode TV : annonce au centre de l'écran, et pastille bien visible dans la barre tant qu'on y est. */
-.couch-banner {
-  position: fixed; left: 50%; top: 50%; z-index: 10000; transform: translate(-50%, -50%);
-  display: flex; flex-direction: column; align-items: center; gap: 0.6rem; padding: 1.8rem 2.6rem;
-  border-radius: 1.4rem; background: rgba(10, 10, 12, 0.82); backdrop-filter: blur(18px); color: #fff; text-align: center;
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55); pointer-events: none; animation: couch-banner 2.6s ease forwards;
-}
-.couch-banner strong { font-size: 1.6rem; }
-.couch-banner-hint { opacity: 0.75; font-size: 0.95rem; }
-.couch-banner-icon { display: grid; place-items: center; width: 4.2rem; height: 4.2rem; border-radius: 50%; background: var(--accent); color: var(--on-accent, #000); }
-.couch-banner.off .couch-banner-icon { background: rgba(255, 255, 255, 0.14); color: #fff; }
-@keyframes couch-banner {
-  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.85); }
-  12% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-  80% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-  100% { opacity: 0; transform: translate(-50%, -50%) scale(0.97); }
-}
-.nav-link.couch-on, .shell.top .nav-link.couch-on { background: var(--accent); color: var(--on-accent, #000); opacity: 1; font-weight: 700; }
-.nav-link.couch-on, .shell.top .nav-link.couch-on { font: inherit; font-weight: 700; gap: 0.5rem; }
-.nav-link.couch-on .icon, .shell.top .nav-link.couch-on .icon { display: block; }
-@media (prefers-reduced-motion: reduce) { .couch-banner { animation-duration: 2.6s; animation-name: couch-banner-still; } @keyframes couch-banner-still { 0%, 85% { opacity: 1; } 100% { opacity: 0; } } }
 /* Visages reconnus : arrivent en douceur une fois la recherche terminée. */
 .pause-cast.found { animation: cast-found 0.45s ease both; }
 @keyframes cast-found { from { opacity: 0; transform: translateY(12px); } }
@@ -1052,12 +1019,11 @@ body:has(.cast-bar) .tog-bar:not(.in-player) { bottom: 8.5rem; }
 .controls { position: relative; display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 1rem 1.3rem; margin-top: 1.5rem; }
 .player .controls .pill { padding: 0.85em 1.7em; gap: 0.6em; font-size: 1.15rem; font-weight: 600; }
 .player .controls .pill .icon { width: 1.5rem; height: 1.5rem; }
-/* Souris : volume et plein écran, discrets, à droite. Masqués en mode TV. */
+/* Souris : volume et plein écran, discrets, à droite. */
 .controls .side { position: absolute; right: 0; top: 50%; transform: translateY(-50%); display: flex; align-items: center; gap: 0.6rem; }
 .player .controls .side .btn { width: 2.8rem; height: 2.8rem; padding: 0; display: grid; place-items: center; background: transparent; box-shadow: none; }
 .player .controls .side .btn:hover { background: rgba(255, 255, 255, 0.14); }
 .controls .side .volume { width: 6.5rem; }
-.couch-player .controls .side, .couch .controls .side { display: none; }
 
 .player-menu { position: absolute; left: 50%; bottom: 100%; z-index: 5; transform: translateX(-50%); margin-bottom: -4rem; min-width: 18rem; max-width: min(30rem, 92vw); max-height: 55vh; overflow-y: auto; display: grid; padding: 0.6rem; border-radius: 1.2rem; background: rgba(28, 30, 35, 0.97); box-shadow: 0 18px 50px rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(255, 255, 255, 0.08); }
 .player-menu button { text-align: left; padding: 0.75em 1.1em; border: 0; border-radius: 0.8rem; background: none; color: #fff; font: inherit; font-size: 1.05rem; cursor: pointer; }

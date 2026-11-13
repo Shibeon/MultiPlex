@@ -3,7 +3,7 @@ import type { ComponentChildren, JSX } from 'preact';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { t } from './i18n';
 import { openItemMenu } from './menu';
-import { cardWidth, settings } from './settings';
+import { cardWidth } from './settings';
 import { server } from './store';
 
 const ICONS: Record<string, string> = {
@@ -413,28 +413,3 @@ export function VirtualGrid({ total, minWidth, extra, gap = 16, onRange, render 
   );
 }
 
-/** Annonce l'entrée dans le mode TV ou la sortie, quelques secondes, au centre de l'écran. */
-export function CouchBanner() {
-  const couch = settings.value.couch;
-  const [shown, setShown] = useState<boolean | null>(null);
-  const first = useRef(true);
-  useEffect(() => {
-    if (first.current) {
-      first.current = false;
-      return;
-    }
-    setShown(couch);
-    const timer = window.setTimeout(() => setShown(null), 2600);
-    return () => clearTimeout(timer);
-  }, [couch]);
-  if (shown === null) return null;
-  return (
-    <div class={`couch-banner ${shown ? 'on' : 'off'}`} role="status" aria-live="polite" key={String(shown)}>
-      <span class="couch-banner-icon">
-        <Icon name="tv" size={34} />
-      </span>
-      <strong>{t(shown ? 'couch.on' : 'couch.off')}</strong>
-      <span class="couch-banner-hint">{t(shown ? 'couch.hintOn' : 'couch.hintOff')}</span>
-    </div>
-  );
-}

@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { formatClock, t } from '../i18n';
 import { native, type NativeMeta } from '../native';
 import { moveFocus } from '../nav';
-import { setCouch, settings } from '../settings';
+import { couchOn, settings } from '../settings';
 import { cancelXray, runXray, xrayAvailable } from '../xray';
-import { CouchBanner, Icon, SeekPreview } from '../ui';
+import { Icon, SeekPreview } from '../ui';
 import { PillMenu, PlayerClock, PlayerSub, PlayerTech, Pill, SkipButton } from '../playerui';
 
 type Menu = null | 'audio' | 'sub' | 'speed' | 'chapter' | 'quality' | 'output' | 'more';
@@ -103,14 +103,14 @@ export function NativeOverlay() {
   const wake = () => {
     setVisible(true);
     clearTimeout(hideTimer.current);
-    hideTimer.current = window.setTimeout(() => setVisible(false), settings.value.couch ? HIDE_AFTER_COUCH_MS : HIDE_AFTER_MS);
+    hideTimer.current = window.setTimeout(() => setVisible(false), couchOn.value ? HIDE_AFTER_COUCH_MS : HIDE_AFTER_MS);
   };
   useEffect(() => {
     wake();
     return () => clearTimeout(hideTimer.current);
   }, []);
   const shown = visible || paused || !!menu || scrub !== null;
-  const couch = settings.value.couch;
+  const couch = couchOn.value;
 
   // Mode TV : quand les contrôles disparaissent, le focus les quitte aussi, pour que les flèches
   // reviennent à l'avance / au retour rapide.
@@ -131,7 +131,7 @@ export function NativeOverlay() {
       // Mode TV, piloté comme une télécommande : flèches pour aller d'un bouton à l'autre quand
       // les contrôles ont le focus ; sinon gauche / droite avancent ou reculent, et haut, bas ou OK
       // font apparaître les contrôles, le focus sur Lecture.
-      if (settings.value.couch && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Enter'].includes(e.key)) {
+      if (couchOn.value && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Enter'].includes(e.key)) {
         const DIR: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
         if (onControl) {
           if (e.key === 'Enter') return;
@@ -262,7 +262,6 @@ export function NativeOverlay() {
     { key: 'speed', label: `${t('player.speed')} · ${speed !== 1 ? `×${speed}` : 'Normale'}`, on: false, run: () => setMenu('speed') },
     { key: 'stats', label: t('player.stats'), on: false, run: () => void n.command('stats') },
     castAvailable ? { key: 'cast', label: t('cast.title'), on: false, run: () => n.action('cast') } : null,
-    { key: 'couch', label: `${t('couch.title')} (F10)`, on: couch, run: () => setCouch(!couch) },
   ].filter((x): x is { key: string; label: string; on: boolean; run: () => void } => !!x);
 
   const items: { key: string; label: string; on: boolean; run: () => void }[] =
@@ -439,16 +438,12 @@ export function NativeOverlay() {
               <Icon name={muted || volume === 0 ? 'mute' : 'volume'} />
             </button>
             <input class="volume" type="range" aria-label="Volume" min={0} max={100} step={1} value={muted ? 0 : Math.min(100, volume)} style={{ '--fill': `${muted ? 0 : Math.min(100, volume)}%` }} onInput={(e) => void n.command('volume', Number(e.currentTarget.value))} />
-            <button class="btn icon-btn" data-act="couch" aria-label={t('couch.title')} title={`${t('couch.title')} (F10)`} aria-pressed={couch} onClick={() => setCouch(!couch)}>
-              <Icon name="tv" />
-            </button>
             <button class="btn icon-btn" aria-label={t('player.fullscreen')} onClick={() => n.action('fullscreen')}>
               <Icon name="full" />
             </button>
           </span>
         </div>
       </div>
-      <CouchBanner />
     </div>
   );
 }

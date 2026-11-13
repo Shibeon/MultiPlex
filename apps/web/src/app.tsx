@@ -18,9 +18,9 @@ import { SettingsPage } from './pages/Settings';
 import { ThemesPage } from './pages/Themes';
 import { UpdateBanner, WhatsNew } from './pages/Update';
 import { back, route } from './router';
-import { setCouch, settings } from './settings';
+import { settings } from './settings';
 import { auth, discover, home, libraries, server, status } from './store';
-import { CouchBanner, Icon } from './ui';
+import { Icon } from './ui';
 import { CastBar, CastPicker } from './castui';
 import { TogetherBar, TogetherDialog } from './togetherui';
 
@@ -150,7 +150,6 @@ export function App() {
       <CastBar />
       <TogetherDialog />
       <TogetherBar />
-      <CouchBanner />
     </>
   );
 }
@@ -186,10 +185,6 @@ function Routes() {
         ))}
         <div class="nav-sep grow" />
         <NavLink href="#/search" icon="search" label={t('nav.search')} iconOnly />
-        <button class={`nav-link${settings.value.couch ? ' couch-on' : ' icon-only'}`} aria-pressed={settings.value.couch} title={`${t('couch.title')} (F10)`} onClick={() => setCouch(!settings.value.couch)}>
-          <Icon name="tv" />
-          <span>{t('couch.title')}</span>
-        </button>
         <NavLink href="#/settings" icon="settings" label={t('nav.settings')} iconOnly />
         {home.value.length > 1 && <ProfileLink />}
       </nav>
