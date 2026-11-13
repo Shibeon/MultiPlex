@@ -29,6 +29,8 @@ interface MenuTarget {
 
 const target = signal<MenuTarget | null>(null);
 const infoOf = signal<string | null>(null);
+/** Ouvre la fenêtre « Voir les informations » d'un titre du serveur. */
+export const showInfo = (id: string) => (infoOf.value = id);
 export const toast = signal<{ text: string; action?: { label: string; run: () => void } } | null>(null);
 
 let toastTimer = 0;

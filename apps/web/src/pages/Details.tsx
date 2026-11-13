@@ -1,11 +1,14 @@
 import { seasonCatalogId, techBadges, upcomingEpisodes, type Metadata } from '@multiplex/core';
 import { resolvePlayable } from '../queue';
-import { useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
+import type { ComponentChildren } from 'preact';
+import { showInfo } from '../menu';
+import { PlayerTech } from '../playerui';
 import { formatDuration, t } from '../i18n';
 import { go } from '../router';
 import { settings } from '../settings';
 import { discover, invalidate, server, useData } from '../store';
-import { Card, ErrorBox, HubRow, Icon, Ratings, Spinner, StarRating, TechBadges, artSize, isWatched } from '../ui';
+import { Card, ErrorBox, HubRow, Icon, Ratings, Spinner, StarRating, artSize, isWatched } from '../ui';
 import { ServerWatchlistButton } from './Discover';
 import { OfflineButton } from './Offline';
 import { CastButton } from '../castui';
@@ -111,14 +114,26 @@ export function Details({ id }: { id: string }) {
   };
 
   const playable = ['movie', 'episode', 'show', 'season'].includes(item.type);
-  // Comme sur la maquette : la série en titre, l'épisode (ou la saison) en dessous.
+  // Épisode : la série en petit au-dessus, le titre de l'épisode en grand (de même pour une saison).
   const parentKey = item.type === 'episode' ? item.grandparentRatingKey : item.type === 'season' ? item.parentRatingKey : undefined;
-  const heading = item.type === 'episode' ? (item.grandparentTitle ?? item.title) : item.type === 'season' ? (item.parentTitle ?? item.title) : item.title;
-  const poster = item.type === 'episode' ? item.grandparentThumb : (item.thumb ?? item.parentThumb);
+  const kicker = item.type === 'episode' ? item.grandparentTitle : item.type === 'season' ? item.parentTitle : undefined;
+  const poster = item.type === 'episode' ? (item.grandparentThumb ?? item.parentThumb) : (item.thumb ?? item.parentThumb);
   const art = settings.value.backdrops ? (item.art ?? item.grandparentArt ?? item.parentArt) : undefined;
-  const facts = [item.year, formatDuration(item.duration), item.contentRating].filter(Boolean);
+  const facts = [
+    item.type === 'episode' && item.parentIndex !== undefined && `S${item.parentIndex}`,
+    item.type === 'episode' && item.index !== undefined && `E${item.index}`,
+    item.year,
+    formatDuration(item.duration),
+    item.contentRating,
+  ].filter(Boolean);
   const leftMin = item.viewOffset && item.duration ? Math.round((item.duration - item.viewOffset) / 60000) : 0;
-  const hasTech = !!techBadges(item.Media?.[0]).length;
+  const progress = item.viewOffset && item.duration ? item.viewOffset / item.duration : 0;
+  const tech = techBadges(item.Media?.[0]);
+  const credits: [string, Metadata['Director']][] = [
+    [t('item.director'), item.Director],
+    [t('item.writer'), item.Writer],
+    [t('item.producer'), item.Producer?.slice(0, 8)],
+  ];
 
   return (
     <div class={`details dx${art ? ' has-art' : ''}`}>
@@ -126,20 +141,12 @@ export function Details({ id }: { id: string }) {
       <div class="details-main dx-hero">
         {poster && <img class="details-poster" src={srv.image(poster, 600, 900)} alt="" />}
         <div class="details-info">
-          <h1 class="dx-title">{parentKey ? <a href={`#/item/${parentKey}`}>{heading}</a> : heading}</h1>
-          {item.type === 'episode' && (
-            <p class="dx-sub">
-              <b>
-                S{item.parentIndex} · E{item.index}
-              </b>
-              <span>{item.title}</span>
-            </p>
+          {kicker && (
+            <a class="dx-kicker" href={`#/item/${parentKey}`}>
+              {kicker}
+            </a>
           )}
-          {item.type === 'season' && (
-            <p class="dx-sub">
-              <span>{item.title}</span>
-            </p>
-          )}
+          <h1 class="dx-title">{item.title}</h1>
           {item.tagline && <p class="tagline">{item.tagline}</p>}
           {!!facts.length && (
             <p class="facts">
@@ -166,77 +173,72 @@ export function Details({ id }: { id: string }) {
           )}
           <div class="actions">
             {playable && (
-              <button class="btn primary big" disabled={busy} onClick={() => void play(false)}>
-                <Icon name="play" /> {item.viewOffset ? t('item.resume') : t('item.play')}
-                {leftMin > 0 && (
-                  <small>
-                    {' '}
-                    · {leftMin} min {t('item.left')}
-                  </small>
-                )}
+              <button class={`btn primary big dx-play${progress > 0 ? ' resume' : ''}`} disabled={busy} onClick={() => void play(false)}>
+                <Icon name="play" size={30} />
+                <span class="dx-play-text">
+                  <b>{item.viewOffset ? t('item.resume') : t('item.play')}</b>
+                  {leftMin > 0 && (
+                    <small>
+                      {leftMin} min {t('item.left')}
+                    </small>
+                  )}
+                  {progress > 0 && (
+                    <i class="dx-play-bar">
+                      <i style={{ width: `${progress * 100}%` }} />
+                    </i>
+                  )}
+                </span>
               </button>
             )}
             {!!item.viewOffset && (
               <button class="btn" disabled={busy} onClick={() => void play(true)}>
-                <Icon name="restart" size={18} /> {t('item.restart')}
+                <Icon name="restart" size={20} /> {t('item.restart')}
               </button>
             )}
             <ServerWatchlistButton item={item} />
-            {playable && (
-              <button class="btn" disabled={busy} onClick={() => void toggleWatched()}>
-                <Icon name={isWatched(item) ? 'eye' : 'check'} size={18} /> {isWatched(item) ? t('item.unwatched') : t('item.watched')}
+            <MoreMenu>
+              {playable && (
+                <button class="btn" role="menuitem" disabled={busy} onClick={() => void toggleWatched()}>
+                  <Icon name={isWatched(item) ? 'eye' : 'check'} size={20} /> {isWatched(item) ? t('item.unwatched') : t('item.watched')}
+                </button>
+              )}
+              <OfflineButton item={item} />
+              {playable && <CastButton item={item} start={(item.viewOffset ?? 0) / 1000} />}
+              {(item.type === 'movie' || item.type === 'episode') && <TogetherButton item={item} />}
+              {(item.type === 'movie' || item.type === 'show' || item.type === 'episode') && (
+                <button class="btn" role="menuitem" onClick={() => document.querySelector<HTMLElement>('.dx .stars .star')?.focus()}>
+                  <Icon name="star" size={20} /> {t('item.rate')}
+                </button>
+              )}
+              <button class="btn" role="menuitem" onClick={() => showInfo(item.ratingKey)}>
+                <Icon name="info" size={20} /> {t('item.techInfo')}
               </button>
-            )}
-            <OfflineButton item={item} />
-            {playable && <CastButton item={item} start={(item.viewOffset ?? 0) / 1000} />}
-            {(item.type === 'movie' || item.type === 'episode') && <TogetherButton item={item} />}
+            </MoreMenu>
           </div>
-        </div>
-      </div>
-      {(item.summary || hasTech || item.Genre?.length || item.Director?.length || item.Writer?.length) && (
-        <div class="dx-info">
-          <div class="dx-synopsis">
-            {item.summary && (
-              <>
-                <h3>{t('item.synopsis')}</h3>
-                <p class="summary">{item.summary}</p>
-              </>
-            )}
-            <dl class="credits">
-              {!!item.Genre?.length && <div>{item.Genre.map((g) => g.tag).join(' · ')}</div>}
-              {!!item.Director?.length && (
-                <div>
-                  <dt>{t('item.director')}</dt> <dd>
-                    <PeopleLinks people={item.Director} />
-                  </dd>
-                </div>
+          {item.summary && <p class="summary">{item.summary}</p>}
+          {(credits.some(([, p]) => p?.length) || !!item.Genre?.length) && (
+            <dl class="dx-credits">
+              {!!item.Genre?.length && (
+                <>
+                  <dt>{t('item.genre')}</dt>
+                  <dd>{item.Genre.map((g) => g.tag).join(', ')}</dd>
+                </>
               )}
-              {!!item.Writer?.length && (
-                <div>
-                  <dt>{t('item.writer')}</dt>{' '}
-                  <dd>
-                    <PeopleLinks people={item.Writer} />
-                  </dd>
-                </div>
-              )}
-              {!!item.Producer?.length && (
-                <div>
-                  <dt>{t('item.producer')}</dt>{' '}
-                  <dd>
-                    <PeopleLinks people={item.Producer.slice(0, 8)} />
-                  </dd>
-                </div>
+              {credits.map(([label, people]) =>
+                people?.length ? (
+                  <>
+                    <dt>{label}</dt>
+                    <dd>
+                      <PeopleLinks people={people} />
+                    </dd>
+                  </>
+                ) : null,
               )}
             </dl>
-          </div>
-          {hasTech && (
-            <div class="dx-formats">
-              <h3>{t('item.formats')}</h3>
-              <TechBadges item={item} />
-            </div>
           )}
+          <PlayerTech badges={tech} />
         </div>
-      )}
+      </div>
       <CastRow people={item.Role} title={t('item.cast')} />
       {hasKids && (
         <section class="children">
@@ -254,6 +256,43 @@ export function Details({ id }: { id: string }) {
         </section>
       )}
       {(item.type === 'movie' || item.type === 'show') && <RelatedRows item={item} />}
+    </div>
+  );
+}
+
+/** Bouton « ⋯ » de la fiche : les actions secondaires, dans une liste qui s'ouvre dessous. */
+function MoreMenu({ children }: { children: ComponentChildren }) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    box.current?.querySelector<HTMLElement>('.dx-menu > *')?.focus();
+    const away = (e: Event) => !box.current?.contains(e.target as Node) && setOpen(false);
+    const key = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' && e.key !== 'Backspace' && e.keyCode !== 10009 && e.keyCode !== 461) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setOpen(false);
+      box.current?.querySelector<HTMLElement>('.dx-more-btn')?.focus();
+    };
+    addEventListener('pointerdown', away, true);
+    addEventListener('keydown', key, true);
+    return () => {
+      removeEventListener('pointerdown', away, true);
+      removeEventListener('keydown', key, true);
+    };
+  }, [open]);
+  return (
+    <div class="dx-more" ref={box}>
+      <button class="btn dx-more-btn" aria-label={t('menu.more')} title={t('menu.more')} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <Icon name="dots" size={26} />
+      </button>
+      {open && (
+        // Un choix referme la liste (le clic remonte jusqu'ici).
+        <div class="dx-menu" role="menu" onClick={(e) => (e.target as HTMLElement).closest('button,a') && setOpen(false)}>
+          {children}
+        </div>
+      )}
     </div>
   );
 }
