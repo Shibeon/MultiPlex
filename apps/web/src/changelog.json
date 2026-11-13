@@ -1,6 +1,30 @@
 [
   {
     "versions": {
+      "desktop": "0.1.11",
+      "web": "0.1.11",
+      "android": "0.1.11",
+      "tv": "0.1.11"
+    },
+    "fr": [
+      "Nouvelle fiche : l’affiche à gauche, la série au-dessus du titre de l’épisode, les notes et vos étoiles sur une ligne, un grand bouton « Reprendre » avec le temps restant, et un menu « ⋯ » (marquer comme vu, hors ligne, lire sur un téléviseur, noter, infos techniques).",
+      "Fiche : crédits en tableau (réalisé par, écrit par, producteurs), formats en couleur (4K, Dolby Vision, Atmos…) et casting en photos rondes.",
+      "Lecteur redessiné : titre, épisode et formats en haut avec l’heure de fin estimée ; barre avec Intro et Crédits ; épisode précédent, −30 s, lecture, +30 s, épisode suivant ; puis Audio, Sous-titres et « Plus » pour le reste.",
+      "Lecteur : boutons lumineux, avec un halo sur la lecture et sur le bouton sélectionné à la télécommande.",
+      "Barre du haut : une icône par onglet, l’onglet actif entouré.",
+      "Ordinateur : les mises à jour se font en silence, téléchargées en arrière-plan et installées à la fermeture de l’app (réglage « Installer automatiquement les mises à jour »)."
+    ],
+    "en": [
+      "New details page: poster on the left, the show above the episode title, ratings and your stars on one line, a big “Resume” button with the time left, and a “⋯” menu (mark as watched, offline, play on a TV, rate, technical info).",
+      "Details: credits as a table (directed by, written by, producers), colored formats (4K, Dolby Vision, Atmos…) and the cast as round photos.",
+      "Redesigned player: title, episode and formats at the top with the estimated end time; a bar showing Intro and Credits; previous episode, −30 s, play, +30 s, next episode; then Audio, Subtitles and “More” for the rest.",
+      "Player: glowing buttons, with a halo on play and on the button selected with the remote.",
+      "Top bar: an icon for each tab, the active tab outlined.",
+      "Computer: updates are now silent, downloaded in the background and installed when you quit the app (“Install updates automatically” setting)."
+    ]
+  },
+  {
+    "versions": {
       "desktop": "0.1.10",
       "web": "0.1.10",
       "android": "0.1.10",
