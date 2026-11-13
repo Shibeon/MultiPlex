@@ -3,11 +3,13 @@ import { App } from './app';
 import { isOverlayWindow, isXrayWindow } from './native';
 import { initNav } from './nav';
 import { NativeOverlay } from './pages/NativeOverlay';
+import { initLiquidGlass } from './liquid';
 import { initSettings } from './settings';
 import { boot, status } from './store';
 import './styles.css';
 
 initSettings();
+if (!isXrayWindow) initLiquidGlass();
 
 if (isXrayWindow) {
   // Fenêtre invisible : uniquement la reconnaissance de visages, chargée à la demande.
