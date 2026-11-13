@@ -1,7 +1,8 @@
 // Mise à jour automatique de l'application de bureau, depuis les versions publiées
 // sur GitHub. Par défaut elle est silencieuse : la nouvelle version se télécharge en
-// arrière-plan et s'installe sans rien demander au lancement suivant (installée à la
-// fermeture, elle remplaçait le programme pendant quelques secondes et un raccourci lancé
+// arrière-plan, puis l'app propose de redémarrer : l'installation est alors silencieuse et
+// MultiPlex se relance. Sans redémarrage, elle s'installe au lancement suivant (installée à
+// la fermeture, elle remplaçait le programme pendant quelques secondes et un raccourci lancé
 // à ce moment-là affichait une erreur), sur Windows, macOS et Linux. Si l'utilisateur
 // coupe ce réglage, l'app signale seulement la version, la télécharge sur demande, puis
 // propose de redémarrer. L'interface annonce son choix par `update:auto`.
@@ -169,7 +170,11 @@ function setupUpdater(send, { simulate = false } = {}) {
   const check = () => autoUpdater.checkForUpdates().catch(() => {});
   ipcMain.handle('update:check', check);
   ipcMain.handle('update:download', () => autoUpdater.downloadUpdate().catch(() => {}));
-  ipcMain.handle('update:install', () => autoUpdater.quitAndInstall());
+  // « Redémarrer » : installation silencieuse (sans assistant), puis MultiPlex se relance.
+  ipcMain.handle('update:install', () => {
+    fs.rmSync(pendingFile(), { force: true });
+    setImmediate(() => autoUpdater.quitAndInstall(true, true));
+  });
   // Silencieuse : téléchargement sans demander, installation à la fermeture (autoInstallOnAppQuit).
   ipcMain.handle('update:auto', (_e, on) => {
     auto = !!on;

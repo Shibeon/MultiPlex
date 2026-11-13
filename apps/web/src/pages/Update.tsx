@@ -108,16 +108,18 @@ function notesLines(raw: string | undefined, current = ''): string[] {
 export const canUpdate = !!native?.updates;
 
 /**
- * Bandeau discret en bas de l'écran : une version est disponible, en cours de téléchargement,
- * ou prête. Seulement quand la mise à jour silencieuse est coupée : sinon rien ne s'affiche,
- * et les nouveautés apparaissent une fois au lancement suivant.
+ * Bandeau discret en bas de l'écran. Mise à jour silencieuse (par défaut) : rien pendant le
+ * téléchargement, puis « version prête » avec Redémarrer (installation silencieuse et relance
+ * immédiate) ou Plus tard (installée alors au prochain lancement). Réglage coupé : la version
+ * est d'abord proposée, téléchargée sur demande, puis prête à redémarrer.
  */
 export function UpdateBanner() {
   const u = update.value;
   const [open, setOpen] = useState(false);
-  if (!native?.updates || (settings.value.autoUpdate && native.updates.setAuto)) return null;
-  if (!['available', 'downloading', 'ready'].includes(u.status)) return null;
-  if (u.status === 'available' && dismissed.value === u.version) return null;
+  const silent = settings.value.autoUpdate && !!native?.updates?.setAuto;
+  if (!native?.updates) return null;
+  if (!(silent ? ['ready'] : ['available', 'downloading', 'ready']).includes(u.status)) return null;
+  if ((u.status === 'available' || u.status === 'ready') && dismissed.value === `${u.status}:${u.version}`) return null;
   const news = notesLines(u.notes, u.current);
   return (
     <div class="update-banner" role="status">
@@ -146,15 +148,22 @@ export function UpdateBanner() {
           <button class="btn primary" onClick={() => void native!.updates!.download()}>
             {t('upd.download')}
           </button>
-          <button class="btn" onClick={() => (dismissed.value = u.version ?? '')}>
+          <button class="btn" onClick={() => (dismissed.value = `available:${u.version}`)}>
             {t('upd.later')}
           </button>
         </>
       )}
       {u.status === 'ready' && (
-        <button class="btn primary" onClick={() => void native!.updates!.install()}>
-          {t('upd.restart')}
-        </button>
+        <>
+          <button class="btn primary" onClick={() => void native!.updates!.install()}>
+            {t('upd.restart')}
+          </button>
+          {silent && (
+            <button class="btn" title={t('upd.laterHint')} onClick={() => (dismissed.value = `ready:${u.version}`)}>
+              {t('upd.later')}
+            </button>
+          )}
+        </>
       )}
     </div>
   );
