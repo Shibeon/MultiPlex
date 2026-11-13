@@ -122,7 +122,10 @@ export function UpdateBanner() {
   if ((u.status === 'available' || u.status === 'ready') && dismissed.value === `${u.status}:${u.version}`) return null;
   const news = notesLines(u.notes, u.current);
   return (
-    <div class="update-banner" role="status">
+    <div class={`update-banner${open && news.length > 0 ? ' open' : ''}`} role="status">
+      <span class="update-title">
+        {u.status === 'ready' ? t('upd.ready') : u.status === 'downloading' ? `${t('upd.downloading')} ${u.percent ?? 0} %` : t('upd.available')} <strong>{u.version}</strong>
+      </span>
       {open && news.length > 0 && (
         <ul class="update-notes">
           {news.map((l) => (
@@ -130,41 +133,40 @@ export function UpdateBanner() {
           ))}
         </ul>
       )}
-      <span>
-        {u.status === 'ready' ? t('upd.ready') : u.status === 'downloading' ? `${t('upd.downloading')} ${u.percent ?? 0} %` : t('upd.available')} <strong>{u.version}</strong>
-      </span>
       {u.status === 'downloading' && (
         <span class="progress">
           <i style={{ width: `${u.percent ?? 0}%` }} />
         </span>
       )}
-      {news.length > 0 && (
-        <button class="btn" aria-expanded={open} onClick={() => setOpen(!open)}>
-          {t('upd.whatsNew')}
-        </button>
-      )}
-      {u.status === 'available' && (
-        <>
-          <button class="btn primary" onClick={() => void native!.updates!.download()}>
-            {t('upd.download')}
+      <div class="update-actions">
+        {news.length > 0 && (
+          <button class="btn" aria-expanded={open} onClick={() => setOpen(!open)}>
+            {t('upd.whatsNew')}
           </button>
-          <button class="btn" onClick={() => (dismissed.value = `available:${u.version}`)}>
-            {t('upd.later')}
-          </button>
-        </>
-      )}
-      {u.status === 'ready' && (
-        <>
-          <button class="btn primary" onClick={() => void native!.updates!.install()}>
-            {t('upd.restart')}
-          </button>
-          {silent && (
-            <button class="btn" title={t('upd.laterHint')} onClick={() => (dismissed.value = `ready:${u.version}`)}>
+        )}
+        {u.status === 'available' && (
+          <>
+            <button class="btn primary" onClick={() => void native!.updates!.download()}>
+              {t('upd.download')}
+            </button>
+            <button class="btn" onClick={() => (dismissed.value = `available:${u.version}`)}>
               {t('upd.later')}
             </button>
-          )}
-        </>
-      )}
+          </>
+        )}
+        {u.status === 'ready' && (
+          <>
+            <button class="btn primary" onClick={() => void native!.updates!.install()}>
+              {t('upd.restart')}
+            </button>
+            {silent && (
+              <button class="btn" title={t('upd.laterHint')} onClick={() => (dismissed.value = `ready:${u.version}`)}>
+                {t('upd.later')}
+              </button>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
