@@ -1,6 +1,26 @@
 [
   {
     "versions": {
+      "desktop": "0.1.14",
+      "web": "0.1.14",
+      "android": "0.1.14",
+      "tv": "0.1.14"
+    },
+    "fr": [
+      "Lecteur : Audio, Sous-titres et « Plus » s’ouvrent sur leurs options, qui sortent directement du bouton ; la barre de lecture s’efface le temps du choix.",
+      "Ordinateur, son vers un ampli : quand la sortie (optique, ARC) n’accepte pas le format d’origine (Dolby Digital Plus, Atmos, TrueHD), le son est réencodé en Dolby Digital 5.1 au lieu de sortir en stéréo.",
+      "Mode TV : il est repris au lancement suivant, plein écran compris.",
+      "Fiche d’une personne : ses réseaux sociaux s’affichent avec leurs logos."
+    ],
+    "en": [
+      "Player: Audio, Subtitles and “More” open onto their options, which come straight out of the button; the progress bar steps aside while you choose.",
+      "Computer, sound to a receiver: when the output (optical, ARC) doesn’t accept the original format (Dolby Digital Plus, Atmos, TrueHD), audio is re-encoded to Dolby Digital 5.1 instead of playing in stereo.",
+      "TV mode: it is restored on next launch, full screen included.",
+      "Person page: their social networks are shown with their logos."
+    ]
+  },
+  {
+    "versions": {
       "desktop": "0.1.13",
       "web": "0.1.13",
       "android": "0.1.13",
