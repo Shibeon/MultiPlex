@@ -1,6 +1,17 @@
 [
   {
     "versions": {
+      "desktop": "0.1.12"
+    },
+    "fr": [
+      "Mise à jour de test : elle sert à vérifier que l’installation silencieuse fonctionne (téléchargée en arrière-plan, installée à la fermeture de l’app). Rien d’autre ne change."
+    ],
+    "en": [
+      "Test update: it checks that silent installation works (downloaded in the background, installed when you quit the app). Nothing else changes."
+    ]
+  },
+  {
+    "versions": {
       "desktop": "0.1.11",
       "web": "0.1.11",
       "android": "0.1.11",
