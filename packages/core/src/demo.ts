@@ -1,5 +1,5 @@
 import { randomId } from './http';
-import type { ActiveSession, Hub, ItemsQuery, Library, MediaServer, Metadata, Page, PlaybackPlan } from './types';
+import type { ActiveSession, Hub, ItemsQuery, Library, LibraryOptions, MediaServer, Metadata, Page, PlaybackPlan } from './types';
 
 /**
  * Serveur factice : permet d'essayer et de développer l'interface sans compte
@@ -152,11 +152,25 @@ export class DemoServer implements MediaServer {
   async items(sectionId: string, q: ItemsQuery): Promise<Page<Metadata>> {
     const top = sectionId === '1' ? 'movie' : 'show';
     let list = this.all((m) => m._section === sectionId && m.type === top);
-    if (q.filter?.unwatched || q.filter?.unwatchedLeaves) {
-      list = list.filter((m) => (m.type === 'movie' ? !m.viewCount : (m.viewedLeafCount ?? 0) < (m.leafCount ?? 0)));
-    }
+    const f = q.filter ?? {};
+    const seen = (m: Metadata) => (m.type === 'movie' ? !!m.viewCount : (m.viewedLeafCount ?? 0) >= (m.leafCount ?? 0));
+    const flag = f.unwatched ?? f.unwatchedLeaves;
+    if (flag !== undefined) list = list.filter((m) => (Number(flag) ? !seen(m) : seen(m)));
+    if (f.inProgress) list = list.filter((m) => !!m.viewOffset || (m.type === 'show' && (m.viewedLeafCount ?? 0) > 0 && !seen(m)));
+    if (f.genre) list = list.filter((m) => m.Genre?.some((g) => g.tag === f.genre));
+    if (f.decade) list = list.filter((m) => Math.floor((m.year ?? 0) / 10) * 10 === Number(f.decade));
+    if (f.resolution) list = list.filter((m) => m.Media?.[0]?.videoResolution === String(f.resolution));
     const [field, dir] = (q.sort ?? 'titleSort').split(':');
-    const val = (m: Metadata) => (field === 'year' ? (m.year ?? 0) : field === 'rating' ? (m.rating ?? 0) : field === 'addedAt' ? Number(m.ratingKey) : m.title);
+    const val = (m: Metadata) =>
+      field === 'year' || field === 'originallyAvailableAt'
+        ? (m.year ?? 0)
+        : field === 'rating' || field === 'audienceRating'
+          ? (m.rating ?? 0)
+          : field === 'duration'
+            ? (m.duration ?? 0)
+            : field === 'addedAt' || field === 'lastViewedAt'
+              ? Number(m.ratingKey)
+              : m.title;
     list.sort((a, b) => {
       const x = val(a);
       const y = val(b);
@@ -164,6 +178,35 @@ export class DemoServer implements MediaServer {
       return dir === 'desc' ? -c : c;
     });
     return { items: list.slice(q.offset, q.offset + q.limit), total: list.length, offset: q.offset };
+  }
+
+  async libraryOptions(sectionId: string, type: number): Promise<LibraryOptions> {
+    const base = `/demo/${sectionId}/${type}`;
+    const show = type === 2;
+    const filters = [
+      { filter: show ? 'unwatchedLeaves' : 'unwatched', filterType: 'boolean', key: '', title: 'Unwatched' },
+      { filter: 'inProgress', filterType: 'boolean', key: '', title: 'In Progress' },
+      { filter: 'genre', filterType: 'string', key: `${base}/genre`, title: 'Genre' },
+      { filter: 'decade', filterType: 'integer', key: `${base}/decade`, title: 'Decade' },
+      ...(show ? [] : [{ filter: 'resolution', filterType: 'string', key: `${base}/resolution`, title: 'Resolution' }]),
+    ];
+    const sorts = ['titleSort', 'addedAt', 'year', 'originallyAvailableAt', 'rating', 'audienceRating', 'lastViewedAt', ...(show ? [] : ['duration'])].map((k) => ({
+      key: k,
+      descKey: `${k}:desc`,
+      title: k,
+      defaultDirection: k === 'titleSort' ? 'asc' : 'desc',
+    }));
+    return { filters, sorts };
+  }
+
+  async filterValues(key: string): Promise<{ key: string; title: string }[]> {
+    const [, , section, , what] = key.split('/');
+    const list = this.all((m) => m._section === section && (m.type === 'movie' || m.type === 'show'));
+    const uniq = (v: (string | undefined)[]) => [...new Set(v.filter((x): x is string => !!x))].sort();
+    if (what === 'genre') return uniq(list.flatMap((m) => m.Genre?.map((g) => g.tag) ?? [])).map((g) => ({ key: g, title: g }));
+    if (what === 'decade') return uniq(list.map((m) => (m.year ? String(Math.floor(m.year / 10) * 10) : undefined))).reverse().map((d) => ({ key: d, title: `${d}s` }));
+    if (what === 'resolution') return uniq(list.map((m) => m.Media?.[0]?.videoResolution)).map((r) => ({ key: r, title: r === '4k' ? '4K' : `${r}p` }));
+    return [];
   }
 
   async metadata(ratingKey: string): Promise<Metadata> {

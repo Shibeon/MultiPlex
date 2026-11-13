@@ -6,6 +6,7 @@ import type {
   Hub,
   ItemsQuery,
   Library,
+  LibraryOptions,
   MediaServer,
   Metadata,
   Page,
@@ -67,6 +68,21 @@ export class PlexServer implements MediaServer {
     );
     const items = mc.Metadata ?? [];
     return { items, total: mc.totalSize ?? mc.size ?? items.length, offset: q.offset };
+  }
+
+  async libraryOptions(sectionId: string, type: number): Promise<LibraryOptions> {
+    const mc = await this.mc<{ Meta?: { Type?: { type: string; key?: string; Filter?: LibraryOptions['filters']; Sort?: LibraryOptions['sorts'] }[] } }>(
+      `/library/sections/${sectionId}/all`,
+      { includeMeta: 1, type, 'X-Plex-Container-Start': 0, 'X-Plex-Container-Size': 0 },
+    );
+    const types = mc.Meta?.Type ?? [];
+    const t = types.find((x) => x.key?.includes(`type=${type}`)) ?? types[0];
+    return { filters: t?.Filter ?? [], sorts: t?.Sort ?? [] };
+  }
+
+  async filterValues(key: string): Promise<{ key: string; title: string }[]> {
+    const mc = await this.mc<{ Directory?: { key: string; title: string }[] }>(key);
+    return (mc.Directory ?? []).filter((d) => d.key && d.title).map((d) => ({ key: String(d.key), title: d.title }));
   }
 
   async metadata(ratingKey: string): Promise<Metadata> {

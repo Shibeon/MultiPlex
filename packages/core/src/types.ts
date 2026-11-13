@@ -212,6 +212,29 @@ export interface ItemsQuery {
   filter?: Record<string, string | number>;
 }
 
+/** Filtre proposé par le serveur pour un type d'élément (genre, décennie, résolution, non vus…). */
+export interface LibraryFilter {
+  /** Paramètre à passer dans la requête (`genre`, `decade`, `unwatched`…). */
+  filter: string;
+  filterType: string;
+  /** Adresse de la liste des valeurs possibles (filtres non booléens). */
+  key: string;
+  title: string;
+}
+
+/** Tri proposé par le serveur ; `descKey` = le même dans l'autre sens. */
+export interface LibrarySort {
+  key: string;
+  descKey?: string;
+  title: string;
+  defaultDirection?: string;
+}
+
+export interface LibraryOptions {
+  filters: LibraryFilter[];
+  sorts: LibrarySort[];
+}
+
 export interface PlaybackOptions {
   /** Identifiant d'un préréglage de QUALITIES. */
   quality: string;
@@ -273,6 +296,10 @@ export interface MediaServer {
   libraries(): Promise<Library[]>;
   hubs(sectionId?: string): Promise<Hub[]>;
   items(sectionId: string, query: ItemsQuery): Promise<Page<Metadata>>;
+  /** Filtres et tris que le serveur accepte pour ce type d'élément de la bibliothèque. */
+  libraryOptions?(sectionId: string, type: number): Promise<LibraryOptions>;
+  /** Valeurs possibles d'un filtre (`key` d'un LibraryFilter) : clé à passer et intitulé. */
+  filterValues?(key: string): Promise<{ key: string; title: string }[]>;
   metadata(ratingKey: string): Promise<Metadata>;
   /** Élément du serveur correspondant à un identifiant Plex universel, s'il existe. */
   findByGuid(guid: string): Promise<Metadata | undefined>;

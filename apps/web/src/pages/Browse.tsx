@@ -1,4 +1,4 @@
-import type { Hub, Metadata } from '@multiplex/core';
+import type { Hub, LibraryOptions, MediaServer, Metadata } from '@multiplex/core';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { formatDuration, t } from '../i18n';
 import { go, route } from '../router';
@@ -110,37 +110,118 @@ export function Home() {
 }
 
 const TYPE_ID: Record<string, number> = { movie: 1, show: 2, artist: 8 };
-const SORTS = [
+/**
+ * Tris proposés, dans cet ordre, s'ils figurent parmi ceux que le serveur accepte pour cette
+ * bibliothèque (sans réponse du serveur : les cinq premiers, toujours disponibles).
+ */
+const SORTS: [string, string][] = [
   ['titleSort', 'lib.sort.title'],
-  ['addedAt:desc', 'lib.sort.added'],
-  ['year:desc', 'lib.sort.year'],
-  ['rating:desc', 'lib.sort.rating'],
-  ['lastViewedAt:desc', 'lib.sort.viewed'],
+  ['addedAt', 'lib.sort.added'],
+  ['year', 'lib.sort.year'],
+  ['rating', 'lib.sort.rating'],
+  ['lastViewedAt', 'lib.sort.viewed'],
+  ['originallyAvailableAt', 'lib.sort.release'],
+  ['audienceRating', 'lib.sort.audience'],
+  ['duration', 'lib.sort.duration'],
 ];
 const PAGE = 120;
+
+type Watch = 'all' | 'unwatched' | 'progress' | 'watched';
+interface LibPrefs {
+  sort: string;
+  dir: 'asc' | 'desc';
+  watch: Watch;
+  genre: string;
+  decade: string;
+  /** Résolution du serveur (`4k`, `1080`…) ou `hdr`. */
+  quality: string;
+}
+const DEFAULT_PREFS: LibPrefs = { sort: 'titleSort', dir: 'asc', watch: 'all', genre: '', decade: '', quality: '' };
 
 interface LibState {
   items: (Metadata | undefined)[];
   total: number;
   pages: Set<number>;
 }
+type Choice = { key: string; title: string };
+interface LibOptions {
+  options: LibraryOptions | null;
+  genres: Choice[];
+  decades: Choice[];
+  resolutions: Choice[];
+}
 // Conservés hors du composant : un retour arrière retrouve la grille telle quelle.
 const libStates = new Map<string, LibState>();
-const libPrefs = new Map<string, { sort: string; unwatched: boolean }>();
+const libPrefs = new Map<string, LibPrefs>();
+const libOptions = new Map<string, Promise<LibOptions>>();
+
+/** Filtres et tris que le serveur accepte, avec les valeurs des listes (genres, décennies, résolutions). */
+function loadOptions(srv: MediaServer, section: string, type: number | undefined): Promise<LibOptions> {
+  const none: LibOptions = { options: null, genres: [], decades: [], resolutions: [] };
+  if (!type || !srv.libraryOptions) return Promise.resolve(none);
+  return srv
+    .libraryOptions(section, type)
+    .then(async (options) => {
+      const values = (name: string) => {
+        const f = options.filters.find((x) => x.filter === name);
+        return f?.key && srv.filterValues ? srv.filterValues(f.key).catch(() => []) : Promise.resolve([]);
+      };
+      const [genres, decades, resolutions] = await Promise.all([values('genre'), values('decade'), values('resolution')]);
+      return { options, genres, decades, resolutions };
+    })
+    .catch(() => none);
+}
+
+const decadeLabel = (title: string) => {
+  const y = /^(\d{4})s?$/.exec(title.trim())?.[1];
+  return y ? t('lib.decadeOf').replace('{y}', y) : title;
+};
 
 export function LibraryPage({ id }: { id: string }) {
   const srv = server.value!;
   const lib = libraries.value.find((l) => l.key === id);
+  const type = lib ? TYPE_ID[lib.type] : undefined;
   const prefKey = `${srv.id}:${id}`;
-  const [prefs, setPrefsState] = useState(() => libPrefs.get(prefKey) ?? { sort: 'titleSort', unwatched: false });
+  const [prefs, setPrefsState] = useState<LibPrefs>(() => libPrefs.get(prefKey) ?? DEFAULT_PREFS);
+  const [opts, setOpts] = useState<LibOptions | null>(null);
   const [, render] = useState(0);
   const [error, setError] = useState<Error | null>(null);
-  const setPrefs = (p: typeof prefs) => {
-    libPrefs.set(prefKey, p);
-    setPrefsState(p);
+  const setPrefs = (p: Partial<LibPrefs>) => {
+    const next = { ...prefs, ...p };
+    libPrefs.set(prefKey, next);
+    setPrefsState(next);
   };
 
-  const key = `${prefKey}:${prefs.sort}:${prefs.unwatched}`;
+  useEffect(() => {
+    let promise = libOptions.get(prefKey);
+    if (!promise) libOptions.set(prefKey, (promise = loadOptions(srv, id, type)));
+    let live = true;
+    void promise.then((o) => live && setOpts(o));
+    return () => {
+      live = false;
+    };
+  }, [prefKey]);
+
+  const filters = opts?.options?.filters;
+  const has = (name: string) => !!filters?.some((f) => f.filter === name);
+  // Non vus : `unwatchedLeaves` pour les séries (épisodes non vus), `unwatched` pour les films.
+  const unwatchedKey = has('unwatchedLeaves') ? 'unwatchedLeaves' : has('unwatched') ? 'unwatched' : lib?.type === 'show' ? 'unwatchedLeaves' : 'unwatched';
+  const serverSorts = opts?.options?.sorts;
+  const sorts = serverSorts?.length ? SORTS.filter(([k]) => serverSorts.some((x) => x.key === k)) : SORTS.slice(0, 5);
+  const sortDef = serverSorts?.find((x) => x.key === prefs.sort);
+
+  const filter: Record<string, string | number> = {};
+  if (prefs.watch === 'unwatched') filter[unwatchedKey] = 1;
+  if (prefs.watch === 'watched') filter[unwatchedKey] = 0;
+  if (prefs.watch === 'progress') filter.inProgress = 1;
+  if (prefs.genre) filter.genre = prefs.genre;
+  if (prefs.decade) filter.decade = prefs.decade;
+  if (prefs.quality === 'hdr') filter.hdr = 1;
+  else if (prefs.quality) filter.resolution = prefs.quality;
+  const sort = prefs.dir === 'desc' ? (sortDef?.descKey ?? `${prefs.sort}:desc`) : prefs.sort;
+  const filtered = prefs.watch !== 'all' || !!prefs.genre || !!prefs.decade || !!prefs.quality;
+
+  const key = `${prefKey}:${sort}:${JSON.stringify(filter)}`;
   let state = libStates.get(key);
   if (!state) libStates.set(key, (state = { items: [], total: -1, pages: new Set() }));
   const current = useRef(key);
@@ -150,9 +231,8 @@ export function LibraryPage({ id }: { id: string }) {
     const st = state!;
     if (st.pages.has(page)) return;
     st.pages.add(page);
-    const filter: Record<string, number> | undefined = prefs.unwatched ? (lib?.type === 'show' ? { unwatchedLeaves: 1 } : { unwatched: 1 }) : undefined;
     srv
-      .items(id, { type: lib ? TYPE_ID[lib.type] : undefined, sort: prefs.sort, offset: page * PAGE, limit: PAGE, filter })
+      .items(id, { type, sort, offset: page * PAGE, limit: PAGE, filter: filtered ? filter : undefined })
       .then((res) => {
         st.total = res.total;
         res.items.forEach((m, i) => (st.items[res.offset + i] = m));
@@ -169,6 +249,18 @@ export function LibraryPage({ id }: { id: string }) {
     loadPage(0);
   }, [key]);
 
+  const changeSort = (k: string) => {
+    const d = serverSorts?.find((x) => x.key === k)?.defaultDirection;
+    setPrefs({ sort: k, dir: d === 'asc' || d === 'desc' ? d : k === 'titleSort' ? 'asc' : 'desc' });
+  };
+  const watchOptions: [Watch, string][] = [
+    ['all', 'lib.watch.all'],
+    ['unwatched', 'lib.watch.unwatched'],
+    ...(!filters || has('inProgress') ? ([['progress', 'lib.watch.progress']] as [Watch, string][]) : []),
+    ['watched', 'lib.watch.watched'],
+  ];
+  const qualities = [...(opts?.resolutions ?? []), ...(has('hdr') ? [{ key: 'hdr', title: 'HDR' }] : [])];
+
   const s = settings.value;
   return (
     <div class="page">
@@ -179,22 +271,73 @@ export function LibraryPage({ id }: { id: string }) {
             {state.total} {t('lib.count')}
           </span>
         )}
-        <span class="spacer" />
-        <button class={`btn toggle-pill${prefs.unwatched ? ' on' : ''}`} aria-pressed={prefs.unwatched} onClick={() => setPrefs({ ...prefs, unwatched: !prefs.unwatched })}>
-          {prefs.unwatched && <Icon name="check" size={16} />}
-          {t('lib.unwatched')}
-        </button>
-        <select aria-label={t('lib.sort')} value={prefs.sort} onChange={(e) => setPrefs({ ...prefs, sort: e.currentTarget.value })}>
-          {SORTS.map(([v, label]) => (
-            <option key={v} value={v}>
-              {t(label)}
-            </option>
-          ))}
-        </select>
       </header>
+      <div class="lib-tools">
+        <div class="lib-filters">
+          <select class={prefs.watch !== 'all' ? 'on' : ''} aria-label={t('lib.watch')} value={prefs.watch} onChange={(e) => setPrefs({ watch: e.currentTarget.value as Watch })}>
+            {watchOptions.map(([v, label]) => (
+              <option key={v} value={v}>
+                {t(label)}
+              </option>
+            ))}
+          </select>
+          {opts && opts.genres.length > 0 && (
+            <select class={prefs.genre ? 'on' : ''} aria-label={t('lib.genre')} value={prefs.genre} onChange={(e) => setPrefs({ genre: e.currentTarget.value })}>
+              <option value="">{t('lib.genre.all')}</option>
+              {opts.genres.map((g) => (
+                <option key={g.key} value={g.key}>
+                  {g.title}
+                </option>
+              ))}
+            </select>
+          )}
+          {opts && opts.decades.length > 0 && (
+            <select class={prefs.decade ? 'on' : ''} aria-label={t('lib.decade')} value={prefs.decade} onChange={(e) => setPrefs({ decade: e.currentTarget.value })}>
+              <option value="">{t('lib.decade.all')}</option>
+              {opts.decades.map((d) => (
+                <option key={d.key} value={d.key}>
+                  {decadeLabel(d.title)}
+                </option>
+              ))}
+            </select>
+          )}
+          {qualities.length > 0 && (
+            <select class={prefs.quality ? 'on' : ''} aria-label={t('lib.quality')} value={prefs.quality} onChange={(e) => setPrefs({ quality: e.currentTarget.value })}>
+              <option value="">{t('lib.quality.all')}</option>
+              {qualities.map((q) => (
+                <option key={q.key} value={q.key}>
+                  {q.title}
+                </option>
+              ))}
+            </select>
+          )}
+          {filtered && (
+            <button class="btn lib-reset" onClick={() => setPrefs({ watch: 'all', genre: '', decade: '', quality: '' })}>
+              <Icon name="close" size={16} /> {t('lib.reset')}
+            </button>
+          )}
+        </div>
+        <div class="lib-sort">
+          <select aria-label={t('lib.sort')} value={prefs.sort} onChange={(e) => changeSort(e.currentTarget.value)}>
+            {sorts.map(([v, label]) => (
+              <option key={v} value={v}>
+                {t(label)}
+              </option>
+            ))}
+          </select>
+          <button
+            class="btn icon-btn lib-dir"
+            aria-label={prefs.dir === 'asc' ? t('lib.asc') : t('lib.desc')}
+            title={prefs.dir === 'asc' ? t('lib.asc') : t('lib.desc')}
+            onClick={() => setPrefs({ dir: prefs.dir === 'asc' ? 'desc' : 'asc' })}
+          >
+            <Icon name={prefs.dir === 'asc' ? 'up' : 'down'} size={18} />
+          </button>
+        </div>
+      </div>
       {error && <ErrorBox error={error} retry={() => (setError(null), loadPage(0))} />}
       {state.total < 0 && !error && <Spinner />}
-      {state.total === 0 && <p class="muted">{t('common.empty')}</p>}
+      {state.total === 0 && <p class="muted">{filtered ? t('lib.noMatch') : t('common.empty')}</p>}
       {state.total > 0 && (
         <VirtualGrid
           total={state.total}
