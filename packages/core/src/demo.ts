@@ -194,7 +194,7 @@ export class DemoServer implements MediaServer {
       { filter: 'inProgress', filterType: 'boolean', key: '', title: 'In Progress' },
       { filter: 'genre', filterType: 'string', key: `${base}/genre`, title: 'Genre' },
       { filter: 'decade', filterType: 'integer', key: `${base}/decade`, title: 'Decade' },
-      ...(show && type !== 4 ? [] : [{ filter: 'resolution', filterType: 'string', key: `${base}/resolution`, title: 'Resolution' }]),
+      ...(show ? [] : [{ filter: 'resolution', filterType: 'string', key: `${base}/resolution`, title: 'Resolution' }]),
       { filter: 'year', filterType: 'integer', key: `${base}/year`, title: 'Year' },
     ];
     const sorts = ['titleSort', 'addedAt', 'year', 'originallyAvailableAt', 'rating', 'audienceRating', 'lastViewedAt', ...(show ? [] : ['duration'])].map((k) => ({
