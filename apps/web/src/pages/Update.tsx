@@ -1,4 +1,4 @@
-import { signal } from '@preact/signals';
+import { effect, signal } from '@preact/signals';
 import { useState } from 'preact/hooks';
 import changelog from '../changelog.json';
 import versions from '../../../../versions.json';
@@ -18,6 +18,8 @@ if (native?.updates && !isOverlayWindow) {
     .then((s) => (update.value = s))
     .catch(() => {});
   native.updates.on((s) => (update.value = s));
+  // Silencieuse par défaut : l'app de bureau télécharge seule et installe à la fermeture.
+  effect(() => void native!.updates!.setAuto?.(settings.value.autoUpdate)?.catch(() => {}));
 }
 
 type Notes = { version: string; fr: string[]; en: string[] };
@@ -105,11 +107,15 @@ function notesLines(raw: string | undefined, current = ''): string[] {
 /** Vrai dans l'application de bureau, où la mise à jour automatique existe. */
 export const canUpdate = !!native?.updates;
 
-/** Bandeau discret en bas de l'écran : une version est disponible, en cours de téléchargement, ou prête. */
+/**
+ * Bandeau discret en bas de l'écran : une version est disponible, en cours de téléchargement,
+ * ou prête. Seulement quand la mise à jour silencieuse est coupée : sinon rien ne s'affiche,
+ * et les nouveautés apparaissent une fois au lancement suivant.
+ */
 export function UpdateBanner() {
   const u = update.value;
   const [open, setOpen] = useState(false);
-  if (!native?.updates || !settings.value.autoUpdate) return null;
+  if (!native?.updates || (settings.value.autoUpdate && native.updates.setAuto)) return null;
   if (!['available', 'downloading', 'ready'].includes(u.status)) return null;
   if (u.status === 'available' && dismissed.value === u.version) return null;
   const news = notesLines(u.notes, u.current);
@@ -175,7 +181,9 @@ export function UpdateSettings() {
         ? t('upd.none')
         : u.status === 'error'
           ? t('upd.error')
-          : u.status === 'available' || u.status === 'downloading' || u.status === 'ready'
+          : u.status === 'ready' && settings.value.autoUpdate
+            ? t('upd.onQuit').replace('{v}', u.version ?? '')
+            : u.status === 'available' || u.status === 'downloading' || u.status === 'ready'
             ? `${t('upd.available')} ${u.version}`
             : '';
   return (

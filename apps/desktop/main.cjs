@@ -758,7 +758,8 @@ function createWindow() {
     const wait = (ms) => new Promise((r) => setTimeout(r, ms));
     const banner = () => js("(() => { const b = document.querySelector('.update-banner'); return b ? { text: b.querySelector('span').textContent.trim(), buttons: [...b.querySelectorAll('.btn')].map((x) => x.textContent.trim()) } : null; })()");
     win.webContents.on('did-finish-load', async () => {
-      if (++loads === 1) return void (await js("localStorage.setItem('mp.demo','true'); location.reload()"));
+      // Le bandeau n'existe que si la mise à jour silencieuse est coupée : c'est ce parcours qu'on teste.
+      if (++loads === 1) return void (await js("localStorage.setItem('mp.demo','true'); localStorage.setItem('mp.settings', JSON.stringify({ ...JSON.parse(localStorage.getItem('mp.settings') || '{}'), autoUpdate: false })); location.reload()"));
       const report = {};
       try {
         await wait(3500);

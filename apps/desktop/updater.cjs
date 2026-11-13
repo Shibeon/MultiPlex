@@ -1,6 +1,8 @@
 // Mise à jour automatique de l'application de bureau, depuis les versions publiées
-// sur GitHub. Rien n'est installé sans l'accord de l'utilisateur : l'app signale
-// qu'une version existe, la télécharge sur demande, puis propose de redémarrer.
+// sur GitHub. Par défaut elle est silencieuse : la nouvelle version se télécharge en
+// arrière-plan et s'installe à la fermeture de l'app, sans rien demander. Si l'utilisateur
+// coupe ce réglage, l'app signale seulement la version, la télécharge sur demande, puis
+// propose de redémarrer. L'interface annonce son choix par `update:auto`.
 const { app, ipcMain } = require('electron');
 
 const CHECK_EVERY_MS = 6 * 60 * 60 * 1000;
@@ -29,6 +31,7 @@ function setupUpdater(send, { simulate = false } = {}) {
       set({ status: 'ready', version: '9.9.9' });
     });
     ipcMain.handle('update:install', () => set({ status: 'idle', installed: true }));
+    ipcMain.handle('update:auto', () => undefined);
     setTimeout(() => set({ status: 'available', version: '9.9.9', notes }), 1500);
     return;
   }
@@ -47,6 +50,7 @@ function setupUpdater(send, { simulate = false } = {}) {
     ipcMain.handle('update:check', () => set({ status: 'none' }));
     ipcMain.handle('update:download', () => undefined);
     ipcMain.handle('update:install', () => undefined);
+    ipcMain.handle('update:auto', () => undefined);
     return;
   }
 
@@ -77,6 +81,11 @@ function setupUpdater(send, { simulate = false } = {}) {
   ipcMain.handle('update:check', check);
   ipcMain.handle('update:download', () => autoUpdater.downloadUpdate().catch(() => {}));
   ipcMain.handle('update:install', () => autoUpdater.quitAndInstall());
+  // Silencieuse : téléchargement sans demander, installation à la fermeture (autoInstallOnAppQuit).
+  ipcMain.handle('update:auto', (_e, on) => {
+    autoUpdater.autoDownload = !!on;
+    if (on && state.status === 'available') autoUpdater.downloadUpdate().catch(() => {});
+  });
 
   setTimeout(check, 8000);
   setInterval(check, CHECK_EVERY_MS);

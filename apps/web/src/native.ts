@@ -74,6 +74,8 @@ export interface NativeApi {
     check(): Promise<unknown>;
     download(): Promise<unknown>;
     install(): Promise<unknown>;
+    /** Mise à jour silencieuse (téléchargée seule, installée à la fermeture) ; absent des anciennes versions. */
+    setAuto?(on: boolean): Promise<unknown>;
     on(listener: (state: UpdateState) => void): () => void;
   };
   /** Sorties audio de la machine ; absent des versions de l'app qui ne le proposent pas. */

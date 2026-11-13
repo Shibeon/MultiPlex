@@ -85,6 +85,7 @@ contextBridge.exposeInMainWorld('multiplexNative', {
     check: () => ipcRenderer.invoke('update:check'),
     download: () => ipcRenderer.invoke('update:download'),
     install: () => ipcRenderer.invoke('update:install'),
+    setAuto: (on) => ipcRenderer.invoke('update:auto', !!on),
     on: subscribe('update:event', ([state]) => [state]),
   },
 });
