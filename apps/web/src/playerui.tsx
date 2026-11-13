@@ -87,7 +87,8 @@ export function PlayerOutput({ badges, source }: { badges: TechBadge[] | undefin
     <div class={`ptech-out${open ? ' open' : ''}`}>
       <div class="ptech-row">
         <ul class="ptech" aria-label={t('live.label')}>
-          {[...video, ...audio].map((b) => (
+          {/* Traitement du son (réencodé, transmis tel quel) : seulement dans le détail ⓘ. */}
+          {[...video, ...audio.filter((b) => b.kind !== 'proc')].map((b) => (
             <TechPill key={b.kind + b.label} b={b} />
           ))}
         </ul>
