@@ -68,8 +68,8 @@ function audioBadges(badges: TechBadge[]): TechBadge[] {
 }
 
 /**
- * Lecteur : ce qui sort vraiment, sur deux lignes (vidéo, audio), et un bouton ⓘ qui ouvre
- * le détail « source → sortie » avec l'explication de chaque conversion.
+ * Lecteur : ce qui sort vraiment, sur une ligne, et un bouton ⓘ qui ouvre le détail
+ * « source → sortie » avec l'explication de chaque conversion.
  */
 export function PlayerOutput({ badges, source }: { badges: TechBadge[] | undefined; source: TechBadge[] }) {
   const [open, setOpen] = useState(false);
@@ -84,34 +84,17 @@ export function PlayerOutput({ badges, source }: { badges: TechBadge[] | undefin
   const notes = [...new Set(badges.map((b) => b.hint).filter((h): h is string => !!h))];
   if (badges.some((b) => b.unsure)) notes.push(t('live.unsureNote'));
   return (
-    <div class={`ptech-out${open ? ' open' : ''}`} aria-label={t('live.label')}>
-      {video.length > 0 && (
-        <div class="ptech-row">
-          <span class="ptech-head">
-            <Icon name="movie" size={18} /> {t('live.video')}
-          </span>
-          <ul class="ptech">
-            {video.map((b) => (
-              <TechPill key={b.kind + b.label} b={b} />
-            ))}
-          </ul>
-        </div>
-      )}
-      {audio.length > 0 && (
-        <div class="ptech-row">
-          <span class="ptech-head">
-            <Icon name="volume" size={18} /> {t('live.audio')}
-          </span>
-          <ul class="ptech">
-            {audio.map((b) => (
-              <TechPill key={b.kind + b.label} b={b} />
-            ))}
-          </ul>
-          <button class="ptech-info" aria-label={t('live.details')} title={t('live.details')} aria-expanded={open} onClick={() => setOpen(!open)}>
-            <Icon name="info" size={20} />
-          </button>
-        </div>
-      )}
+    <div class={`ptech-out${open ? ' open' : ''}`}>
+      <div class="ptech-row">
+        <ul class="ptech" aria-label={t('live.label')}>
+          {[...video, ...audio].map((b) => (
+            <TechPill key={b.kind + b.label} b={b} />
+          ))}
+        </ul>
+        <button class="ptech-info" aria-label={t('live.details')} title={t('live.details')} aria-expanded={open} onClick={() => setOpen(!open)}>
+          <Icon name="info" size={20} />
+        </button>
+      </div>
       {open && (
         <div class="ptech-panel" role="dialog" aria-label={t('live.details')}>
           <dl>
