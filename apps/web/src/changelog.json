@@ -1,6 +1,22 @@
 [
   {
     "versions": {
+      "desktop": "0.1.19",
+      "web": "0.1.19",
+      "android": "0.1.19",
+      "tv": "0.1.19"
+    },
+    "fr": [
+      "Lecteur : les pastilles sous le titre montrent ce qui est réellement restitué, et non plus les caractéristiques du fichier : définition décodée, HDR10 ou SDR envoyé à l’écran, son transmis à l’ampli (passthrough, réencodé en Dolby Digital) ou décodé (PCM et canaux), Direct Play ou transcodage. Ce qui ne peut pas être vérifié est marqué d’un « ? ». L’étiquette audio en haut à droite disparaît, intégrée aux pastilles.",
+      "Ordinateur : première version livrée par la mise à jour à chaud (installée pendant que MultiPlex est ouvert, « Redémarrer » relance directement dessus)."
+    ],
+    "en": [
+      "Player: the badges under the title now show what is actually output, not the file’s properties: decoded resolution, HDR10 or SDR sent to the screen, audio passed to the receiver (passthrough, re-encoded to Dolby Digital) or decoded (PCM and channels), Direct Play or transcoding. Anything that cannot be verified is marked with a “?”. The audio label at the top right is gone, folded into the badges.",
+      "Computer: first version delivered by the hot update (installed while MultiPlex is open, “Restart” reopens straight into it)."
+    ]
+  },
+  {
+    "versions": {
       "desktop": "0.1.18",
       "web": "0.1.18",
       "android": "0.1.18",
