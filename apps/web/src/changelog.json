@@ -1,6 +1,28 @@
 [
   {
     "versions": {
+      "desktop": "0.1.21",
+      "web": "0.1.21",
+      "android": "0.1.21",
+      "tv": "0.1.21"
+    },
+    "fr": [
+      "Bibliothèques Films et Séries : filtres par visionnage (non vus, en cours, vus), genre, décennie et qualité vidéo (4K, 1080p, HDR…), et nouveaux tris (date de sortie, note du public, durée) avec un bouton pour inverser l’ordre. Seuls les filtres et tris acceptés par votre serveur Plex sont proposés.",
+      "Fiche du média : les pastilles montrent ce que votre appareil restituera (comme dans le lecteur), d’après ce qu’il a réellement restitué à la dernière lecture d’un fichier semblable ; sinon une estimation marquée « ? ». Les caractéristiques du fichier restent dans « Infos techniques ».",
+      "Lecteur : le volume passe à gauche, le plein écran reste à droite.",
+      "Menu : Films et Séries passent avant Ma liste et Amis.",
+      "Ordinateur : première version installée par la mise à jour à chaud depuis la 0.1.20 (pendant que MultiPlex est ouvert, puis « Redémarrer »)."
+    ],
+    "en": [
+      "Movies and TV Shows libraries: filter by watch state (unwatched, in progress, watched), genre, decade and video quality (4K, 1080p, HDR…), plus new sorts (release date, audience rating, duration) with a button to reverse the order. Only filters and sorts your Plex server supports are offered.",
+      "Details page: the badges show what your device will output (as in the player), based on what it actually output the last time a similar file played; otherwise an estimate marked “?”. The file’s own properties remain in “Technical info”.",
+      "Player: volume moves to the left, full screen stays on the right.",
+      "Menu: Movies and TV Shows now come before My list and Friends.",
+      "Computer: first version installed by the hot update from 0.1.20 (while MultiPlex is open, then “Restart”)."
+    ]
+  },
+  {
+    "versions": {
       "desktop": "0.1.20",
       "web": "0.1.20",
       "android": "0.1.20",
