@@ -164,6 +164,22 @@ jobs:
           TAG: ${{ needs.release.outputs.tag }}
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          # Un système plus lent dépose quand même ses fichiers dans une version déjà publiée.
+          EP_GH_IGNORE_TIME: 'true'
+
+      # Chaque système publie la version dès que ses fichiers sont déposés, sans attendre les
+      # autres : le premier la rend publique, les suivants y ajoutent les leurs. En attendant,
+      # une app sur un système pas encore prêt ne trouve simplement pas de mise à jour.
+      - name: Publier la version
+        if: needs.release.outputs.desktop == 'true'
+        shell: bash
+        run: |
+          repo=$(node -p "const p = require('./apps/desktop/package.json').build.publish[0]; p.owner + '/' + p.repo")
+          node scripts/versions.mjs notes desktop release-body.md --md
+          gh release edit "$TAG" --repo "$repo" --draft=false --latest --notes-file release-body.md
+        env:
+          TAG: ${{ needs.release.outputs.tag }}
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
 
       - uses: actions/upload-artifact@v4
         with:
@@ -174,22 +190,25 @@ jobs:
             apps/desktop/release/*.AppImage
             apps/desktop/release/*.deb
 
-  # Windows, macOS et Linux ont réussi : la version devient publique (la mise à jour est
-  # proposée), et l'étiquette est posée ici sur le commit publié.
+  # Après les compilations (même si l'une a échoué) : étiquette du commit publié et
+  # remise en texte lisible des anciennes pages de version.
   publish:
     needs: [release, desktop]
-    if: ${{ !cancelled() && needs.release.outputs.desktop == 'true' && needs.desktop.result == 'success' }}
+    if: ${{ !cancelled() && needs.release.outputs.desktop == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Rendre la version publique
+      - name: Pages de version lisibles
         env:
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
           TAG: ${{ needs.release.outputs.tag }}
         run: |
           repo=$(node -p "const p = require('./apps/desktop/package.json').build.publish[0]; p.owner + '/' + p.repo")
-          node scripts/versions.mjs notes desktop release-body.md --md
-          gh release edit "$TAG" --repo "$repo" --draft=false --latest --notes-file release-body.md
+          # Aucun système n'a réussi : la version reste en brouillon, rien à étiqueter.
+          if [ "$(gh release view "$TAG" --repo "$repo" --json isDraft -q .isDraft)" = true ]; then
+            echo "$TAG toujours en brouillon."
+            echo "UNPUBLISHED=1" >> "$GITHUB_ENV"
+          fi
           # Anciennes versions dont la page affichait le JSON destiné à l'application : remises
           # en texte lisible (sans effet sur les mises à jour, qui lisent « latest.yml »).
           for t in $(gh release list --repo "$repo" --limit 100 --json tagName -q '.[].tagName'); do
@@ -199,6 +218,7 @@ jobs:
             if [ -s fixed-body.md ]; then gh release edit "$t" --repo "$repo" --notes-file fixed-body.md; fi
           done
       - name: Étiqueter le commit publié
+        if: env.UNPUBLISHED != '1'
         env:
           TAG: ${{ needs.release.outputs.tag }}
         run: |
