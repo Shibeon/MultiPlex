@@ -430,14 +430,16 @@ export function NativeOverlay() {
           </span>
         </div>
         <div class="controls">
-          {audio.length > 0 && <PillMenu icon="audio" act="audio" label={t('player.audio')} open={menu === 'audio'} menu={menuList} onClick={openMenu('audio')} />}
-          {subs.length > 0 && <PillMenu icon="subtitles" act="sub" label={t('player.subs')} open={menu === 'sub'} menu={menuList} onClick={openMenu('sub')} />}
-          <PillMenu icon="plus" act="more" label={t('player.more')} open={!!menu && menu !== 'audio' && menu !== 'sub'} menu={menuList} onClick={() => setMenu(menu ? null : 'more')} />
-          <span class="side">
+          <span class="side side-left">
             <button class="btn icon-btn" data-act="mute" aria-label="Volume" aria-pressed={muted} onClick={() => void n.command('mute')}>
               <Icon name={muted || volume === 0 ? 'mute' : 'volume'} />
             </button>
             <input class="volume" type="range" aria-label="Volume" min={0} max={100} step={1} value={muted ? 0 : Math.min(100, volume)} style={{ '--fill': `${muted ? 0 : Math.min(100, volume)}%` }} onInput={(e) => void n.command('volume', Number(e.currentTarget.value))} />
+          </span>
+          {audio.length > 0 && <PillMenu icon="audio" act="audio" label={t('player.audio')} open={menu === 'audio'} menu={menuList} onClick={openMenu('audio')} />}
+          {subs.length > 0 && <PillMenu icon="subtitles" act="sub" label={t('player.subs')} open={menu === 'sub'} menu={menuList} onClick={openMenu('sub')} />}
+          <PillMenu icon="plus" act="more" label={t('player.more')} open={!!menu && menu !== 'audio' && menu !== 'sub'} menu={menuList} onClick={() => setMenu(menu ? null : 'more')} />
+          <span class="side">
             <button class="btn icon-btn" aria-label={t('player.fullscreen')} onClick={() => n.action('fullscreen')}>
               <Icon name="full" />
             </button>

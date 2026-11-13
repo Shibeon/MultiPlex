@@ -680,13 +680,15 @@ export function Player({ id }: { id: string }) {
           </span>
         </div>
         <div class="controls">
+          <span class="side side-left">
+            <button class="btn icon-btn" aria-label="Volume" aria-pressed={ui.muted} onClick={() => (v().muted = !v().muted)}>
+              <Icon name={ui.muted ? 'mute' : 'volume'} />
+            </button>
+          </span>
           {audioStreams.length > 0 && <PillMenu icon="audio" act="audio" label={t('player.audio')} open={menu === 'audio'} menu={menuList} onClick={openMenu('audio')} />}
           {subStreams.length > 0 && <PillMenu icon="subtitles" act="sub" label={t('player.subs')} open={menu === 'sub'} menu={menuList} onClick={openMenu('sub')} />}
           <PillMenu icon="plus" act="more" label={t('player.more')} open={!!menu && menu !== 'audio' && menu !== 'sub'} menu={menuList} onClick={() => setMenu(menu ? null : 'more')} />
           <span class="side">
-            <button class="btn icon-btn" aria-label="Volume" aria-pressed={ui.muted} onClick={() => (v().muted = !v().muted)}>
-              <Icon name={ui.muted ? 'mute' : 'volume'} />
-            </button>
             <button class="btn icon-btn" aria-label={t('player.fullscreen')} title={t('player.fullscreen')} onClick={fullscreen}>
               <Icon name="full" />
             </button>
