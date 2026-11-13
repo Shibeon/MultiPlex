@@ -1,6 +1,24 @@
 [
   {
     "versions": {
+      "desktop": "0.1.23",
+      "web": "0.1.23",
+      "android": "0.1.23",
+      "tv": "0.1.23"
+    },
+    "fr": [
+      "Plus d’éclair blanc à l’ouverture de MultiPlex.",
+      "Fiche d’une série : les saisons passent avant le casting (et les épisodes avant le casting sur la fiche d’une saison).",
+      "Bibliothèques : « Plus de filtres » se rouvre comme vous l’aviez laissé, et s’ouvre toujours si l’un de ses filtres est actif ; le filtre par emplacement est retiré."
+    ],
+    "en": [
+      "No more white flash when MultiPlex opens.",
+      "Show page: seasons now come before the cast (and episodes before the cast on a season page).",
+      "Libraries: “More filters” reopens the way you left it, and always opens when one of its filters is active; the location filter is gone."
+    ]
+  },
+  {
+    "versions": {
       "desktop": "0.1.22",
       "web": "0.1.22",
       "android": "0.1.22",
