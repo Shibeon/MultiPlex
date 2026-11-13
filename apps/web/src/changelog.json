@@ -1,6 +1,22 @@
 [
   {
     "versions": {
+      "desktop": "0.1.31",
+      "web": "0.1.31",
+      "android": "0.1.31",
+      "tv": "0.1.31"
+    },
+    "fr": [
+      "Téléviseur : interface allégée (sans flou ni reflets) pour une navigation plus fluide à la télécommande ; une touche maintenue ne bloque plus l’appli.",
+      "Téléviseur : l’affiche sélectionnée passe au premier plan, et la sélection dans la barre du haut n’est plus doublée ni coupée."
+    ],
+    "en": [
+      "TV: lighter interface (no blur or reflections) for smoother remote navigation; holding a key no longer freezes the app.",
+      "TV: the selected poster is drawn on top, and the top bar selection is no longer doubled or clipped."
+    ]
+  },
+  {
+    "versions": {
       "desktop": "0.1.30",
       "web": "0.1.30",
       "android": "0.1.30",
