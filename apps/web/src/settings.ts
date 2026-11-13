@@ -178,9 +178,15 @@ export function sanitize(input: unknown): Partial<Settings> {
 /** Agrandissement de l'interface : ce qui se lit à 60 cm doit se lire à 3 m. */
 const COUCH_SCALE = 1.4;
 
-const isTv = () => innerHeight <= 620 && innerWidth >= 900;
+/**
+ * Téléphone : écran tactile dont le petit côté est court. En paysage, un grand téléphone
+ * dépasse 900 px de large : sans ce garde-fou, il passerait en affichage TV (tout minuscule).
+ */
+const isPhone = () =>
+  typeof matchMedia === 'function' && navigator.maxTouchPoints > 0 && matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height, innerWidth, innerHeight) < 600;
+const isTv = () => innerHeight <= 620 && innerWidth >= 900 && !isPhone();
 /** Petits écrans (téléphones) : l'interface garde sa taille normale. */
-const isWide = () => innerWidth >= 900;
+const isWide = () => innerWidth >= 900 && !isPhone();
 const viewport = signal({ tv: typeof window !== 'undefined' && isTv(), wide: typeof window === 'undefined' || isWide() });
 
 /**

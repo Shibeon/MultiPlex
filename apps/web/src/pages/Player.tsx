@@ -1,3 +1,4 @@
+import { lockLandscape, useLandscape } from '../orientation';
 import { PillMenu, PlayerClock, PlayerSub, PlayerTech, Pill, SkipButton, liveTechWeb } from '../playerui';
 import { QUALITIES, hdrKind, srtToVtt, streamsOf, techBadges, type Media, type Metadata, type PlaybackPlan, type Stream } from '@multiplex/core';
 import type Hls from 'hls.js';
@@ -55,6 +56,8 @@ export function Player({ id }: { id: string }) {
   const video = useRef<HTMLVideoElement>(null);
   const root = useRef<HTMLDivElement>(null);
   const hls = useRef<Hls | null>(null);
+  // Téléphone : le lecteur s'affiche toujours en paysage.
+  useLandscape();
   const plan = useRef<PlaybackPlan | null>(null);
   const itemRef = useRef<Metadata | null>(null);
   const gen = useRef(0);
@@ -295,7 +298,7 @@ export function Player({ id }: { id: string }) {
     // iPhone (Safari comme Chrome, même moteur) : pas de plein écran pour la page, seulement pour
     // la vidéo, avec le lecteur d'iOS. Nos commandes y sont remplacées par les siennes.
     const ios = () => (video.current as (HTMLVideoElement & Webkit) | null)?.webkitEnterFullscreen?.();
-    if (el?.requestFullscreen) return void el.requestFullscreen().catch(ios);
+    if (el?.requestFullscreen) return void el.requestFullscreen().then(lockLandscape, ios);
     if (el?.webkitRequestFullscreen) return void el.webkitRequestFullscreen();
     ios();
   };

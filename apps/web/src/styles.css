@@ -1101,6 +1101,36 @@ body:has(.cast-bar) .tog-bar:not(.in-player) { bottom: 8.5rem; }
 .player .transport .btn.pill .icon { width: 1.5rem; height: 1.5rem; }
 .ptech .ptech-audio[data-tech^='Dolby']::before { width: 0.9em; height: 0.68em; background: radial-gradient(circle at 0 50%, currentColor 0.33em, transparent 0.34em) left / 48% 100% no-repeat, radial-gradient(circle at 100% 50%, currentColor 0.33em, transparent 0.34em) right / 48% 100% no-repeat; }
 @media (max-width: 700px) { .player .transport .btn.pill { padding: 0.7em; } }
+/* Téléphone en paysage (le lecteur s'y met tout seul) : peu de hauteur, tout se resserre. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .player-top { padding: 0.8rem clamp(1rem, 3vw, 2rem) 2rem; gap: 0.5rem 0.9rem; }
+  .player-top > .btn { width: 2.6rem; height: 2.6rem; margin-top: 0; }
+  .player-title strong { font-size: 1.25rem; }
+  .player-title span { font-size: 0.85rem; }
+  .player-clock b { font-size: 1.15rem; }
+  .player-clock span { font-size: 0.75rem; }
+  .ptech { margin-top: 0.4rem; gap: 0.35rem; }
+  .ptech li { height: 1.35rem; font-size: 0.7rem; padding: 0 0.45rem; }
+  .player-bottom { padding: 2.5rem clamp(1rem, 3vw, 2rem) calc(0.7rem + env(safe-area-inset-bottom)); }
+  .seek { gap: 0.8rem; font-size: 0.9rem; }
+  .player .seek-mark::after { font-size: 0.72rem; }
+  .transport { gap: 1rem; margin: 0.5rem 0 0; }
+  .player .transport .btn.skipper { width: 3rem; height: 3rem; }
+  .player .transport .btn.skipper .icon { width: 1.15rem; height: 1.15rem; }
+  .player .transport .btn.skipper small { font-size: 0.72rem; }
+  .player .transport .btn.play { width: 3.8rem; height: 3.8rem; }
+  .player .transport .btn.play .icon { width: 1.8rem; height: 1.8rem; }
+  .player .transport .btn.pill { padding: 0.55em 1.1em; font-size: 0.85rem; }
+  .player .transport .btn.pill .icon { width: 1.15rem; height: 1.15rem; }
+  .player .controls { margin-top: 0.5rem; gap: 0.6rem; }
+  .player .controls .btn.pill { padding: 0.5em 1em; font-size: 0.9rem; }
+  .player .controls .btn.pill .icon { width: 1.15rem; height: 1.15rem; }
+  .controls .side { position: static; transform: none; }
+  .controls .side .volume { display: none; }
+  .player .controls .side .btn { width: 2.6rem; height: 2.6rem; }
+  .player .controls .side .btn .icon { width: 1.3rem; height: 1.3rem; }
+  .player .skip, .player .pause-cast { bottom: 11.2rem; font-size: 0.9rem; padding: 0.6em 1.3em; }
+}
 .player .btn.pill { font-size: 1.15rem; font-weight: 600; gap: 0.6em; }
 
 /* =====================================================================
