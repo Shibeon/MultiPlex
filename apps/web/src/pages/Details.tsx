@@ -136,7 +136,7 @@ export function Details({ id }: { id: string }) {
   ];
 
   return (
-    <div class={`details dx${art ? ' has-art' : ''}`}>
+    <div class={`details dx${art ? ' dx-backdrop' : ''}`}>
       {art && <div class="backdrop dx-art" style={{ backgroundImage: `url("${srv.image(art, ...artSize())}")` }} />}
       <div class="details-main dx-hero">
         {poster && <img class="details-poster" src={srv.image(poster, 600, 900)} alt="" />}
