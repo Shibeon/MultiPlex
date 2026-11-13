@@ -4,13 +4,15 @@ import { HttpError, checkPin, createPin, pinAuthUrl, type PlexPin } from '@multi
 import type { ComponentChildren } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
 import { t } from '../i18n';
-import { auth, bootError, client, connect, connectManual, logout, resources, signIn, startDemo, status } from '../store';
+import { auth, bootError, client, connect, logout, resources, signIn, status } from '../store';
 import { Spinner } from '../ui';
+import { tvDevice } from '../platform';
+import { QrCode } from '../qr';
 
-function Shell({ children }: { children: ComponentChildren }) {
+function Shell({ children, wide }: { children: ComponentChildren; wide?: boolean }) {
   return (
     <main class="gate">
-      <div class="gate-card">
+      <div class={`gate-card${wide ? ' wide' : ''}`}>
         <h1 class="brand">
           Multi<span>Plex</span>
         </h1>
@@ -33,9 +35,6 @@ export function Login() {
   const [pins, setPins] = useState<{ strong: PlexPin; short: PlexPin } | null>(null);
   const [err, setErr] = useState('');
   const [gen, setGen] = useState(0);
-  const [url, setUrl] = useState('');
-  const [token, setToken] = useState('');
-  const [busy, setBusy] = useState(false);
   const [slow, setSlow] = useState(false);
 
   useEffect(() => {
@@ -85,17 +84,46 @@ export function Login() {
     };
   }, [gen]);
 
-  const manual = async (e: Event) => {
-    e.preventDefault();
-    setBusy(true);
-    setErr('');
-    try {
-      await connectManual(url, token);
-    } catch {
-      setErr(t('login.failed'));
-    }
-    setBusy(false);
-  };
+  // Téléviseur : rien à ouvrir ni à taper avec la télécommande. On valide depuis son téléphone
+  // (QR code) ou sur plex.tv/link (code court), et l'application attend la validation.
+  if (tvDevice) {
+    return (
+      <Shell wide>
+        <h2>{t('login.title')}</h2>
+        {pins ? (
+          <div class="tv-login">
+            <div class="tv-login-way">
+              <QrCode text={pinAuthUrl(client, pins.strong)} label={t('login.qr')} />
+              <p>{t('login.qr')}</p>
+            </div>
+            <div class="tv-login-or">{t('login.or')}</div>
+            <div class="tv-login-way">
+              <ol class="tv-login-steps">
+                <li>
+                  {t('login.step1')} <b>plex.tv/link</b>
+                </li>
+                <li>{t('login.step2')}</li>
+              </ol>
+              <div class="pin-code big" aria-live="polite">
+                {pins.short.code}
+              </div>
+            </div>
+          </div>
+        ) : err ? null : (
+          <Spinner />
+        )}
+        {pins && <p class="muted">{slow ? t('login.slow') : t('login.waiting')}</p>}
+        {err && (
+          <p class="error-text" role="alert">
+            {err}{' '}
+            <button class="link" onClick={() => (setErr(''), setGen((g) => g + 1))}>
+              {t('common.retry')}
+            </button>
+          </p>
+        )}
+      </Shell>
+    );
+  }
 
   return (
     <Shell>
@@ -123,19 +151,6 @@ export function Login() {
           </button>
         </p>
       )}
-      <button class="btn" onClick={() => void startDemo()}>
-        {t('login.demo')}
-      </button>
-      <details class="manual">
-        <summary>{t('login.manual')}</summary>
-        <form onSubmit={manual}>
-          <input type="url" required placeholder={t('login.url')} aria-label={t('login.url')} value={url} onInput={(e) => setUrl(e.currentTarget.value)} />
-          <input type="password" required autocomplete="off" placeholder={t('login.token')} aria-label={t('login.token')} value={token} onInput={(e) => setToken(e.currentTarget.value)} />
-          <button class="btn" disabled={busy}>
-            {t('login.connect')}
-          </button>
-        </form>
-      </details>
       <p class="muted small">{t('set.about')}</p>
     </Shell>
   );
@@ -158,9 +173,6 @@ export function ServerPicker() {
           </button>
         ))}
       </div>
-      <button class="btn" onClick={() => void startDemo()}>
-        {t('login.demo')}
-      </button>
       {!!offlineInfo.value?.entries.length && (
         <button class="btn" onClick={() => ((status.value = 'offline'), go('/offline'))}>
           {t('off.open')}

@@ -16,3 +16,10 @@ function detect(): Platform {
 }
 
 export const platform: Platform = detect();
+
+/**
+ * Téléviseur : LG webOS, Samsung Tizen, ou Android sans écran tactile (Android TV, Fire TV).
+ * On s'y sert d'une télécommande : pas de clavier ni de navigateur à ouvrir pour se connecter.
+ */
+export const tvDevice: boolean =
+  platform === 'tv' || (platform === 'android' && typeof navigator !== 'undefined' && (navigator.maxTouchPoints === 0 || /\bTV\b|AFT/.test(navigator.userAgent)));

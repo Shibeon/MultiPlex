@@ -7,7 +7,6 @@ import {
   PlexDiscover,
   PlexServer,
   getHomeUsers,
-  getJson,
   getServers,
   getUser,
   pickConnection,
@@ -140,14 +139,6 @@ async function hasOffline(): Promise<boolean> {
 export async function retryOnline(): Promise<void> {
   status.value = 'connecting';
   await boot();
-}
-
-export async function connectManual(uri: string, token: string): Promise<void> {
-  uri = uri.trim().replace(/\/+$/, '');
-  const id = await getJson<{ MediaContainer: { machineIdentifier: string } }>(`${uri}/identity?X-Plex-Token=${encodeURIComponent(token.trim())}`, { timeout: 6000 });
-  const saved: SavedServer = { id: id.MediaContainer.machineIdentifier, name: new URL(uri).hostname, uri, token: token.trim() };
-  await use(new PlexServer(saved.id, saved.name, saved.uri, saved.token, client));
-  save('mp.server', saved);
 }
 
 export async function connect(res: PlexResource): Promise<void> {
