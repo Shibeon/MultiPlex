@@ -22,18 +22,130 @@ export function SkipButton({ seconds, onClick, act }: { seconds: number; onClick
 /** Une pastille : `unsure` = déduite, pas vérifiée dans la chaîne de lecture ; `hint` = précision au survol. */
 export type TechBadge = { kind: string; label: string; unsure?: boolean; hint?: string };
 
-/** Pastilles sous le titre : ce qui est réellement restitué (voir liveTechNative / liveTechWeb). */
+/** Pastilles (fiche d'un média) : les caractéristiques du fichier, sur une rangée. */
 export function PlayerTech({ badges }: { badges: TechBadge[] | undefined }) {
   if (!badges?.length) return null;
   return (
     <ul class="ptech" aria-label={t('live.label')}>
       {badges.map((b) => (
-        <li key={b.kind + b.label} class={`ptech-${b.kind}${b.unsure ? ' unsure' : ''}`} data-tech={b.label} title={b.unsure ? `${b.hint ?? b.label} — ${t('live.unsure')}` : b.hint}>
-          {b.label}
-          {b.unsure && <i aria-hidden="true">?</i>}
-        </li>
+        <TechPill key={b.kind + b.label} b={b} />
       ))}
     </ul>
+  );
+}
+
+function TechPill({ b }: { b: TechBadge }) {
+  return (
+    <li class={`ptech-${b.kind}${b.unsure ? ' unsure' : ''}`} data-tech={b.label} title={b.unsure ? `${b.hint ?? b.label} — ${t('live.unsure')}` : b.hint}>
+      {/^(Dolby|DTS)/.test(b.label) && b.kind === 'audio' && <SurroundMark />}
+      {b.label}
+      {b.unsure && <i aria-hidden="true">?</i>}
+    </li>
+  );
+}
+
+/** Petit emblème « son multicanal » (dessin propre à MultiPlex, pas un logo de marque). */
+function SurroundMark() {
+  return (
+    <svg class="surround" viewBox="0 0 24 16" aria-hidden="true">
+      <circle cx="12" cy="8" r="2.6" fill="currentColor" />
+      <path d="M7.2 3.2a6.8 6.8 0 0 0 0 9.6M16.8 3.2a6.8 6.8 0 0 1 0 9.6M3.6 0.8a10.6 10.6 0 0 0 0 14.4M20.4 0.8a10.6 10.6 0 0 1 0 14.4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+    </svg>
+  );
+}
+
+const VIDEO_KINDS = new Set(['resolution', 'hdr', 'sdr', 'mode']);
+const join = (...parts: (string | undefined)[]) => parts.filter(Boolean).join(' ');
+
+/** Son : format et canaux en une seule pastille (« Dolby Digital 5.1 »). */
+function audioBadges(badges: TechBadge[]): TechBadge[] {
+  const audio = badges.find((b) => b.kind === 'audio');
+  const ch = badges.find((b) => b.kind === 'channels');
+  const out: TechBadge[] = [];
+  if (audio) out.push({ ...audio, label: join(audio.label, ch?.label) });
+  else if (ch) out.push(ch);
+  return [...out, ...badges.filter((b) => b.kind === 'proc')];
+}
+
+/**
+ * Lecteur : ce qui sort vraiment, sur deux lignes (vidéo, audio), et un bouton ⓘ qui ouvre
+ * le détail « source → sortie » avec l'explication de chaque conversion.
+ */
+export function PlayerOutput({ badges, source }: { badges: TechBadge[] | undefined; source: TechBadge[] }) {
+  const [open, setOpen] = useState(false);
+  if (!badges?.length) return null;
+  const video = badges.filter((b) => VIDEO_KINDS.has(b.kind));
+  const audio = audioBadges(badges);
+  const label = (list: TechBadge[], kind: string) => list.find((b) => b.kind === kind)?.label;
+  const srcVideo = join(label(source, 'resolution'), label(source, 'hdr') ?? (label(source, 'resolution') ? 'SDR' : undefined));
+  const outVideo = join(label(badges, 'resolution'), label(badges, 'hdr') ?? label(badges, 'sdr'));
+  const srcAudio = join(label(source, 'audio'), label(source, 'channels'));
+  const outAudio = audio[0]?.kind !== 'proc' ? audio[0]?.label : undefined;
+  const notes = [...new Set(badges.map((b) => b.hint).filter((h): h is string => !!h))];
+  if (badges.some((b) => b.unsure)) notes.push(t('live.unsureNote'));
+  return (
+    <div class={`ptech-out${open ? ' open' : ''}`} aria-label={t('live.label')}>
+      {video.length > 0 && (
+        <div class="ptech-row">
+          <span class="ptech-head">
+            <Icon name="movie" size={18} /> {t('live.video')}
+          </span>
+          <ul class="ptech">
+            {video.map((b) => (
+              <TechPill key={b.kind + b.label} b={b} />
+            ))}
+          </ul>
+        </div>
+      )}
+      {audio.length > 0 && (
+        <div class="ptech-row">
+          <span class="ptech-head">
+            <Icon name="volume" size={18} /> {t('live.audio')}
+          </span>
+          <ul class="ptech">
+            {audio.map((b) => (
+              <TechPill key={b.kind + b.label} b={b} />
+            ))}
+          </ul>
+          <button class="ptech-info" aria-label={t('live.details')} title={t('live.details')} aria-expanded={open} onClick={() => setOpen(!open)}>
+            <Icon name="info" size={20} />
+          </button>
+        </div>
+      )}
+      {open && (
+        <div class="ptech-panel" role="dialog" aria-label={t('live.details')}>
+          <dl>
+            {(srcVideo || outVideo) && (
+              <>
+                <dt>{t('live.video')}</dt>
+                <dd>
+                  <b>{t('live.source')} :</b> {srcVideo || '—'}
+                  <br />
+                  <b>{t('live.output')} :</b> {outVideo || '—'}
+                </dd>
+              </>
+            )}
+            {(srcAudio || outAudio) && (
+              <>
+                <dt>{t('live.audio')}</dt>
+                <dd>
+                  <b>{t('live.source')} :</b> {srcAudio || '—'}
+                  <br />
+                  <b>{t('live.output')} :</b> {outAudio || '—'}
+                </dd>
+              </>
+            )}
+          </dl>
+          {notes.length > 0 && (
+            <ul class="ptech-notes">
+              {notes.map((n) => (
+                <li key={n}>{n.charAt(0).toUpperCase() + n.slice(1)}.</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -91,7 +203,7 @@ export function liveTechNative(s: Record<string, unknown>, meta: { tech?: TechBa
   if (ao?.format?.startsWith('spdif')) {
     if (s['ac3-encode'] && ao.format === 'spdif-ac3') {
       out.push({ kind: 'audio', label: 'Dolby Digital' }, { kind: 'channels', label: '5.1' });
-      proc.push({ kind: 'proc', label: t('native.audioEncoded') });
+      proc.push({ kind: 'proc', label: t('native.audioEncoded'), hint: t('live.encodedNote').replace('{s}', src(meta.tech, 'audio') ?? t('live.original')) });
     } else {
       const srcAudio = src(meta.tech, 'audio');
       // Atmos voyage dans le flux Dolby Digital+ ou TrueHD transmis tel quel.
@@ -101,14 +213,14 @@ export function liveTechNative(s: Record<string, unknown>, meta: { tech?: TechBa
       // Le nombre de canaux d'un flux brut est celui de la source (sauf le cœur DTS d'une piste DTS-HD).
       const ch = src(meta.tech, 'channels');
       if (ch && !dtsCore) out.push({ kind: 'channels', label: ch });
-      proc.push({ kind: 'proc', label: 'Passthrough' });
+      proc.push({ kind: 'proc', label: 'Passthrough', hint: atmos || dtsCore ? undefined : t('live.passNote') });
     }
   } else if (ao?.format) {
     out.push({ kind: 'audio', label: 'PCM' });
     const ch = channelsLabel(ao['channel-count']);
     if (ch) out.push({ kind: 'channels', label: ch });
   }
-  if (meta.playMode) out.push({ kind: 'mode', label: meta.playMode === 'direct' ? 'Direct Play' : t('live.transcoding') });
+  if (meta.playMode) out.push(meta.playMode === 'direct' ? { kind: 'mode', label: 'Direct Play', hint: t('live.directNote') } : { kind: 'mode', label: t('live.transcoding'), hint: t('live.transcodeNote') });
   return [...out, ...proc];
 }
 
@@ -132,8 +244,9 @@ export function liveTechWeb(v: HTMLVideoElement | null, plan: { mode: 'direct' |
     const a = src(tech, 'audio');
     if (a) out.push({ kind: 'audio', label: a, unsure: true, hint: t('live.browserAudio') });
   }
-  const mode = plan.mode === 'direct' ? 'Direct Play' : plan.video === 'copy' ? 'Direct Stream' : t('live.transcoding');
-  out.push({ kind: 'mode', label: mode });
+  if (plan.mode === 'direct') out.push({ kind: 'mode', label: 'Direct Play', hint: t('live.directNote') });
+  else if (plan.video === 'copy') out.push({ kind: 'mode', label: 'Direct Stream', hint: t('live.streamNote') });
+  else out.push({ kind: 'mode', label: t('live.transcoding'), hint: t('live.transcodeNote') });
   return out;
 }
 

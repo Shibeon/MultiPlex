@@ -5,7 +5,7 @@ import { moveFocus } from '../nav';
 import { couchOn, settings } from '../settings';
 import { cancelXray, runXray, xrayAvailable } from '../xray';
 import { Icon, SeekPreview } from '../ui';
-import { PillMenu, PlayerClock, PlayerSub, PlayerTech, Pill, SkipButton, liveTechNative } from '../playerui';
+import { PillMenu, PlayerClock, PlayerOutput, PlayerSub, Pill, SkipButton, liveTechNative } from '../playerui';
 
 type Menu = null | 'audio' | 'sub' | 'speed' | 'chapter' | 'quality' | 'output' | 'more';
 
@@ -346,7 +346,7 @@ export function NativeOverlay() {
         <div class="player-title">
           <strong>{meta.title}</strong>
           {meta.sub && <PlayerSub text={meta.sub} />}
-          <PlayerTech badges={liveTechNative(s, meta)} />
+          <PlayerOutput badges={liveTechNative(s, meta)} source={meta.tech ?? []} />
         </div>
         <PlayerClock remaining={duration - time} speed={speed} />
       </div>

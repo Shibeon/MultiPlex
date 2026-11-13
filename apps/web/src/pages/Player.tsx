@@ -1,5 +1,5 @@
 import { lockLandscape, useLandscape } from '../orientation';
-import { PillMenu, PlayerClock, PlayerSub, PlayerTech, Pill, SkipButton, liveTechWeb } from '../playerui';
+import { PillMenu, PlayerClock, PlayerOutput, PlayerSub, Pill, SkipButton, liveTechWeb } from '../playerui';
 import { QUALITIES, hdrKind, srtToVtt, streamsOf, techBadges, type Media, type Metadata, type PlaybackPlan, type Stream } from '@multiplex/core';
 import type Hls from 'hls.js';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
@@ -629,7 +629,12 @@ export function Player({ id }: { id: string }) {
         <div class="player-title">
           <strong>{head.title}</strong>
           {head.sub && <PlayerSub text={head.sub} />}
-          <PlayerTech badges={item ? liveTechWeb(video.current, plan.current, techBadges(item.Media?.[choice.current.media])) : undefined} />
+          {item && (
+            <PlayerOutput
+              badges={liveTechWeb(video.current, plan.current, techBadges(item.Media?.[choice.current.media]))}
+              source={techBadges(item.Media?.[choice.current.media])}
+            />
+          )}
         </div>
         <PlayerClock remaining={ui.duration - ui.time} speed={choice.current.speed} />
       </div>
