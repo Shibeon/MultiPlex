@@ -1,16 +1,16 @@
 // Mise à jour automatique de l'application de bureau, depuis les versions publiées
 // sur GitHub. Par défaut elle est silencieuse : la nouvelle version se télécharge en
-// arrière-plan et s'installe sans rien demander — sous Windows au lancement suivant
-// (installée à la fermeture, elle remplaçait le programme pendant quelques secondes et le
-// raccourci de la barre des tâches affichait une erreur), ailleurs à la fermeture. Si l'utilisateur
+// arrière-plan et s'installe sans rien demander au lancement suivant (installée à la
+// fermeture, elle remplaçait le programme pendant quelques secondes et un raccourci lancé
+// à ce moment-là affichait une erreur), sur Windows, macOS et Linux. Si l'utilisateur
 // coupe ce réglage, l'app signale seulement la version, la télécharge sur demande, puis
 // propose de redémarrer. L'interface annonce son choix par `update:auto`.
 const { app, ipcMain, BrowserWindow } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 
-/** Sous Windows, une mise à jour silencieuse attend le lancement suivant (voir plus haut). */
-const AT_LAUNCH = process.platform === 'win32';
+/** Une mise à jour silencieuse attend le lancement suivant (voir plus haut), sur tous les systèmes. */
+const AT_LAUNCH = true;
 /** Version téléchargée, à installer au prochain lancement. */
 const pendingFile = () => path.join(app.getPath('userData'), 'pending-update.json');
 
@@ -152,7 +152,7 @@ function setupUpdater(send, { simulate = false } = {}) {
   autoUpdater.on('download-progress', (p) => set({ status: 'downloading', version: state.version, notes, percent: Math.round(p.percent) }));
   let auto = false;
   autoUpdater.on('update-downloaded', (info) => {
-    // Silencieuse sous Windows : notée pour le prochain lancement, plus rien à la fermeture.
+    // Silencieuse : notée pour le prochain lancement, plus rien à la fermeture.
     const atLaunch = auto && AT_LAUNCH;
     if (atLaunch) {
       try {
@@ -174,7 +174,7 @@ function setupUpdater(send, { simulate = false } = {}) {
   ipcMain.handle('update:auto', (_e, on) => {
     auto = !!on;
     autoUpdater.autoDownload = auto;
-    // Windows : installée au prochain lancement, pas à la fermeture (raccourci cassé pendant l'installation).
+    // Installée au prochain lancement, pas à la fermeture (raccourci cassé pendant l'installation).
     autoUpdater.autoInstallOnAppQuit = !(auto && AT_LAUNCH);
     // Mise à jour silencieuse coupée : plus d'installation au lancement non plus.
     if (!auto) fs.rmSync(pendingFile(), { force: true });
