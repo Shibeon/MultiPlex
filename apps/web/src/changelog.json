@@ -1,6 +1,22 @@
 [
   {
     "versions": {
+      "desktop": "0.1.18",
+      "web": "0.1.18",
+      "android": "0.1.18",
+      "tv": "0.1.18"
+    },
+    "fr": [
+      "Ordinateur : nouvelle façon de se mettre à jour. La plupart des nouvelles versions s’installent maintenant pendant que MultiPlex est ouvert ; un bandeau propose alors « Redémarrer », qui relance directement la nouvelle version, en quelques secondes. « Plus tard » : elle sera utilisée au prochain lancement.",
+      "Lecteur : les boutons volume et plein écran sont aussi grands et visibles que les autres."
+    ],
+    "en": [
+      "Computer: a new way to update. Most new versions now install while MultiPlex is open; a banner then offers “Restart”, which reopens straight into the new version within seconds. “Later”: it will be used next time you open the app.",
+      "Player: the volume and full-screen buttons are as large and visible as the others."
+    ]
+  },
+  {
+    "versions": {
       "desktop": "0.1.17",
       "web": "0.1.17",
       "android": "0.1.17",
