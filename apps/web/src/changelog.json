@@ -1,6 +1,22 @@
 [
   {
     "versions": {
+      "desktop": "0.1.15",
+      "web": "0.1.15",
+      "android": "0.1.15",
+      "tv": "0.1.15"
+    },
+    "fr": [
+      "Ordinateur : la mise à jour silencieuse s’installe au lancement suivant (une petite fenêtre le temps de l’installation, puis MultiPlex se rouvre), et non plus à la fermeture : le raccourci de la barre des tâches ne montre plus d’erreur pendant l’installation.",
+      "Les listes de lecture sont retirées (onglet, page et menu « Ajouter à »). Celles de votre serveur Plex ne sont pas supprimées."
+    ],
+    "en": [
+      "Computer: silent updates now install on the next launch (a small window during installation, then MultiPlex reopens) instead of when quitting, so the taskbar shortcut no longer shows an error during installation.",
+      "Playlists are removed (tab, page and “Add to” menu). Those on your Plex server are not deleted."
+    ]
+  },
+  {
+    "versions": {
       "desktop": "0.1.14",
       "web": "0.1.14",
       "android": "0.1.14",
