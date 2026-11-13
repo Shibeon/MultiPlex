@@ -1,6 +1,24 @@
 [
   {
     "versions": {
+      "desktop": "0.1.16",
+      "web": "0.1.16",
+      "android": "0.1.16",
+      "tv": "0.1.16"
+    },
+    "fr": [
+      "Affichage agrandi du mode TV désormais permanent sur ordinateur et téléviseur (pas sur téléphone) : le bouton Mode TV et la touche F10 disparaissent.",
+      "MultiPlex ne démarre plus en plein écran : le plein écran se demande dans le lecteur (bouton, double-clic ou F11).",
+      "Nouveau style verre pour les bibliothèques, la recherche, les réglages et la liste des épisodes."
+    ],
+    "en": [
+      "The larger TV-mode display is now permanent on computers and TVs (not on phones): the TV mode button and the F10 key are gone.",
+      "MultiPlex no longer starts in full screen: full screen is requested from the player (button, double-click or F11).",
+      "New glass look for libraries, search, settings and the episode list."
+    ]
+  },
+  {
+    "versions": {
       "desktop": "0.1.15",
       "web": "0.1.15",
       "android": "0.1.15",
