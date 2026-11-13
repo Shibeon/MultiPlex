@@ -135,6 +135,7 @@ function OfflineShell() {
         </a>
         <NavLink href="#/offline" icon="download" label={t('nav.offline')} />
         <div class="nav-sep grow" />
+        <i class="nav-divider" aria-hidden="true" />
         <NavLink href="#/settings" icon="settings" label={t('nav.settings')} iconOnly />
       </nav>
       <main class="content">{route.value.parts[0] === 'settings' ? <SettingsPage /> : <OfflinePage />}</main>
@@ -176,17 +177,20 @@ function Routes() {
         <a class="brand" href="#/">
           Multi<span>Plex</span>
         </a>
+        {/* Recherche en tête ; les pages principales avec leur nom ; Amis et Hors ligne en icônes ;
+            un filet, puis les réglages et le profil. */}
+        <NavLink href="#/search" icon="search" label={t('nav.search')} iconOnly />
         <NavLink href="#/" icon="home" label={t('nav.home')} />
-        {/* Les bibliothèques (Films, Séries…) d'abord, puis Ma liste, Amis et Hors ligne. */}
+        {/* Les bibliothèques (Films, Séries…), puis Ma liste. */}
         {libraries.value.map((l) => (
           <NavLink key={l.key} href={`#/library/${l.key}`} icon={l.type} label={l.title} />
         ))}
-        <div class="nav-sep" />
         {discover.value && <NavLink href="#/watchlist" icon="bookmark" label={t('nav.watchlist')} />}
-        <NavLink href="#/activity" icon="live" label={t('nav.live')} />
-        {offlineApi && <NavLink href="#/offline" icon="download" label={t('nav.offline')} />}
+        <div class="nav-sep" />
+        <NavLink href="#/activity" icon="friends" label={t('nav.live')} iconOnly />
+        {offlineApi && <NavLink href="#/offline" icon="download" label={t('nav.offline')} iconOnly />}
         <div class="nav-sep grow" />
-        <NavLink href="#/search" icon="search" label={t('nav.search')} iconOnly />
+        <i class="nav-divider" aria-hidden="true" />
         <NavLink href="#/settings" icon="settings" label={t('nav.settings')} iconOnly />
         {home.value.length > 1 && <ProfileLink />}
       </nav>

@@ -93,6 +93,8 @@ input[type='color'] { padding: 0; width: 3em; height: 2em; }
 .nav-link.active { color: var(--accent); background: var(--surface-2); }
 .nav-sep { height: 1px; background: var(--surface-2); margin: 0.5rem 0.4rem; }
 .nav-sep.grow { flex: 1; background: none; }
+/* Filet vertical avant les réglages : barre flottante uniquement. */
+.nav-divider { display: none; }
 .content { margin-left: var(--sidebar-w); min-height: 100vh; }
 .page { padding: 1.5rem clamp(1rem, 3vw, 2.5rem) 4rem; }
 .page-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.6rem 1rem; margin-bottom: 1.2rem; }
@@ -308,6 +310,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter'
   .shell.top .sidebar .brand, .shell.top .nav-sep { display: none; }
   .shell.top .nav-link { flex: none; gap: 0.5rem; padding: 0.5rem 1.05rem; border-radius: 99px; color: var(--text); opacity: 0.72; white-space: nowrap; font-weight: 500; }
   .shell.top .nav-link .icon { display: none; }
+  .shell.top .nav-divider { display: block; flex: none; width: 1px; height: 1.7rem; margin: 0 0.35rem; background: color-mix(in srgb, var(--text) 20%, transparent); }
   .shell.top .nav-link.icon-only { padding: 0.5rem 0.65rem; }
   .shell.top .nav-link.icon-only .icon { display: block; }
   .shell.top .nav-link.icon-only span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
