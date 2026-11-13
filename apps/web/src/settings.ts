@@ -223,12 +223,29 @@ function applyCouch(on: boolean): void {
   else if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
 }
 
+/** Au lancement : remet la fenêtre en plein écran si le mode TV était resté actif. */
+function restoreCouch(): void {
+  const native = (window as unknown as { multiplexNative?: { setFullscreen?(on: boolean): void } }).multiplexNative;
+  if (native?.setFullscreen) return native.setFullscreen(true);
+  if (document.fullscreenElement || !document.documentElement.requestFullscreen) return;
+  const once = () => {
+    removeEventListener('pointerdown', once, true);
+    removeEventListener('keydown', once, true);
+    if (settings.value.couch && !document.fullscreenElement) void document.documentElement.requestFullscreen().catch(() => {});
+  };
+  addEventListener('pointerdown', once, true);
+  addEventListener('keydown', once, true);
+}
+
 /** Applique thème, variables et CSS personnalisé au document, et persiste. */
 export function initSettings(): void {
   const style = document.createElement('style');
   style.id = 'custom-css';
   document.head.appendChild(style);
   let applied: string[] = [];
+  // Mode TV laissé actif au dernier lancement : on le reprend tel quel, plein écran compris
+  // (dans un navigateur, le plein écran attend un premier geste : le navigateur l'exige).
+  if (settings.value.couch && !isOverlayWindow) restoreCouch();
   addEventListener('resize', () => {
     if (viewport.value.tv !== isTv()) viewport.value = { tv: isTv() };
   });
