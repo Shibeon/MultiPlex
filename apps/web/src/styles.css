@@ -727,6 +727,15 @@ input.switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 3
 /* L'élément sélectionné doit se voir de loin : contour épais, halo, léger agrandissement. */
 .couch :focus-visible { outline-width: 4px; outline-offset: 4px; }
 .couch .card:focus-visible .poster { transform: scale(1.09); outline-width: 4px; box-shadow: 0 0 0 4px var(--accent), 0 18px 50px rgba(0, 0, 0, 0.6), 0 0 44px color-mix(in srgb, var(--accent) 55%, transparent); }
+/* L'affiche sélectionnée grossit (et prend un contour) : son titre descend d'autant pour ne pas
+   passer dessous. --lift : moitié de l'agrandissement de l'affiche, plus l'épaisseur du contour. */
+.couch .card { --lift: calc(var(--card-w) * 1.5 * 0.045 + 10px); }
+.couch .card.wide { --lift: calc(var(--card-w) * 1.9 * 0.5625 * 0.045 + 10px); }
+.couch .card .card-text { transition: transform var(--speed); }
+.couch .card:focus-visible .card-text { transform: translateY(var(--lift)); }
+.couch.reduce-motion .card:focus-visible .card-text { transform: translateY(10px); }
+.couch .row:not(.wrap) { padding: 28px 28px calc(14px + 1.4rem); margin: -28px -28px calc(-14px - 1.4rem); scroll-padding-inline: 28px; }
+.couch .row.wrap { row-gap: calc(var(--gap) + var(--card-w) * 1.5 * 0.045 + 10px); }
 .couch .btn:focus-visible, .couch .nav-link:focus-visible { transform: scale(1.06); box-shadow: 0 0 34px color-mix(in srgb, var(--accent) 50%, transparent); }
 .couch .card-title { font-weight: 600; }
 .couch .muted, .couch .card-sub { opacity: 0.9; }
@@ -807,6 +816,12 @@ button.cast-card { border: 0; background: none; cursor: pointer; font: inherit; 
 .card:hover .badge, .card:focus-visible .badge { opacity: 0; }
 .card-more:hover { background: var(--accent); color: #000; }
 @media (hover: none) { .card-more { opacity: 1; } .poster .badge { right: auto; left: 6px; } }
+/* Téléviseur : pas de souris mais pas d'écran tactile non plus. Le bouton « ⋯ » n'apparaît que sur
+   l'affiche sélectionnée, comme sur ordinateur ; la coche reste donc à droite, où elle ne cache pas
+   les mentions incrustées en haut à gauche de certaines affiches (« 4K HDR »…). */
+.tv-device .card-more { opacity: 0; }
+.tv-device .card:focus-visible .card-more, .tv-device .card-more:focus-visible { opacity: 1; }
+.tv-device .poster .badge { left: auto; right: 6px; }
 .menu { position: fixed; z-index: 300; min-width: 15rem; max-width: 20rem; padding: 0.35rem; border-radius: calc(var(--radius) * 0.9); background: var(--surface); box-shadow: 0 18px 60px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.06); animation: menu-in 0.12s ease-out; }
 @keyframes menu-in { from { opacity: 0; transform: translateY(-4px); } }
 .menu-title { padding: 0.45rem 0.7rem 0.35rem; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.04em; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

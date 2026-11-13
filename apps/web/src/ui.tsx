@@ -4,7 +4,7 @@ import type { ComponentChildren, JSX } from 'preact';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { t } from './i18n';
 import { openItemMenu } from './menu';
-import { cardWidth } from './settings';
+import { cardWidth, couchOn } from './settings';
 import { server } from './store';
 
 const ICONS: Record<string, string> = {
@@ -368,6 +368,10 @@ interface GridProps {
 export function VirtualGrid({ total, minWidth, extra, gap = 16, onRange, render }: GridProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [v, setV] = useState({ cols: 1, colW: minWidth, first: 0, last: 0 });
+  // Affichage TV : l'affiche sélectionnée grossit et son titre descend (voir styles.css, --lift) ;
+  // on écarte les rangées d'autant pour que l'année ne passe pas sous la rangée suivante.
+  const couch = couchOn.value;
+  const lift = (colW: number) => (couch ? colW * 1.5 * 0.045 + 10 : 0);
 
   useLayoutEffect(() => {
     let raf = 0;
@@ -378,7 +382,7 @@ export function VirtualGrid({ total, minWidth, extra, gap = 16, onRange, render 
       const w = el.clientWidth;
       const cols = Math.max(1, Math.floor((w + gap) / (minWidth + gap)));
       const colW = (w - gap * (cols - 1)) / cols;
-      const rowH = colW * 1.5 + extra + gap;
+      const rowH = colW * 1.5 + extra + gap + lift(colW);
       const top = el.getBoundingClientRect().top;
       const first = Math.max(0, Math.floor(-top / rowH) - 2);
       const last = Math.min(Math.ceil(total / cols), Math.ceil((innerHeight - top) / rowH) + 2);
@@ -395,9 +399,10 @@ export function VirtualGrid({ total, minWidth, extra, gap = 16, onRange, render 
       removeEventListener('resize', schedule);
       cancelAnimationFrame(raf);
     };
-  }, [total, minWidth, extra, gap]);
+  }, [total, minWidth, extra, gap, couch]);
 
-  const rowH = v.colW * 1.5 + extra + gap;
+  const rowGap = gap + lift(v.colW);
+  const rowH = v.colW * 1.5 + extra + rowGap;
   const start = v.first * v.cols;
   const end = Math.min(total, v.last * v.cols);
   useEffect(() => {
@@ -407,14 +412,14 @@ export function VirtualGrid({ total, minWidth, extra, gap = 16, onRange, render 
   const cells = [];
   for (let i = start; i < end; i++) {
     cells.push(
-      <div key={i} class="vcell" style={{ height: `${rowH - gap}px` }}>
+      <div key={i} class="vcell" style={{ height: `${rowH - rowGap}px` }}>
         {render(i)}
       </div>,
     );
   }
   return (
     <div ref={ref} class="vgrid-wrap" style={{ height: `${Math.ceil(total / v.cols) * rowH}px` }}>
-      <div class="vgrid" style={{ transform: `translateY(${v.first * rowH}px)`, gridTemplateColumns: `repeat(${v.cols}, 1fr)`, gap: `${gap}px` }}>
+      <div class="vgrid" style={{ transform: `translateY(${v.first * rowH}px)`, gridTemplateColumns: `repeat(${v.cols}, 1fr)`, rowGap: `${rowGap}px`, columnGap: `${gap}px` }}>
         {cells}
       </div>
     </div>

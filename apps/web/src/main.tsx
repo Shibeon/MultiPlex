@@ -1,4 +1,5 @@
 import { render } from 'preact';
+import { tvDevice } from './platform';
 import { App } from './app';
 import { isOverlayWindow, isXrayWindow, native } from './native';
 import { initNav } from './nav';
@@ -22,6 +23,8 @@ if (isXrayWindow) {
   render(<NativeOverlay />, document.getElementById('app')!);
 } else {
   if (native?.platform === 'win32') initRepaintOnLoad();
+  // Téléviseur (télécommande) : quelques réglages d'affichage propres, voir styles.css.
+  if (tvDevice) document.documentElement.classList.add('tv-device');
   initNav();
   render(<App />, document.getElementById('app')!);
   // L'interface et son thème sont en place : le fond provisoire d'index.html n'a plus lieu d'être.
