@@ -1,10 +1,11 @@
 import { render } from 'preact';
 import { App } from './app';
-import { isOverlayWindow, isXrayWindow } from './native';
+import { isOverlayWindow, isXrayWindow, native } from './native';
 import { initNav } from './nav';
 import { NativeOverlay } from './pages/NativeOverlay';
 import { initLiquidGlass } from './liquid';
 import { initSettings } from './settings';
+import { initRepaintOnLoad } from './repaint';
 import { boot, status } from './store';
 import './styles.css';
 
@@ -20,6 +21,7 @@ if (isXrayWindow) {
   document.documentElement.classList.add('overlay-window');
   render(<NativeOverlay />, document.getElementById('app')!);
 } else {
+  if (native?.platform === 'win32') initRepaintOnLoad();
   initNav();
   render(<App />, document.getElementById('app')!);
   // L'interface et son thème sont en place : le fond provisoire d'index.html n'a plus lieu d'être.
