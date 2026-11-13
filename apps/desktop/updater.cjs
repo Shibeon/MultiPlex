@@ -101,7 +101,19 @@ async function installPendingAtLaunch() {
 // redémarrage, boot.cjs le lance. Sinon, mise à jour complète par electron-updater.
 const HOT_OS = { win32: 'win', darwin: 'mac', linux: 'linux' }[process.platform];
 const hotDir = () => path.join(app.getPath('userData'), 'hot');
+/**
+ * Dépôt des versions. L'app installée n'a plus la section `build` de package.json
+ * (electron-builder la retire) : on lit app-update.yml, livré à côté de l'archive, celui
+ * qu'utilise electron-updater. package.json ne sert qu'en secours (paquet à chaud, développement).
+ */
 const publishTarget = () => {
+  try {
+    const yml = fs.readFileSync(path.join(process.resourcesPath, 'app-update.yml'), 'utf8');
+    const field = (k) => yml.match(new RegExp(`^${k}:\\s*['"]?([\\w.-]+)['"]?\\s*$`, 'm'))?.[1];
+    if (field('owner') && field('repo')) return { owner: field('owner'), repo: field('repo') };
+  } catch {
+    /* pas d'app-update.yml : développement */
+  }
   try {
     const p = require('./package.json').build.publish[0];
     return p.owner && p.repo ? p : null;
