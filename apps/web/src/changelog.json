@@ -1,6 +1,24 @@
 [
   {
     "versions": {
+      "desktop": "0.1.30",
+      "web": "0.1.30",
+      "android": "0.1.30",
+      "tv": "0.1.30"
+    },
+    "fr": [
+      "Téléviseur : la coche « vu » ne cache plus les mentions des affiches, et le titre de l’affiche sélectionnée reste lisible.",
+      "Téléviseur : on n’affiche plus ce qui ne sert à rien à la télécommande (volume, plein écran, partage, fichiers, CSS, réseaux sociaux, bouton Retour).",
+      "Les noms des bibliothèques (Films, Séries…) et l’heure du lecteur suivent la langue choisie."
+    ],
+    "en": [
+      "TV: the “watched” check no longer hides poster labels, and the selected poster’s title stays readable.",
+      "TV: things you can’t use with a remote are gone (volume, full screen, sharing, files, CSS, social links, Back button).",
+      "Library names (Movies, TV Shows…) and the player clock follow the chosen language."
+    ]
+  },
+  {
+    "versions": {
       "desktop": "0.1.29",
       "web": "0.1.29",
       "android": "0.1.29",
