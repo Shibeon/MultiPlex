@@ -199,7 +199,7 @@ export function NativeOverlay() {
   // Ce que mpv envoie réellement à la sortie audio : son brut (l'ampli décode) ou son décodé.
   const out = (s['audio-out-params'] ?? null) as { format?: string; 'hr-channels'?: string; 'channel-count'?: number } | null;
   const RAW: Record<string, string> = { 'spdif-ac3': 'Dolby Digital', 'spdif-eac3': 'Dolby Digital Plus', 'spdif-truehd': 'Dolby TrueHD', 'spdif-dts': 'DTS', 'spdif-dtshd': 'DTS-HD' };
-  const outLabel = !out?.format ? '' : out.format.startsWith('spdif') ? `${t('native.audioRaw')} · ${RAW[out.format] ?? out.format.slice(6).toUpperCase()}` : `${t('native.audioDecoded')} · ${{ stereo: '2.0', mono: '1.0' }[out['hr-channels'] ?? ''] ?? out['hr-channels'] ?? `${out['channel-count'] ?? '?'} ch`}`;
+  const outLabel = !out?.format ? '' : s['ac3-encode'] && out.format === 'spdif-ac3' ? `${t('native.audioEncoded')} · Dolby Digital 5.1` : out.format.startsWith('spdif') ? `${t('native.audioRaw')} · ${RAW[out.format] ?? out.format.slice(6).toUpperCase()}` : `${t('native.audioDecoded')} · ${{ stereo: '2.0', mono: '1.0' }[out['hr-channels'] ?? ''] ?? out['hr-channels'] ?? `${out['channel-count'] ?? '?'} ch`}`;
 
   // À la pause : qui est à l'écran ? L'analyse attend que la pause soit installée, et s'efface à la reprise.
   const [xray, setXray] = useState<{ at: number; state: 'working' | 'done' | 'failed'; faces: number; onScreen: number[] } | null>(null);

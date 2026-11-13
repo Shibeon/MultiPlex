@@ -28,6 +28,14 @@ const AUDIO_STAGES = [
   { spdif: '', exclusive: false },
 ];
 
+/**
+ * Réencodage en Dolby Digital 5.1 (640 kb/s), comme le fait Plex : une liaison optique ou
+ * ARC ne transporte ni Dolby Digital Plus, ni TrueHD, ni le multicanal décodé. Sans lui, un
+ * film en E-AC3 / Atmos sort en stéréo sur un ampli branché en optique. Les sources de plus de
+ * six canaux sont ramenées en 5.1 par mpv avant l'encodage (le filtre choisit la disposition).
+ */
+const AC3_ENCODE = 'lavcac3enc=tospdif=yes:bitrate=640:minch=3';
+
 /** Sorties audio du système, dans l'ordre où mpv les essaie. */
 const NATIVE_AO = process.platform === 'win32' ? 'wasapi' : process.platform === 'darwin' ? 'coreaudio' : 'pipewire,pulse,alsa';
 
@@ -126,6 +134,8 @@ class MpvPlayer {
     // on repasse au son décodé (voir onMessage). La lecture démarre dans tous les cas.
     this.spdif = !!opts.passthrough;
     this.stage = 0;
+    this.ac3enc = false;
+    this.ac3Tried = false;
     // Le mode exclusif donne la main à MultiPlex sur la sortie : c'est ce qui permet le son brut,
     // et le multicanal décodé (5.1, 7.1) même si Windows est réglé en stéréo.
     if (this.spdif) args.push(`--audio-spdif=${AUDIO_STAGES[0].spdif}`, '--audio-exclusive=yes', '--audio-channels=auto', `--ao=${NATIVE_AO},null`);
@@ -219,13 +229,55 @@ class MpvPlayer {
       this.state[msg.name] = msg.data;
       if (msg.name === 'eof-reached' && msg.data) this.reachedEnd = true;
       // Sortie de secours muette : la sortie réelle a refusé ce qu'on lui proposait.
-      if (msg.name === 'current-ao' && msg.data === 'null' && this.spdif) void this.nextAudioStage();
+      if (msg.name === 'current-ao' && msg.data === 'null' && this.spdif) void (this.ac3enc ? this.stopAc3Encode(true) : this.nextAudioStage());
+      // Le son part décodé avec moins de canaux que la source (optique, ARC) : on tente le Dolby Digital.
+      if (msg.name === 'audio-out-params' && this.spdif) void this.maybeAc3Encode(msg.data);
+      // Autre piste audio : on réévalue (une piste stéréo n'a pas besoin d'être réencodée).
+      if (msg.name === 'aid' && this.spdif && (this.ac3enc || this.ac3Tried)) void this.stopAc3Encode(false);
       this.emit('state', { name: msg.name, value: msg.data });
     } else if (msg.event === 'end-file' && this.loaded) {
       // Démarré à vide, mpv resterait ouvert sur un écran noir : on le ferme à la fin du fichier.
       if (msg.reason === 'eof') this.reachedEnd = true;
       if (msg.reason === 'error') this.emit('error', { message: `Lecture impossible (${msg.file_error ?? 'erreur'})` });
       else void this.send(['quit']);
+    }
+  }
+
+  /** Canaux de la piste audio en cours, d'après le fichier. */
+  sourceChannels() {
+    const track = (this.state['track-list'] ?? []).find((t) => t.type === 'audio' && t.selected);
+    return Number(track?.['demux-channel-count']) || 0;
+  }
+
+  /**
+   * Son brut refusé pour ce format et multicanal décodé impossible : la sortie n'a gardé que
+   * deux canaux d'une source 5.1 ou 7.1. On réencode alors en Dolby Digital 5.1, que toute
+   * liaison optique accepte ; si la sortie le refuse aussi, on revient au son décodé.
+   */
+  async maybeAc3Encode(params) {
+    if (this.ac3enc || this.ac3Tried || this.stepping || !params?.format) return;
+    if (String(params.format).startsWith('spdif')) return;
+    const source = this.sourceChannels();
+    if (source <= 2 || (Number(params['channel-count']) || 0) >= Math.min(source, 6)) return;
+    this.ac3Tried = true;
+    this.ac3enc = true;
+    const session = this.session;
+    await this.send(['set_property', 'af', AC3_ENCODE]);
+    this.emit('state', { name: 'ac3-encode', value: true });
+    await new Promise((r) => setTimeout(r, 900));
+    if (session === this.session && this.ac3enc && (await this.send(['get_property', 'current-ao'])) === 'null') await this.stopAc3Encode(true);
+  }
+
+  /** Retire le réencodage ; `failed` : la sortie l'a refusé, on n'y revient pas pour ce fichier. */
+  async stopAc3Encode(failed) {
+    if (!this.ac3enc && !this.ac3Tried) return;
+    const was = this.ac3enc;
+    this.ac3enc = false;
+    this.ac3Tried = failed;
+    if (was) {
+      await this.send(['set_property', 'af', '']);
+      this.emit('state', { name: 'ac3-encode', value: false });
+      if (failed) await this.send(['ao-reload']);
     }
   }
 
@@ -247,6 +299,8 @@ class MpvPlayer {
     }
     if (session === this.session) this.emit('notice', { code: 'passthrough', stage: this.stage });
     this.stepping = false;
+    // La sortie a accepté, mais peut-être en stéréo seulement : réencodage en Dolby Digital si besoin.
+    if (session === this.session) void this.maybeAc3Encode(this.state['audio-out-params']);
   }
 
   send(command) {
