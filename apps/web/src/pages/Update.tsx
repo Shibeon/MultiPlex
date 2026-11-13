@@ -2,7 +2,7 @@ import { effect, signal } from '@preact/signals';
 import { useState } from 'preact/hooks';
 import changelog from '../changelog.json';
 import versions from '../../../../versions.json';
-import { platform } from '../platform';
+import { platform, tvDevice } from '../platform';
 import { load, save } from '../settings';
 import { t } from '../i18n';
 import { isOverlayWindow, native, type UpdateState } from '../native';
@@ -23,12 +23,21 @@ if (native?.updates && !isOverlayWindow) {
 }
 
 type Notes = { version: string; fr: string[]; en: string[] };
-type Entry = { versions: Partial<Record<string, string>>; fr: string[]; en: string[] };
-/** Nouveautés de cette plateforme seulement, avec son propre numéro, la plus récente d'abord. */
-const LOG: Notes[] = (changelog as Entry[]).flatMap((e) => {
+type Entry = { versions: Partial<Record<string, string>>; devices?: 'tv' | 'touch'; fr: string[]; en: string[] };
+/**
+ * Nouveautés de cette plateforme et de ce type d'appareil seulement, avec son propre numéro, la
+ * plus récente d'abord. Android TV et téléphone partagent l'APK (donc le numéro) mais pas
+ * l'interface : une entrée marquée `devices` ne s'affiche que sur ce type d'appareil. Les entrées
+ * d'un même numéro sont réunies ; une version sans rien pour cet appareil n'apparaît pas.
+ */
+const LOG: Notes[] = (changelog as Entry[]).reduce<Notes[]>((out, e) => {
   const version = e.versions[platform];
-  return version ? [{ version, fr: e.fr, en: e.en }] : [];
-});
+  if (!version || (e.devices && e.devices !== (tvDevice ? 'tv' : 'touch'))) return out;
+  const last = out[out.length - 1];
+  if (last?.version === version) out[out.length - 1] = { version, fr: [...last.fr, ...e.fr], en: [...last.en, ...e.en] };
+  else out.push({ version, fr: e.fr, en: e.en });
+  return out;
+}, []);
 /** Version de cette plateforme (versions.json : bureau, web, Android et TV ont chacun la leur). */
 export const VERSION: string = (versions as Record<string, string>)[platform];
 const lines = (n: { fr: string[]; en: string[] }) => (settings.value.lang === 'fr' ? n.fr : n.en);
@@ -45,8 +54,13 @@ const newer = (a: string, b: string) => {
  */
 function unseen(): Notes[] {
   const seen = load<string>('mp.seenVersion');
-  if (seen) return LOG.filter((n) => newer(n.version, seen));
-  if (load('mp.auth') || load('mp.settings')) return LOG.slice(0, 1);
+  if (seen) {
+    const list = LOG.filter((n) => newer(n.version, seen));
+    // Rien de nouveau pour cet appareil : on note la version comme vue, sans rien afficher.
+    if (!list.length && newer(VERSION, seen)) save('mp.seenVersion', VERSION);
+    return list;
+  }
+  if ((load('mp.auth') || load('mp.settings')) && LOG[0]?.version === VERSION) return LOG.slice(0, 1);
   save('mp.seenVersion', VERSION);
   return [];
 }

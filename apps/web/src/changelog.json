@@ -6,6 +6,7 @@
       "android": "0.1.31",
       "tv": "0.1.31"
     },
+    "devices": "tv",
     "fr": [
       "Téléviseur : interface allégée (sans flou ni reflets) pour une navigation plus fluide à la télécommande ; une touche maintenue ne bloque plus l’appli.",
       "Téléviseur : l’affiche sélectionnée passe au premier plan, et la sélection dans la barre du haut n’est plus doublée ni coupée."
