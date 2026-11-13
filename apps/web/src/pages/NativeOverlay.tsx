@@ -5,7 +5,7 @@ import { moveFocus } from '../nav';
 import { couchOn, settings } from '../settings';
 import { cancelXray, runXray, xrayAvailable } from '../xray';
 import { Icon, SeekPreview } from '../ui';
-import { PillMenu, PlayerClock, PlayerSub, PlayerTech, Pill, SkipButton, liveTechNative } from '../playerui';
+import { PillMenu, PlayerClock, PlayerSub, PlayerTech, Pill, SkipButton, liveTechNative, rememberTech, techContext } from '../playerui';
 
 type Menu = null | 'audio' | 'sub' | 'speed' | 'chapter' | 'quality' | 'output' | 'more';
 
@@ -89,6 +89,13 @@ export function NativeOverlay() {
   }, []);
 
   const time = Number(s['time-pos']) || 0;
+  const live = liveTechNative(s, meta);
+  const liveKey = JSON.stringify(live);
+  // Ce qui sort vraiment, une fois la sortie audio négociée : la fiche du média le reprendra.
+  const settled = time > 15;
+  useEffect(() => {
+    if (settled) rememberTech(meta.tech, live, techContext(true, settings.value.passthrough, settings.value.audioDevice));
+  }, [settled, liveKey]);
   const duration = Number(s.duration) || 0;
   const paused = !!s.pause;
   const muted = !!s.mute;
@@ -346,7 +353,7 @@ export function NativeOverlay() {
         <div class="player-title">
           <strong>{meta.title}</strong>
           {meta.sub && <PlayerSub text={meta.sub} />}
-          <PlayerTech badges={liveTechNative(s, meta)} />
+          <PlayerTech badges={live} />
         </div>
         <PlayerClock remaining={duration - time} speed={speed} />
       </div>

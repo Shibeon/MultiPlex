@@ -137,6 +137,102 @@ export function liveTechWeb(v: HTMLVideoElement | null, plan: { mode: 'direct' |
   return out;
 }
 
+// --- Fiche du média : ce que cet appareil restituera ----------------------------------------
+// Rien n'est lu encore : on reprend ce que l'appareil a réellement restitué la dernière fois
+// qu'il a lu un fichier du même genre (même plage dynamique, même piste audio, mêmes réglages
+// de sortie), retenu pendant la lecture. À défaut, une estimation d'après l'écran et les
+// réglages, marquée « ? ».
+
+const SEEN_KEY = 'mp.techSeen';
+type Seen = Record<string, TechBadge[]>;
+function readSeen(): Seen {
+  try {
+    return JSON.parse(localStorage.getItem(SEEN_KEY) ?? '{}') as Seen;
+  } catch {
+    return {};
+  }
+}
+/** Clés d'un fichier : plage dynamique ; piste audio (codec et canaux) ; les deux, pour le mode. */
+function seenKeys(source: TechBadge[], ctx: string) {
+  const hdr = src(source, 'hdr') ?? 'SDR';
+  const audio = `${src(source, 'audio') ?? '?'}|${src(source, 'channels') ?? '?'}`;
+  return { video: `v|${ctx}|${hdr}`, audio: `a|${ctx}|${audio}`, mode: `m|${ctx}|${src(source, 'video') ?? '?'}|${hdr}|${audio}` };
+}
+
+/** Pendant la lecture : retient ce qui a été vérifié (pas les pastilles « ? »). */
+export function rememberTech(source: TechBadge[] | undefined, live: TechBadge[], ctx: string): void {
+  if (!source?.length || !live.length) return;
+  const k = seenKeys(source, ctx);
+  const sure = live.filter((b) => !b.unsure);
+  const video = sure.filter((b) => b.kind === 'hdr' || b.kind === 'sdr');
+  const audio = sure.filter((b) => b.kind === 'audio' || b.kind === 'channels' || b.kind === 'proc');
+  const mode = sure.filter((b) => b.kind === 'mode');
+  const seen = readSeen();
+  const next = { ...seen };
+  if (video.length) next[k.video] = video;
+  if (audio.some((b) => b.kind === 'audio')) next[k.audio] = audio;
+  if (mode.length) next[k.mode] = mode;
+  if (JSON.stringify(next) === JSON.stringify(seen)) return;
+  try {
+    localStorage.setItem(SEEN_KEY, JSON.stringify(next));
+  } catch {
+    /* stockage plein ou interdit : la fiche restera sur l'estimation */
+  }
+}
+
+/** Contexte de sortie : un changement de lecteur ou de réglage audio invalide ce qui a été vu. */
+export function techContext(native: boolean, passthrough: boolean, audioDevice: string): string {
+  return native ? `native|${passthrough ? 'pass' : 'pcm'}|${audioDevice}` : 'web';
+}
+
+const hdrScreen = () => typeof matchMedia === 'function' && matchMedia('(dynamic-range: high)').matches;
+
+/** Pastilles de la fiche : définition, plage dynamique, son, mode, tels que cet appareil les restituera. */
+export function predictTech(source: TechBadge[], ctx: string): TechBadge[] {
+  if (!source.length) return [];
+  const native = ctx.startsWith('native');
+  const seen = readSeen();
+  const k = seenKeys(source, ctx);
+  const was = (list: TechBadge[] | undefined) => list?.map((b) => ({ ...b, hint: b.hint ? `${b.hint} — ${t('live.seen')}` : t('live.seen') }));
+  const out: TechBadge[] = [];
+  const res = source.find((b) => b.kind === 'resolution');
+  if (res) out.push(res);
+
+  const srcHdr = src(source, 'hdr');
+  const video = was(seen[k.video]);
+  if (video) out.push(...video);
+  else if (!srcHdr) {
+    if (res) out.push({ kind: 'sdr', label: 'SDR' });
+  } else if (hdrScreen()) {
+    // mpv n'envoie jamais de Dolby Vision : il l'applique et sort du HDR10.
+    const label = srcHdr === 'HLG' ? 'HLG' : native ? 'HDR10' : srcHdr;
+    out.push({ kind: 'hdr', label, unsure: true, hint: label !== srcHdr ? t('live.hdrAs').replace('{s}', srcHdr) : t('live.screenHdr') });
+  } else out.push({ kind: 'sdr', label: 'SDR', unsure: true, hint: `${t('live.toSdr').replace('{s}', srcHdr)} (${t('live.screenSdr')})` });
+
+  const audio = was(seen[k.audio]);
+  const proc: TechBadge[] = [];
+  if (audio) {
+    out.push(...audio.filter((b) => b.kind !== 'proc'));
+    proc.push(...audio.filter((b) => b.kind === 'proc'));
+  } else {
+    const a = src(source, 'audio');
+    const ch = src(source, 'channels');
+    if (native && ctx.includes('|pcm|')) {
+      if (a) out.push({ kind: 'audio', label: 'PCM', hint: t('live.pcmGuess') });
+      if (ch) out.push({ kind: 'channels', label: ch === 'Stéréo' ? t('live.stereo') : ch, unsure: true, hint: t('live.pcmGuess') });
+    } else {
+      if (a) out.push({ kind: 'audio', label: a, unsure: true, hint: native ? t('live.passGuess') : t('live.browserAudio') });
+      if (ch) out.push({ kind: 'channels', label: ch === 'Stéréo' ? t('live.stereo') : ch, unsure: true });
+    }
+  }
+
+  const mode = was(seen[k.mode]);
+  if (mode) out.push(...mode);
+  // Le lecteur de bureau lit toujours le fichier d'origine.
+  else if (native) out.push({ kind: 'mode', label: 'Direct Play' });
+  return [...out, ...proc];
+}
+
 const clockOf = (d: Date) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
 /** Heure qu'il est, et heure de fin estimée de la lecture. */

@@ -3,7 +3,8 @@ import { resolvePlayable } from '../queue';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
 import { showInfo } from '../menu';
-import { PlayerTech } from '../playerui';
+import { PlayerTech, predictTech, techContext } from '../playerui';
+import { nativeAvailable } from '../native';
 import { formatDuration, t } from '../i18n';
 import { go } from '../router';
 import { settings } from '../settings';
@@ -128,7 +129,10 @@ export function Details({ id }: { id: string }) {
   ].filter(Boolean);
   const leftMin = item.viewOffset && item.duration ? Math.round((item.duration - item.viewOffset) / 60000) : 0;
   const progress = item.viewOffset && item.duration ? item.viewOffset / item.duration : 0;
-  const tech = techBadges(item.Media?.[0]);
+  // Ce que cet appareil restituera (lecteur de bureau ou lecteur intégré), pas les caractéristiques
+  // du fichier : celles-ci restent dans « Infos techniques ».
+  const nativePlay = nativeAvailable.value && settings.value.nativePlayer;
+  const tech = predictTech(techBadges(item.Media?.[0]), techContext(nativePlay, settings.value.passthrough, settings.value.audioDevice));
   const credits: [string, Metadata['Director']][] = [
     [t('item.director'), item.Director],
     [t('item.writer'), item.Writer],
