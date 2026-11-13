@@ -5,7 +5,7 @@ import { moveFocus } from '../nav';
 import { setCouch, settings } from '../settings';
 import { cancelXray, runXray, xrayAvailable } from '../xray';
 import { CouchBanner, Icon, SeekPreview } from '../ui';
-import { PlayerClock, PlayerSub, PlayerTech, Pill, SkipButton } from '../playerui';
+import { PillMenu, PlayerClock, PlayerSub, PlayerTech, Pill, SkipButton } from '../playerui';
 
 type Menu = null | 'audio' | 'sub' | 'speed' | 'chapter' | 'quality' | 'output' | 'more';
 
@@ -291,11 +291,29 @@ export function NativeOverlay() {
             : [];
 
   const openMenu = (kind: Exclude<Menu, null>) => () => setMenu(menu === kind ? null : kind);
+  const menuList = (
+    <div class="player-menu" role="menu">
+      {items.map((m) => (
+        <button
+          key={m.key}
+          role="menuitemradio"
+          aria-checked={m.on}
+          class={m.on ? 'on' : ''}
+          onClick={() => {
+            setMenu(null);
+            m.run();
+          }}
+        >
+          {m.label}
+        </button>
+      ))}
+    </div>
+  );
   const shownTime = scrub ?? time;
 
   return (
     <div
-      class={`player overlay${shown ? ' show-ui' : ''}${couch ? ' couch-player' : ''}`}
+      class={`player overlay${shown ? ' show-ui' : ''}${menu ? ' menu-open' : ''}${couch ? ' couch-player' : ''}`}
       data-couch={couch ? 'on' : 'off'}
       onMouseMove={wake}
       onClick={(e) => {
@@ -413,9 +431,9 @@ export function NativeOverlay() {
           {meta.hasNext && <Pill icon="next" act="next" label={meta.nextTitle ? t('player.upNext') : t('player.next')} title={meta.nextTitle} onClick={() => n.action('next')} />}
         </div>
         <div class="controls">
-          {audio.length > 0 && <Pill icon="audio" act="audio" label={t('player.audio')} expanded={menu === 'audio'} onClick={openMenu('audio')} />}
-          {subs.length > 0 && <Pill icon="subtitles" act="sub" label={t('player.subs')} expanded={menu === 'sub'} onClick={openMenu('sub')} />}
-          <Pill icon="plus" act="more" label={t('player.more')} expanded={!!menu && menu !== 'audio' && menu !== 'sub'} onClick={() => setMenu(menu ? null : 'more')} />
+          {audio.length > 0 && <PillMenu icon="audio" act="audio" label={t('player.audio')} open={menu === 'audio'} menu={menuList} onClick={openMenu('audio')} />}
+          {subs.length > 0 && <PillMenu icon="subtitles" act="sub" label={t('player.subs')} open={menu === 'sub'} menu={menuList} onClick={openMenu('sub')} />}
+          <PillMenu icon="plus" act="more" label={t('player.more')} open={!!menu && menu !== 'audio' && menu !== 'sub'} menu={menuList} onClick={() => setMenu(menu ? null : 'more')} />
           <span class="side">
             <button class="btn icon-btn" data-act="mute" aria-label="Volume" aria-pressed={muted} onClick={() => void n.command('mute')}>
               <Icon name={muted || volume === 0 ? 'mute' : 'volume'} />
@@ -429,24 +447,6 @@ export function NativeOverlay() {
             </button>
           </span>
         </div>
-        {menu && (
-          <div class="player-menu" role="menu">
-            {items.map((m) => (
-              <button
-                key={m.key}
-                role="menuitemradio"
-                aria-checked={m.on}
-                class={m.on ? 'on' : ''}
-                onClick={() => {
-                  setMenu(null);
-                  m.run();
-                }}
-              >
-                {m.label}
-              </button>
-            ))}
-          </div>
-        )}
       </div>
       <CouchBanner />
     </div>

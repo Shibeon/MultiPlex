@@ -1,3 +1,4 @@
+import type { ComponentChildren } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
 import { t } from './i18n';
 import { Icon } from './ui';
@@ -56,6 +57,19 @@ export function Pill({ icon, label, expanded, onClick, title, act }: { icon: str
     <button class="btn pill" data-act={act} aria-label={label} title={title ?? label} aria-expanded={expanded} onClick={onClick}>
       <Icon name={icon} /> <span>{label}</span>
     </button>
+  );
+}
+
+/**
+ * Bouton de réglage du lecteur qui s'ouvre sur ses options : la liste sort du bouton,
+ * vers le haut, dans la même matière, pour qu'on voie d'où elle vient.
+ */
+export function PillMenu({ open, menu, ...pill }: { icon: string; label: string; open: boolean; menu: ComponentChildren; onClick: () => void; act?: string }) {
+  return (
+    <span class={`pill-wrap${open ? ' open' : ''}`}>
+      {open && <div class="pill-panel">{menu}</div>}
+      <Pill {...pill} expanded={open} />
+    </span>
   );
 }
 

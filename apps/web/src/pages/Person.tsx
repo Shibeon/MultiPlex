@@ -163,8 +163,8 @@ export function PersonPage({ id }: { id: string }) {
           {!!person.data?.links?.length && (
             <p class="person-links">
               {person.data.links.map((l) => (
-                <a key={l.url} class="btn" href={l.url} target="_blank" rel="noreferrer">
-                  {l.title} <Icon name="next" size={10} />
+                <a key={l.url} class="social" href={l.url} target="_blank" rel="noreferrer" aria-label={l.title} title={l.title}>
+                  <SocialLogo title={l.title} url={l.url} />
                 </a>
               ))}
             </p>
@@ -213,5 +213,52 @@ export function PersonPage({ id }: { id: string }) {
         </section>
       ))}
     </div>
+  );
+}
+
+/** Réseau d'un lien externe, d'après son nom ou son adresse. */
+function network(title: string, url: string): string {
+  const s = `${title} ${url}`.toLowerCase();
+  for (const n of ['facebook', 'instagram', 'tiktok', 'youtube', 'imdb', 'wikipedia', 'threads', 'bluesky']) if (s.includes(n)) return n;
+  if (s.includes('twitter') || /\/\/(www\.)?x\.com/.test(s)) return 'x';
+  return 'web';
+}
+
+/** Logo d'un réseau social, dessiné simplement (pas d'images externes), dans sa couleur. */
+export function SocialLogo({ title, url }: { title: string; url: string }) {
+  const n = network(title, url);
+  const W = '#fff';
+  const body: Record<string, preact.JSX.Element> = {
+    facebook: <path fill={W} d="M13.4 21v-7h2.4l.4-2.8h-2.8V9.5c0-.8.3-1.4 1.4-1.4h1.5V5.6c-.3 0-1.1-.1-2.1-.1-2.1 0-3.4 1.2-3.4 3.5v2.2H8.4V14h2.4v7z" />,
+    instagram: (
+      <g fill="none" stroke={W} stroke-width="1.7">
+        <rect x="5.5" y="5.5" width="13" height="13" rx="3.8" />
+        <circle cx="12" cy="12" r="3.1" />
+        <circle cx="15.9" cy="8.1" r="0.5" fill={W} />
+      </g>
+    ),
+    x: (
+      <g fill={W}>
+        <path d="M6.2 6h3.5l8.1 12h-3.5z" />
+        <path d="M16.6 6h1.7l-5.4 6.2-.9-1.2zM7.5 18h-1.7l5.2-6 .9 1.2z" />
+      </g>
+    ),
+    tiktok: <path fill={W} d="M13.6 5h2.3c.2 1.7 1.4 2.9 3 3.1v2.3c-1.1 0-2.1-.3-3-.9v5.1a4.4 4.4 0 1 1-4.4-4.4h.3v2.4h-.3a2 2 0 1 0 2.1 2z" />,
+    youtube: (
+      <g>
+        <rect x="4.5" y="7" width="15" height="10" rx="3" fill={W} />
+        <path d="M10.6 9.6v4.8l4-2.4z" fill="#ff0033" />
+      </g>
+    ),
+    threads: <text x="12" y="16.6" text-anchor="middle" font-size="13" font-weight="700" fill={W} font-family="system-ui, sans-serif">@</text>,
+    bluesky: <path fill={W} d="M7.6 6.6c1.8 1.3 3.7 4 4.4 5.4.7-1.4 2.6-4.1 4.4-5.4 1.3-1 3.4-1.7 3.4.7 0 .5-.3 3.9-.4 4.5-.6 2-2.6 2.5-4.4 2.2 3.1.5 3.9 2.3 2.2 4-3.2 3.3-4.6-.8-5-1.9l-.2-.5-.2.5c-.4 1.1-1.8 5.2-5 1.9-1.7-1.7-.9-3.5 2.2-4-1.8.3-3.8-.2-4.4-2.2-.1-.6-.4-4-.4-4.5 0-2.4 2.1-1.7 3.4-.7z" />,
+    imdb: <text x="12" y="15.2" text-anchor="middle" font-size="7.4" font-weight="900" fill="#000" font-family="system-ui, sans-serif">IMDb</text>,
+    wikipedia: <text x="12" y="16.4" text-anchor="middle" font-size="12" font-family="Georgia, 'Times New Roman', serif" fill="#000">W</text>,
+    web: <text x="12" y="16.2" text-anchor="middle" font-size="11" font-weight="700" fill={W} font-family="system-ui, sans-serif">{(title.trim()[0] ?? '?').toUpperCase()}</text>,
+  };
+  return (
+    <svg class={`social-logo social-${n}`} viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+      {body[n]}
+    </svg>
   );
 }

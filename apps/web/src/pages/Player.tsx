@@ -1,4 +1,4 @@
-import { PlayerClock, PlayerSub, PlayerTech, Pill, SkipButton } from '../playerui';
+import { PillMenu, PlayerClock, PlayerSub, PlayerTech, Pill, SkipButton } from '../playerui';
 import { QUALITIES, hdrKind, srtToVtt, streamsOf, techBadges, type Media, type Metadata, type PlaybackPlan, type Stream } from '@multiplex/core';
 import type Hls from 'hls.js';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
@@ -560,8 +560,17 @@ export function Player({ id }: { id: string }) {
   }
   const openMenu = (kind: Exclude<Menu, null>) => () => setMenu(menu === kind ? null : kind);
 
+  const menuList = menu && (
+    <div class="player-menu" role="menu">
+      {menuItems.map((m) => (
+        <button key={m.id} role="menuitemradio" aria-checked={m.on} class={m.on ? 'on' : ''} onClick={() => void change(menu, m.id)}>
+          {m.label}
+        </button>
+      ))}
+    </div>
+  );
   return (
-    <div ref={root} class={`player${visible || menu || error ? ' show-ui' : ''}`} data-focus-scope onMouseMove={wake} onTouchStart={wake}>
+    <div ref={root} class={`player${visible || menu || error ? ' show-ui' : ''}${menu ? ' menu-open' : ''}`} data-focus-scope onMouseMove={wake} onTouchStart={wake}>
       <video
         ref={video}
         playsInline
@@ -656,9 +665,9 @@ export function Player({ id }: { id: string }) {
           {next && <Pill icon="next" act="next" label={next.type === 'queued' ? t('player.upNext') : t('player.next')} title={next.type === 'queued' ? next.title : undefined} onClick={playNext} />}
         </div>
         <div class="controls">
-          {audioStreams.length > 0 && <Pill icon="audio" label={t('player.audio')} expanded={menu === 'audio'} onClick={openMenu('audio')} />}
-          {subStreams.length > 0 && <Pill icon="subtitles" label={t('player.subs')} expanded={menu === 'sub'} onClick={openMenu('sub')} />}
-          <Pill icon="plus" label={t('player.more')} expanded={!!menu && menu !== 'audio' && menu !== 'sub'} onClick={() => setMenu(menu ? null : 'more')} />
+          {audioStreams.length > 0 && <PillMenu icon="audio" act="audio" label={t('player.audio')} open={menu === 'audio'} menu={menuList} onClick={openMenu('audio')} />}
+          {subStreams.length > 0 && <PillMenu icon="subtitles" act="sub" label={t('player.subs')} open={menu === 'sub'} menu={menuList} onClick={openMenu('sub')} />}
+          <PillMenu icon="plus" act="more" label={t('player.more')} open={!!menu && menu !== 'audio' && menu !== 'sub'} menu={menuList} onClick={() => setMenu(menu ? null : 'more')} />
           <span class="side">
             <button class="btn icon-btn" aria-label="Volume" aria-pressed={ui.muted} onClick={() => (v().muted = !v().muted)}>
               <Icon name={ui.muted ? 'mute' : 'volume'} />
@@ -668,15 +677,6 @@ export function Player({ id }: { id: string }) {
             </button>
           </span>
         </div>
-        {menu && (
-          <div class="player-menu" role="menu">
-            {menuItems.map((m) => (
-              <button key={m.id} role="menuitemradio" aria-checked={m.on} class={m.on ? 'on' : ''} onClick={() => void change(menu, m.id)}>
-                {m.label}
-              </button>
-            ))}
-          </div>
-        )}
       </div>
     </div>
   );
