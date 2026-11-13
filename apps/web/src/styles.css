@@ -1492,3 +1492,13 @@ input.search-input:focus-visible { background-color: var(--glass-2); }
 .set-row > .btn, .set-row > button { flex: none; white-space: nowrap; }
 .set-row select { text-overflow: ellipsis; }
 @media (max-width: 480px) { .set-row:has(.relay-setting) { flex-wrap: wrap; } }
+@media (max-width: 480px) {
+  /* Texte long et bouton : le bouton passe dessous plutôt que d'écraser le texte en colonne. */
+  .set-row:has(> .btn), .set-row:has(> button) { flex-wrap: wrap; }
+  .set-row:has(> .btn) > span:first-child, .set-row:has(> button) > span:first-child { flex: 1 1 12rem; }
+}
+@media (max-width: 380px) {
+  .nav-link { min-width: 0; padding-inline: 0.1rem; font-size: 0.62rem; }
+  .nav-link.icon-only { flex-basis: 2.4rem; }
+  .sidebar .nav-profile { margin-inline: 0.25rem; }
+}
