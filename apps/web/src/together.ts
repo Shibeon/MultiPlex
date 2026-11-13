@@ -91,13 +91,30 @@ export const playingGuid = signal<string | undefined>(undefined);
 const b64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const unb64 = (s: string) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
 
-/** Invitation : relais, salle et clé, en un seul texte à partager. */
-export function makeCode(relay: string, room: string, key: string): string {
-  return `MPX-${b64(new TextEncoder().encode(JSON.stringify({ r: relay, i: room, k: key })))}`;
+/**
+ * Invitation : « MPX-<secret>@<relais> », par exemple « MPX-q3Vb8xK2mT0wZr5L@relais.exemple.fr ».
+ * Le secret (96 bits tirés au hasard) donne la clé de chiffrement et le numéro de salle : le relais
+ * ne reçoit que ce numéro, dont on ne peut pas remonter au secret. L'adresse du relais s'écrit sans
+ * « wss:// ».
+ *
+ * Les anciennes invitations (« MPX- » suivi de relais, salle et clé en JSON) restent acceptées.
+ */
+export type Invite = { relay: string; secret: string } | { relay: string; room: string; key: string };
+
+const SECRET_BYTES = 12;
+
+export function makeCode(relay: string, secret: string): string {
+  return `MPX-${secret}@${relay.replace(/^wss:\/\//, '')}`;
 }
 
-export function parseCode(code: string): { relay: string; room: string; key: string } | null {
-  const m = /MPX-([A-Za-z0-9_-]{20,600})/.exec(code.trim());
+export function parseCode(code: string): Invite | null {
+  const text = code.trim();
+  const short = /MPX-([A-Za-z0-9_-]{16})@([^\s]+)/.exec(text);
+  if (short) {
+    const relay = relayUrl(short[2]);
+    return relay ? { relay, secret: short[1] } : null;
+  }
+  const m = /MPX-([A-Za-z0-9_-]{20,600})/.exec(text);
   if (!m) return null;
   try {
     const j = JSON.parse(new TextDecoder().decode(unb64(m[1]))) as { r?: string; i?: string; k?: string };
@@ -106,6 +123,18 @@ export function parseCode(code: string): { relay: string; room: string; key: str
   } catch {
     return null;
   }
+}
+
+/** Salle et clé AES-GCM tirées du secret de l'invitation (HKDF, avec un usage différent pour chacune). */
+async function derive(c: Invite): Promise<{ room: string; key: CryptoKey }> {
+  if (!('secret' in c)) {
+    return { room: c.room, key: await crypto.subtle.importKey('raw', unb64(c.key), 'AES-GCM', false, ['encrypt', 'decrypt']) };
+  }
+  const base = await crypto.subtle.importKey('raw', unb64(c.secret), 'HKDF', false, ['deriveBits', 'deriveKey']);
+  const params = (info: string) => ({ name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: new TextEncoder().encode(info) });
+  const roomBits = await crypto.subtle.deriveBits(params('multiplex-together-room'), base, 128);
+  const key = await crypto.subtle.deriveKey(params('multiplex-together-key'), base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  return { room: b64(new Uint8Array(roomBits)), key };
 }
 
 /** Adresse du relais saisie dans les réglages : https://… ou wss://… (sans chemin). */
@@ -132,7 +161,7 @@ let key: CryptoKey | null = null;
 let ticker = 0;
 let retry = 0;
 let closing = false;
-let current: { relay: string; room: string; key: string } | null = null;
+let current: { relay: string; room: string } | null = null;
 
 // Lecture en cours, synchronisée.
 let player: Playback | null = null;
@@ -305,9 +334,8 @@ function connect() {
 export async function startTogether(item?: Metadata): Promise<string> {
   const relay = relayUrl();
   if (!relay) throw new Error('relay');
-  const room = b64(crypto.getRandomValues(new Uint8Array(16)));
-  const k = b64(crypto.getRandomValues(new Uint8Array(32)));
-  await open({ relay, room, key: k }, true, item ? sharedOf(item) : undefined);
+  const secret = b64(crypto.getRandomValues(new Uint8Array(SECRET_BYTES)));
+  await open({ relay, secret }, true, item ? sharedOf(item) : undefined);
   return together.value!.code;
 }
 
@@ -318,12 +346,15 @@ export async function joinTogether(code: string): Promise<void> {
   await open(c, false);
 }
 
-async function open(c: { relay: string; room: string; key: string }, host: boolean, item?: SharedItem) {
+async function open(c: Invite, host: boolean, item?: SharedItem) {
   leaveTogether();
   closing = false;
-  current = c;
-  key = await crypto.subtle.importKey('raw', unb64(c.key), 'AES-GCM', false, ['encrypt', 'decrypt']);
-  together.value = { code: makeCode(c.relay, c.room, c.key), host, status: 'connecting', item };
+  const d = await derive(c);
+  current = { relay: c.relay, room: d.room };
+  key = d.key;
+  // Une ancienne invitation se repartage telle quelle ; sinon, la forme courte.
+  const code = 'secret' in c ? makeCode(c.relay, c.secret) : `MPX-${b64(new TextEncoder().encode(JSON.stringify({ r: c.relay, i: c.room, k: c.key })))}`;
+  together.value = { code, host, status: 'connecting', item };
   peers.value = [];
   connect();
   // Présence : un signe de vie toutes les 3 secondes ; un participant muet depuis 12 s est parti.
