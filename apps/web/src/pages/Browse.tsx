@@ -175,15 +175,15 @@ export function LibraryPage({ id }: { id: string }) {
       <header class="page-head">
         <h1>{lib?.title ?? ''}</h1>
         {state.total >= 0 && (
-          <span class="muted">
+          <span class="muted count">
             {state.total} {t('lib.count')}
           </span>
         )}
         <span class="spacer" />
-        <label class="check">
-          <input type="checkbox" checked={prefs.unwatched} onChange={(e) => setPrefs({ ...prefs, unwatched: e.currentTarget.checked })} />
+        <button class={`btn toggle-pill${prefs.unwatched ? ' on' : ''}`} aria-pressed={prefs.unwatched} onClick={() => setPrefs({ ...prefs, unwatched: !prefs.unwatched })}>
+          {prefs.unwatched && <Icon name="check" size={16} />}
           {t('lib.unwatched')}
-        </label>
+        </button>
         <select aria-label={t('lib.sort')} value={prefs.sort} onChange={(e) => setPrefs({ ...prefs, sort: e.currentTarget.value })}>
           {SORTS.map(([v, label]) => (
             <option key={v} value={v}>

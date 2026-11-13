@@ -106,7 +106,7 @@ export function WatchlistPage() {
     <div class="page">
       <header class="page-head">
         <h1>{t('nav.watchlist')}</h1>
-        {data && <span class="muted">{data.total}</span>}
+        {data && <span class="muted count">{data.total}</span>}
         {waiting > 0 && (
           <span class="muted">
             · {waiting} {t('disc.waiting')}

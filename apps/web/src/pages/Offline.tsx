@@ -167,7 +167,7 @@ export function OfflinePage() {
     <div class="page offline-page">
       <header class="page-head">
         <h1>{t('nav.offline')}</h1>
-        <span class="muted">
+        <span class="muted count">
           {size(info.used)} {t('off.used')}
           {info.free !== undefined && ` · ${size(info.free)} ${t('off.free')}`}
         </span>

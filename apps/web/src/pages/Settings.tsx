@@ -23,7 +23,7 @@ function Row({ label, children }: { label: string; children: ComponentChildren }
 function Toggle({ k, label }: { k: keyof Settings; label: string }) {
   return (
     <Row label={label}>
-      <input type="checkbox" checked={settings.value[k] as boolean} onChange={(e) => update({ [k]: e.currentTarget.checked })} />
+      <input class="switch" type="checkbox" role="switch" checked={settings.value[k] as boolean} onChange={(e) => update({ [k]: e.currentTarget.checked })} />
     </Row>
   );
 }
@@ -32,7 +32,7 @@ function Range({ k, label, min, max, step = 1, unit = '' }: { k: keyof Settings;
   const v = settings.value[k] as number;
   return (
     <Row label={`${label} — ${v}${unit}`}>
-      <input type="range" min={min} max={max} step={step} value={v} onInput={(e) => update({ [k]: Number(e.currentTarget.value) })} />
+      <input type="range" min={min} max={max} step={step} value={v} style={{ '--fill': `${((v - min) / (max - min)) * 100}%` }} onInput={(e) => update({ [k]: Number(e.currentTarget.value) })} />
     </Row>
   );
 }
@@ -234,7 +234,7 @@ export function SettingsPage() {
           </span>
         </Row>
         <Row label={t('couch.setting')}>
-          <input type="checkbox" checked={s.couch} onChange={(e) => setCouch(e.currentTarget.checked)} />
+          <input class="switch" type="checkbox" role="switch" checked={s.couch} onChange={(e) => setCouch(e.currentTarget.checked)} />
         </Row>
         <Range k="cardSize" label={t('set.cardSize')} min={100} max={260} step={10} unit=" px" />
         <Range k="radius" label={t('set.radius')} min={0} max={24} unit=" px" />
