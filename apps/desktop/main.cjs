@@ -7,7 +7,7 @@ const { MpvPlayer, listAudioDevices, findMpv } = require('./mpv.cjs');
 const { OfflineLibrary } = require('./offline.cjs');
 const { discover: castDiscover, CastSession } = require('./cast.cjs');
 const { Thumbnailer } = require('./thumbs.cjs');
-const { setupUpdater } = require('./updater.cjs');
+const { setupUpdater, installPendingAtLaunch } = require('./updater.cjs');
 const { RefreshMatcher } = require('./display.cjs');
 
 // Empaquetée, l'app embarque le build web dans ses ressources.
@@ -893,7 +893,9 @@ function createWindow() {
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  // Mise à jour téléchargée lors de la session précédente : installée maintenant, puis relance.
+  if (!arg('smoke') && !arg('smoke-native') && !arg('smoke-eval') && !arg('smoke-update-check') && !process.argv.includes('--smoke-update') && (await installPendingAtLaunch())) return;
   createWindow();
   // Mise à jour automatique (inactive pendant les tests, sauf simulation demandée).
   if (process.argv.includes('--smoke-update')) setupUpdater((state) => sendTo(main, 'update:event', state), { simulate: true });

@@ -65,6 +65,8 @@ export interface UpdateState {
   /** Nouveautés de la version proposée : JSON { fr, en } ou texte libre. */
   notes?: string;
   message?: string;
+  /** Mise à jour silencieuse prête : installée au prochain lancement (Windows) ou à la fermeture. */
+  when?: 'launch' | 'quit';
 }
 
 export interface NativeApi {
