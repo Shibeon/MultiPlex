@@ -1,6 +1,8 @@
 import { signal } from '@preact/signals';
 import { useState } from 'preact/hooks';
 import changelog from '../changelog.json';
+import versions from '../../../../versions.json';
+import { platform } from '../platform';
 import { load, save } from '../settings';
 import { t } from '../i18n';
 import { isOverlayWindow, native, type UpdateState } from '../native';
@@ -19,9 +21,14 @@ if (native?.updates && !isOverlayWindow) {
 }
 
 type Notes = { version: string; fr: string[]; en: string[] };
-const LOG = changelog as Notes[];
-/** Version de l'interface : la première entrée du journal des nouveautés. */
-export const VERSION = LOG[0].version;
+type Entry = { versions: Partial<Record<string, string>>; fr: string[]; en: string[] };
+/** Nouveautés de cette plateforme seulement, avec son propre numéro, la plus récente d'abord. */
+const LOG: Notes[] = (changelog as Entry[]).flatMap((e) => {
+  const version = e.versions[platform];
+  return version ? [{ version, fr: e.fr, en: e.en }] : [];
+});
+/** Version de cette plateforme (versions.json : bureau, web, Android et TV ont chacun la leur). */
+export const VERSION: string = (versions as Record<string, string>)[platform];
 const lines = (n: { fr: string[]; en: string[] }) => (settings.value.lang === 'fr' ? n.fr : n.en);
 
 const newer = (a: string, b: string) => {
@@ -154,7 +161,7 @@ export function UpdateSettings() {
     return (
       <div class="set-row">
         <span>
-          {t('upd.version')} {VERSION}
+          {t('upd.version')} {t(`plat.${platform}`)} {VERSION}
         </span>
         <button class="btn" onClick={showWhatsNew}>
           {t('new.show')}

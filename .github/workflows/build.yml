@@ -2,13 +2,17 @@ name: build
 
 # À chaque envoi : vérification des types, tests et paquets web / TV.
 #
-# Publication d'une mise à jour : il suffit d'envoyer sur `main` un numéro de
-# version (apps/desktop/package.json) qui n'a pas encore été publié, avec son
-# entrée dans apps/web/src/changelog.json. Le build prépare alors la version en
-# brouillon, compile Windows, macOS, Linux et l'APK Android, y dépose les
-# fichiers, puis la rend publique — seulement si toutes les plateformes ont
-# réussi. En cas d'échec, le brouillon reste et le prochain envoi le reprend.
-# L'application installée propose ensuite la mise à jour.
+# Chaque plateforme a son numéro de version (versions.json) : bureau (Windows,
+# macOS, Linux), web, Android (téléphone, tablette, Android TV) et TV (LG webOS,
+# Samsung Tizen). Publier : envoyer sur `main` un numéro pas encore publié, avec
+# son entrée dans apps/web/src/changelog.json (`pnpm release <plateformes…>`).
+# Seules les plateformes dont le numéro a changé sont compilées et publiées.
+#
+# Bureau : la version est préparée en brouillon, Windows, macOS et Linux y
+# déposent leurs fichiers, puis elle devient publique — seulement si les trois
+# ont réussi. L'application installée propose alors la mise à jour.
+# Web, Android, TV : publiées sous les étiquettes web-v…, android-v…, tv-v…,
+# jamais marquées « Latest » (réservé au bureau, que lit sa mise à jour automatique).
 #
 # À la demande (onglet Actions → « Run workflow ») : compilation seule, sans
 # publication, pour récupérer les installeurs dans les artefacts. Ces
@@ -17,7 +21,9 @@ name: build
 #
 # Les versions sont publiées dans un dépôt public à part, pour que le code puisse
 # rester privé : son adresse est dans apps/desktop/package.json (build.publish).
-# Le secret RELEASES_TOKEN doit contenir un jeton autorisé à y écrire.
+# Secrets : RELEASES_TOKEN (jeton autorisé à écrire dans ce dépôt) ; pour Android,
+# ANDROID_KEYSTORE (keystore en base64), ANDROID_KEYSTORE_PASSWORD,
+# ANDROID_KEY_ALIAS et ANDROID_KEY_PASSWORD (voir le README).
 
 on:
   push:
@@ -39,6 +45,7 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm check:versions
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm package:tv
@@ -52,50 +59,71 @@ jobs:
           path: dist-platforms
 
 
-  # Envoi sur main : la version est-elle déjà publiée ? Sinon, on la prépare en brouillon.
-  # Un seul brouillon créé ici, avant les compilations : quand chaque plateforme essayait
-  # de créer la version en même temps, GitHub refusait (« Published releases must have a
-  # valid tag ») et seule la version Windows était publiée.
+  # Envoi sur main : quelles plateformes ont un numéro pas encore publié ?
+  # Bureau : un seul brouillon créé ici, avant les compilations — quand chaque système
+  # essayait de créer la version en même temps, GitHub refusait (« Published releases
+  # must have a valid tag ») et seule la version Windows était publiée.
   release:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     outputs:
-      publish: ${{ steps.prepare.outputs.publish }}
+      desktop: ${{ steps.prepare.outputs.desktop }}
+      web: ${{ steps.prepare.outputs.web }}
+      android: ${{ steps.prepare.outputs.android }}
+      tv: ${{ steps.prepare.outputs.tv }}
       tag: ${{ steps.prepare.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
       - id: prepare
         env:
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          HAS_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE != '' }}
         run: |
           if [ -z "$GH_TOKEN" ]; then
-            echo "Secret RELEASES_TOKEN absent : impossible de publier la version (voir le README, « Mises à jour automatiques »)." >&2
+            echo "Secret RELEASES_TOKEN absent : impossible de publier (voir le README, « Mises à jour automatiques »)." >&2
             exit 1
           fi
+          node scripts/versions.mjs check
           repo=$(node -p "const p = require('./apps/desktop/package.json').build.publish[0]; p.owner + '/' + p.repo")
-          version=$(node -p "require('./apps/desktop/package.json').version")
+          state() { gh release view "$1" --repo "$repo" --json isDraft --jq .isDraft 2>/dev/null || echo none; }
+
+          for p in web android tv; do
+            tag="$p-v$(node scripts/versions.mjs get $p)"
+            if [ "$(state "$tag")" = false ]; then
+              echo "$tag déjà publiée."
+              echo "$p=false" >> "$GITHUB_OUTPUT"
+            elif [ $p = android ] && [ "$HAS_KEYSTORE" != true ]; then
+              echo "::warning::$tag non publiée : secret ANDROID_KEYSTORE absent (voir le README, « Android »). Elle le sera au prochain envoi sur main une fois les secrets ajoutés."
+              echo "$p=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "$tag à publier."
+              echo "$p=true" >> "$GITHUB_OUTPUT"
+            fi
+          done
+
+          version=$(node scripts/versions.mjs get desktop)
           tag="v$version"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          draft=$(gh release view "$tag" --repo "$repo" --json isDraft --jq .isDraft 2>/dev/null || echo none)
+          draft=$(state "$tag")
           if [ "$draft" = false ]; then
-            echo "$tag est déjà publiée : rien à faire."
-            echo publish=false >> "$GITHUB_OUTPUT"
+            echo "$tag (bureau) déjà publiée."
+            echo desktop=false >> "$GITHUB_OUTPUT"
             exit 0
           fi
           # Les nouveautés de la version accompagnent la publication (affichées par l'app installée).
-          node scripts/release-notes.mjs
+          node scripts/versions.mjs notes desktop apps/desktop/release-notes.txt
           if [ "$draft" = none ]; then
             gh release create "$tag" --repo "$repo" --draft --title "$version" --notes-file apps/desktop/release-notes.txt
-            echo "$tag préparée en brouillon."
+            echo "$tag (bureau) préparée en brouillon."
           else
             gh release edit "$tag" --repo "$repo" --notes-file apps/desktop/release-notes.txt
-            echo "$tag : brouillon existant repris."
+            echo "$tag (bureau) : brouillon existant repris."
           fi
-          echo publish=true >> "$GITHUB_OUTPUT"
+          echo desktop=true >> "$GITHUB_OUTPUT"
 
   desktop:
     needs: [web, release]
-    if: ${{ !cancelled() && needs.web.result == 'success' && (github.event_name == 'workflow_dispatch' || needs.release.outputs.publish == 'true') }}
+    if: ${{ !cancelled() && needs.web.result == 'success' && (github.event_name == 'workflow_dispatch' || needs.release.outputs.desktop == 'true') }}
     strategy:
       fail-fast: false
       matrix:
@@ -120,10 +148,10 @@ jobs:
         run: |
           publish=never
           if [[ "$PUBLISH" == true ]]; then publish=always; fi
-          node ../../scripts/release-notes.mjs
+          node ../../scripts/versions.mjs notes desktop release-notes.txt
           pnpm exec electron-builder --publish "$publish" -c.releaseInfo.releaseNotesFile=release-notes.txt
         env:
-          PUBLISH: ${{ needs.release.outputs.publish }}
+          PUBLISH: ${{ needs.release.outputs.desktop }}
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
 
@@ -136,11 +164,11 @@ jobs:
             apps/desktop/release/*.AppImage
             apps/desktop/release/*.deb
 
-  # Toutes les plateformes ont réussi : la version devient publique (la mise à jour est
+  # Windows, macOS et Linux ont réussi : la version devient publique (la mise à jour est
   # proposée), et l'étiquette est posée ici sur le commit publié.
   publish:
     needs: [release, desktop]
-    if: ${{ !cancelled() && needs.release.outputs.publish == 'true' && needs.desktop.result == 'success' }}
+    if: ${{ !cancelled() && needs.release.outputs.desktop == 'true' && needs.desktop.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -160,9 +188,10 @@ jobs:
             git push origin "$TAG"
           fi
 
+  # Android : APK signé publié quand son numéro change ; à la demande, APK de débogage.
   android:
     needs: [web, release]
-    if: ${{ !cancelled() && needs.web.result == 'success' && (github.event_name == 'workflow_dispatch' || needs.release.outputs.publish == 'true') }}
+    if: ${{ !cancelled() && needs.web.result == 'success' && (github.event_name == 'workflow_dispatch' || needs.release.outputs.android == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -178,9 +207,87 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm mobile:sync
       - name: APK de débogage (téléphone, tablette, Android TV, Fire TV)
+        if: needs.release.outputs.android != 'true'
         working-directory: apps/mobile/android
         run: chmod +x gradlew && ./gradlew assembleDebug --no-daemon
+      - name: APK signé
+        if: needs.release.outputs.android == 'true'
+        working-directory: apps/mobile/android
+        env:
+          ANDROID_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          export ANDROID_KEYSTORE_PATH="$RUNNER_TEMP/release.keystore"
+          echo "$ANDROID_KEYSTORE" | base64 -d > "$ANDROID_KEYSTORE_PATH"
+          chmod +x gradlew && ./gradlew assembleRelease --no-daemon
+          version=$(node ../../../scripts/versions.mjs get android)
+          mkdir -p ../../../out
+          cp app/build/outputs/apk/release/app-release.apk "../../../out/MultiPlex-$version.apk"
+      - name: Publier
+        if: needs.release.outputs.android == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+        run: scripts/publish-release.sh android out/*.apk
       - uses: actions/upload-artifact@v4
         with:
           name: android-apk
-          path: apps/mobile/android/app/build/outputs/apk/debug/*.apk
+          path: |
+            apps/mobile/android/app/build/outputs/apk/debug/*.apk
+            out/*.apk
+
+  # Web : archive du site à déposer sur son serveur.
+  web-release:
+    needs: [web, release]
+    if: ${{ !cancelled() && needs.web.result == 'success' && needs.release.outputs.web == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: web
+          path: web
+      - name: Publier
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+        run: |
+          version=$(node scripts/versions.mjs get web)
+          (cd web && zip -qr "../MultiPlex-web-$version.zip" .)
+          scripts/publish-release.sh web "MultiPlex-web-$version.zip"
+
+  # Image Docker de la version web (ghcr.io/shibeon/multiplex-web).
+  web-image:
+    needs: web-release
+    uses: ./.github/workflows/web-image.yml
+    permissions:
+      contents: read
+      packages: write
+
+  # TV : paquet LG webOS (.ipk, installable en mode développeur) et dossier Samsung
+  # Tizen (à signer avec un certificat Samsung dans Tizen Studio avant installation).
+  tv-release:
+    needs: [web, release]
+    if: ${{ !cancelled() && needs.web.result == 'success' && needs.release.outputs.tv == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v4
+        with:
+          name: tv-tizen-webos
+          path: dist-platforms
+      - name: Paquets
+        run: |
+          version=$(node scripts/versions.mjs get tv)
+          mkdir out
+          npx --yes -p @webos-tools/cli@3 ares-package dist-platforms/webos -o out
+          mv out/*.ipk "out/MultiPlex-webos-$version.ipk"
+          (cd dist-platforms/tizen && zip -qr "../../out/MultiPlex-tizen-$version.zip" .)
+          ls -l out
+      - name: Publier
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+        run: scripts/publish-release.sh tv out/*

@@ -10,7 +10,8 @@ import { deflateSync } from 'node:zlib';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const web = join(root, 'apps', 'web', 'dist');
 const out = join(root, 'dist-platforms');
-const { version } = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+// Numéro de la version TV (versions.json), distinct de ceux du bureau, du web et d'Android.
+const { tv: version } = JSON.parse(readFileSync(join(root, 'versions.json'), 'utf8'));
 
 if (!existsSync(join(web, 'index.html'))) {
   console.error('Build web introuvable : lancez `pnpm build` avant.');

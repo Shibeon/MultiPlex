@@ -1,6 +1,11 @@
 [
   {
-    "version": "0.1.10",
+    "versions": {
+      "desktop": "0.1.10",
+      "web": "0.1.10",
+      "android": "0.1.10",
+      "tv": "0.1.10"
+    },
     "fr": [
       "Barre du haut : elle tient toujours à l’écran. En mode TV ou avec Windows à 150–200 %, les réglages et le profil ne sortent plus à droite, et la barre ne recouvre plus le bouton Retour.",
       "Télécommande : on ne reste plus bloqué sur une liste déroulante (le thème, dans les réglages) ; les flèches passent à l’élément suivant et OK ouvre la liste. Même chose pour le champ « CSS personnalisé »."
@@ -11,7 +16,12 @@
     ]
   },
   {
-    "version": "0.1.9",
+    "versions": {
+      "desktop": "0.1.9",
+      "web": "0.1.9",
+      "android": "0.1.9",
+      "tv": "0.1.9"
+    },
     "fr": [
       "Lecteur en mode TV : les commandes s’adaptent à la taille de l’écran, même quand Windows agrandit l’affichage (150 %, 200 %…). Plus de titre sur deux lignes ni d’éléments qui se chevauchent.",
       "Lecteur : le repère du générique s’affiche de nouveau sur la barre de lecture, et non en dessous.",
@@ -24,7 +34,12 @@
     ]
   },
   {
-    "version": "0.1.8",
+    "versions": {
+      "desktop": "0.1.8",
+      "web": "0.1.8",
+      "android": "0.1.8",
+      "tv": "0.1.8"
+    },
     "fr": [
       "Épisodes à venir : la page d’une saison affiche aussi les épisodes annoncés mais pas encore sur votre serveur, avec leur date de sortie.",
       "Version web : aperçu en image sur la barre de lecture, à partir des vignettes que prépare Plex (option « Générer les aperçus vidéo » du serveur).",
@@ -45,7 +60,12 @@
     ]
   },
   {
-    "version": "0.1.7",
+    "versions": {
+      "desktop": "0.1.7",
+      "web": "0.1.7",
+      "android": "0.1.7",
+      "tv": "0.1.7"
+    },
     "fr": [
       "Regarder ensemble : invitez des amis par un lien ou un code, la lecture reste synchronisée (lecture, pause, avance) pour tout le monde. Messages chiffrés de bout en bout, via un relais que vous hébergez (Réglages → Relais « Regarder ensemble », avec un bouton Tester).",
       "Lire sur un téléviseur : Chromecast et téléviseurs compatibles Google Cast (application de bureau, Chrome, Android), AirPlay depuis Safari. Bouton sur les fiches, dans le lecteur et dans le menu d’un titre, avec une barre de contrôle pendant la diffusion.",
@@ -68,7 +88,12 @@
     ]
   },
   {
-    "version": "0.1.6",
+    "versions": {
+      "desktop": "0.1.6",
+      "web": "0.1.6",
+      "android": "0.1.6",
+      "tv": "0.1.6"
+    },
     "fr": [
       "Correctif : les contrôles du lecteur ne se figent plus au début d’un film (la reconnaissance des acteurs tourne désormais à part).",
       "Clic droit (ou bouton « ⋯ ») sur un titre, comme dans Plex : Ma liste, partager, mettre à la suite, file d’attente, bande-annonce, listes de lecture, vu / non vu, retirer de Continuer à regarder, télécharger, informations.",
@@ -87,7 +112,12 @@
     ]
   },
   {
-    "version": "0.1.5",
+    "versions": {
+      "desktop": "0.1.5",
+      "web": "0.1.5",
+      "android": "0.1.5",
+      "tv": "0.1.5"
+    },
     "fr": [
       "À la pause, « qui est à l’écran ? » : les acteurs présents à l’image sont reconnus et mis en avant (calcul sur votre appareil, aucune image envoyée ; désactivable).",
       "Fiches de personnes : photo, biographie, filmographie complète par fonction, et ce qui est déjà sur votre serveur. Distribution et équipe cliquables partout, y compris depuis la pause, avec retour à la lecture.",
@@ -114,7 +144,12 @@
     ]
   },
   {
-    "version": "0.1.4",
+    "versions": {
+      "desktop": "0.1.4",
+      "web": "0.1.4",
+      "android": "0.1.4",
+      "tv": "0.1.4"
+    },
     "fr": [
       "Onglet Amis refait en fil d’activité : avatars de vos amis pour filtrer, publications par jour, épisodes vus à la suite regroupés.",
       "Plex Home : écran « Qui regarde ? » pour changer de profil, avec code PIN pour les profils protégés."
@@ -125,7 +160,12 @@
     ]
   },
   {
-    "version": "0.1.3",
+    "versions": {
+      "desktop": "0.1.3",
+      "web": "0.1.3",
+      "android": "0.1.3",
+      "tv": "0.1.3"
+    },
     "fr": [
       "Lecteur natif : choix de la sortie audio pendant la lecture (casque, écran, ampli), sans interrompre la vidéo."
     ],
@@ -134,7 +174,12 @@
     ]
   },
   {
-    "version": "0.1.2",
+    "versions": {
+      "desktop": "0.1.2",
+      "web": "0.1.2",
+      "android": "0.1.2",
+      "tv": "0.1.2"
+    },
     "fr": [
       "Activité des amis ouverte à tous : ce que vos amis Plex ont regardé récemment, avec un réglage pour ne pas partager ce que vous regardez.",
       "Repères d'intro et de générique sur la barre de lecture, complétés par la base communautaire IntroDB quand Plex n'en fournit pas (application de bureau).",
@@ -157,7 +202,12 @@
     ]
   },
   {
-    "version": "0.1.1",
+    "versions": {
+      "desktop": "0.1.1",
+      "web": "0.1.1",
+      "android": "0.1.1",
+      "tv": "0.1.1"
+    },
     "fr": [
       "Versions macOS et Linux.",
       "Mise à jour automatique vérifiée de bout en bout."
@@ -168,7 +218,12 @@
     ]
   },
   {
-    "version": "0.1.0",
+    "versions": {
+      "desktop": "0.1.0",
+      "web": "0.1.0",
+      "android": "0.1.0",
+      "tv": "0.1.0"
+    },
     "fr": [
       "Première version : lecteur natif, thèmes, liste de suivi, mise à jour automatique."
     ],

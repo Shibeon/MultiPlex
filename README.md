@@ -17,7 +17,7 @@ pnpm desktop    # application de bureau (Electron)
 
 ### Héberger la version web (Docker)
 
-L'image `ghcr.io/shibeon/multiplex-web` est publiée avec chaque version (amd64 et arm64) : coller
+L'image `ghcr.io/shibeon/multiplex-web` est publiée avec chaque version web (amd64 et arm64 ; l'archive du site est aussi jointe à la version `web-v…`) : coller
 [`apps/web/compose.yml`](apps/web/compose.yml) dans une stack, puis la rendre joignable en HTTPS
 par un proxy inverse (port 8080 du conteneur). Le serveur ne sert que les fichiers de
 l'application : les navigateurs parlent directement à Plex. Pour la construire soi-même :
@@ -86,23 +86,31 @@ L'interface ne dépend que du contrat `MediaServer` : ajouter un autre backend r
 | Navigateurs (ordinateur, mobile), PWA | Fonctionne |
 | Windows | `pnpm desktop:dist` → installeur et version portable dans `apps/desktop/release` (non signés) |
 | macOS / Linux | Compilés et publiés par le workflow à chaque version (dmg et zip Apple Silicon, AppImage, deb) ; jamais lancés sur une vraie machine |
-| Android, Android TV, Fire TV (Capacitor) | APK de débogage compilé (`pnpm mobile:sync` puis `gradlew assembleDebug` dans `apps/mobile/android`, avec JDK 21 et SDK Android 35) ; vérifié dans les émulateurs Android 15 (téléphone) et Android TV 14 (télécommande), pas sur un appareil physique |
+| Android, Android TV, Fire TV (Capacitor) | APK signé publié avec chaque version Android (secrets ci-dessous) ; APK de débogage (`pnpm mobile:sync` puis `gradlew assembleDebug` dans `apps/mobile/android`, avec JDK 21 et SDK Android 35) ; vérifié dans les émulateurs Android 15 (téléphone) et Android TV 14 (télécommande), pas sur un appareil physique |
 | iOS / iPadOS (Capacitor) | `pnpm --filter @multiplex/mobile exec cap add ios` sur un Mac ; non testé |
-| Samsung Tizen | `.wgt` produit (`pnpm package:tv` puis `tizen package -t wgt -s <profil>`) ; un vrai téléviseur exige un certificat Samsung lié à votre compte ; non testé sur téléviseur |
-| LG webOS | `.ipk` produit (`pnpm package:tv` puis `ares-package dist-platforms/webos`) ; non testé sur téléviseur |
+| Samsung Tizen | Dossier publié (zip) avec chaque version TV, à signer soi-même : `.wgt` produit (`pnpm package:tv` puis `tizen package -t wgt -s <profil>`) ; un vrai téléviseur exige un certificat Samsung lié à votre compte ; non testé sur téléviseur |
+| LG webOS | `.ipk` publié avec chaque version TV, installable en mode développeur (ou `pnpm package:tv` puis `ares-package dist-platforms/webos`) ; non testé sur téléviseur |
 
 Les paquets TV et mobiles embarquent exactement le même build web : navigation à la télécommande, touches Retour et touches multimédia y sont déjà gérées.
 
-Une fois le dépôt poussé sur GitHub, `.github/workflows/build.yml` lance les tests à chaque envoi ; les applications Windows / macOS / Linux et l’APK Android sont compilés quand une nouvelle version arrive sur `main`, ou à la demande (sans publication).
+Une fois le dépôt poussé sur GitHub, `.github/workflows/build.yml` lance les tests à chaque envoi ; chaque plateforme est compilée et publiée quand son numéro de version change sur `main`, ou à la demande (sans publication).
 
 ## Mises à jour automatiques
 
 L'application de bureau vérifie au démarrage, puis toutes les six heures, si une version plus récente a été publiée sur GitHub. Elle l'annonce par un bandeau ; rien n'est téléchargé ni installé sans accord (« Mettre à jour », puis « Redémarrer »). La vérification peut être désactivée dans Réglages → Mises à jour.
 
+Chaque plateforme a son propre numéro de version, dans `versions.json` : `desktop` (Windows, macOS, Linux), `web`, `android` (téléphone, tablette, Android TV, Fire TV) et `tv` (LG webOS, Samsung Tizen). L'application affiche celui de la plateforme où elle tourne (Réglages → Mises à jour).
+
 Publier une version :
 
-1. Monter le numéro de version dans `apps/desktop/package.json`, et ajouter en tête de `apps/web/src/changelog.json` les nouveautés de cette version (en français et en anglais). L'application les montre une fois après la mise à jour, et les propose avant (« Quoi de neuf ? ») ; la publication échoue si l'entrée manque.
-2. Envoyer sur `main`. Le workflow voit que ce numéro n'est pas encore publié : il prépare la version en brouillon, compile les applications Windows, macOS et Linux, y dépose les installeurs et le fichier que lit la mise à jour automatique, puis la rend publique et pose l'étiquette `v…` — seulement si toutes les plateformes ont réussi. Sinon le brouillon reste, et l'envoi suivant le reprend.
+1. `pnpm release <plateformes…>` (par exemple `pnpm release android tv`, ou `pnpm release all`) : monte le dernier chiffre de ces plateformes (`--set 1.2.0` pour un autre numéro) et ajoute en tête de `apps/web/src/changelog.json` une entrée à remplir, en français et en anglais. L'application montre ces nouveautés une fois après la mise à jour, et les propose avant (« Quoi de neuf ? ») ; chaque plateforme ne voit que les entrées qui la concernent. Le build échoue si une entrée manque ou est vide (`pnpm check:versions`).
+2. Envoyer sur `main`. Le workflow publie chaque plateforme dont le numéro n'est pas encore publié, et seulement celles-là :
+   - bureau : version en brouillon, Windows, macOS et Linux y déposent leurs installeurs et le fichier que lit la mise à jour automatique, puis elle devient publique avec l'étiquette `v…` — seulement si les trois ont réussi ; sinon le brouillon reste, et l'envoi suivant le reprend ;
+   - web : archive du site (version `web-v…`) et image Docker ;
+   - Android : APK signé (`android-v…`) ;
+   - TV : `.ipk` LG et dossier Tizen à signer (`tv-v…`).
+
+   Seule la version du bureau est marquée « Latest » : c'est celle que lit sa mise à jour automatique.
 
 Les versions doivent être lisibles sans authentification : une application installée ne peut pas interroger un dépôt privé. Le code reste donc dans ce dépôt, et les versions sont publiées dans un dépôt public à part, [Shibeon/MultiPlex-releases](https://github.com/Shibeon/MultiPlex-releases), qui ne contient que les installeurs. Son adresse est dans `apps/desktop/package.json` (`build.publish`).
 
@@ -112,9 +120,18 @@ Mise en place, une seule fois :
 2. Créer un jeton d'accès limité à ce dépôt, avec le droit « Contents : Read and write ».
 3. L'enregistrer dans ce dépôt-ci comme secret `RELEASES_TOKEN` (Settings → Secrets and variables → Actions).
 
+Android : Android n'installe une mise à jour que si elle est signée avec la même clé que la version installée. Cette clé se crée une fois, se garde précieusement (perdue, il faut désinstaller l'application pour installer les versions suivantes) et ne se met jamais dans le dépôt :
+
+1. `keytool -genkeypair -v -keystore multiplex.keystore -alias multiplex -keyalg RSA -keysize 2048 -validity 10000` (fourni avec Java).
+2. Secrets du dépôt : `ANDROID_KEYSTORE` (le fichier en base64 : `base64 -w0 multiplex.keystore` sous Linux, `base64 -i multiplex.keystore` sous macOS, `[Convert]::ToBase64String([IO.File]::ReadAllBytes("multiplex.keystore"))` sous PowerShell), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` (`multiplex`) et `ANDROID_KEY_PASSWORD` (si différent du mot de passe du keystore).
+
+Sans ces secrets, la version Android n'est pas publiée (un avertissement l'indique dans le build) ; elle le sera au premier envoi sur `main` après leur ajout. Un APK de débogage déjà installé doit être désinstallé avant d'installer l'APK signé (clés différentes).
+
+TV : le `.ipk` LG s'installe sur un téléviseur en mode développeur (application « Developer Mode » de LG). Le dossier Tizen doit être signé avec un certificat Samsung lié à votre compte et à votre téléviseur (Tizen Studio) : le build ne peut pas le faire à votre place.
+
 L'application installée lit l'adresse des versions dans le fichier `app-update.yml` que la compilation y dépose, compilations locales comprises.
 
-Limites : l'installeur Windows n'est pas signé (Windows affiche un avertissement à l'installation) ; sur macOS, la mise à jour automatique exige une application signée ; la version portable, l'APK Android et les paquets TV ne se mettent pas à jour seuls.
+Limites : l'installeur Windows n'est pas signé (Windows affiche un avertissement à l'installation) ; sur macOS, la mise à jour automatique exige une application signée ; la version portable, l'APK Android et les paquets TV ne se mettent pas à jour seuls : leurs nouvelles versions se téléchargent sur la page des versions.
 
 ## Ce que Plex réserve, et comment MultiPlex fait
 

@@ -322,13 +322,11 @@ export function SettingsPage() {
         )}
       </section>
 
-      {canUpdate && (
-        <section>
-          <h2>{t('upd.title')}</h2>
-          <UpdateSettings />
-          <Toggle k="autoUpdate" label={t('upd.auto')} />
-        </section>
-      )}
+      <section>
+        <h2>{t('upd.title')}</h2>
+        <UpdateSettings />
+        {canUpdate && <Toggle k="autoUpdate" label={t('upd.auto')} />}
+      </section>
 
       <section>
         <h2>{t('set.account')}</h2>
