@@ -177,7 +177,7 @@ input[type='color'] { padding: 0; width: 3em; height: 2em; }
 
 /* ---------- réglages ---------- */
 .settings { max-width: 46rem; }
-.settings section { margin-top: 2rem; display: grid; gap: 0.2rem; }
+.settings section { margin-top: 2rem; display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.2rem; }
 .settings h2 { margin-bottom: 0.6rem; padding-bottom: 0.4rem; border-bottom: 1px solid var(--surface-2); }
 .set-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.55rem 0; min-height: 3rem; cursor: pointer; }
 .set-row input[type='range'] { width: min(16rem, 45%); }
@@ -359,7 +359,7 @@ video::cue { font-family: inherit; }
 .player.overlay.show-ui { cursor: default; }
 /* Barre de progression fine, remplie en blanc, dont la poignée n'apparaît qu'au survol. */
 .player.overlay .spinner { position: absolute; inset: 0; margin: auto; border-color: rgba(255, 255, 255, 0.25); border-top-color: #fff; }
-.player-notice { position: absolute; top: 5.5rem; left: 50%; transform: translateX(-50%); z-index: 4; display: flex; align-items: center; gap: 0.7rem; max-width: min(46rem, 92vw); padding: 0.6rem 0.7rem 0.6rem 1.2rem; border-radius: 99px; background: rgba(30, 30, 33, 0.95); color: #fff; box-shadow: 0 12px 34px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.1); font-size: 0.95rem; }
+.player-notice { position: absolute; top: 5.5rem; left: 50%; transform: translateX(-50%); z-index: 4; display: flex; align-items: center; gap: 0.7rem; width: max-content; max-width: min(46rem, 92vw); padding: 0.6rem 0.7rem 0.6rem 1.2rem; border-radius: 1.6rem; background: rgba(30, 30, 33, 0.95); color: #fff; box-shadow: 0 12px 34px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.1); font-size: 0.95rem; }
 
 /* ---------- galerie de thèmes ---------- */
 .themes > p { max-width: 46rem; }
@@ -780,7 +780,7 @@ button.cast-card { border: 0; background: none; cursor: pointer; font: inherit; 
 .person-local { flex: 0 0 var(--card-w); width: var(--card-w); min-width: 0; display: grid; gap: 0.2rem; align-content: start; }
 .person-local .card { width: 100%; }
 .person-local small { max-width: var(--card-w); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-inline: 0.2rem; }
-.resume-pill { position: fixed; left: 50%; bottom: 1.4rem; transform: translateX(-50%); z-index: 150; display: flex; gap: 0.4rem; align-items: center; padding: 0.4rem; border-radius: 99px; background: var(--surface); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6); }
+.resume-pill { position: fixed; left: 50%; bottom: 1.4rem; transform: translateX(-50%); z-index: 150; width: max-content; max-width: calc(100vw - 2rem); display: flex; gap: 0.4rem; align-items: center; padding: 0.4rem; border-radius: 99px; background: var(--surface); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6); }
 .resume-pill .btn.primary span { max-width: 16rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 400; opacity: 0.85; }
 .pause-cast h3 small { font-weight: 400; letter-spacing: 0; text-transform: none; opacity: 0.75; }
 
@@ -794,7 +794,7 @@ button.cast-card { border: 0; background: none; cursor: pointer; font: inherit; 
 .badge { transition: opacity 0.15s; }
 .card:hover .badge, .card:focus-visible .badge { opacity: 0; }
 .card-more:hover { background: var(--accent); color: #000; }
-@media (hover: none) { .card-more { opacity: 1; } }
+@media (hover: none) { .card-more { opacity: 1; } .poster .badge { right: auto; left: 6px; } }
 .menu { position: fixed; z-index: 300; min-width: 15rem; max-width: 20rem; padding: 0.35rem; border-radius: calc(var(--radius) * 0.9); background: var(--surface); box-shadow: 0 18px 60px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.06); animation: menu-in 0.12s ease-out; }
 @keyframes menu-in { from { opacity: 0; transform: translateY(-4px); } }
 .menu-title { padding: 0.45rem 0.7rem 0.35rem; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.04em; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -806,7 +806,7 @@ button.cast-card { border: 0; background: none; cursor: pointer; font: inherit; 
 .menu-chevron { color: var(--muted); font-size: 1.1rem; line-height: 1; }
 .menu-sep { height: 1px; margin: 0.3rem 0.4rem; background: var(--surface-2); }
 .menu-note { display: block; padding: 0.5rem 0.7rem; color: var(--muted); font-size: 0.85rem; }
-.toast { position: fixed; left: 50%; bottom: 1.5rem; z-index: 310; transform: translateX(-50%); display: flex; align-items: center; gap: 0.9rem; max-width: min(92vw, 36rem); padding: 0.7rem 0.8rem 0.7rem 1.1rem; border-radius: var(--radius); background: var(--surface-2); box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55); animation: menu-in 0.15s ease-out; }
+.toast { position: fixed; left: 50%; bottom: 1.5rem; z-index: 310; transform: translateX(-50%); width: max-content; display: flex; align-items: center; gap: 0.9rem; max-width: min(92vw, 36rem); padding: 0.7rem 0.8rem 0.7rem 1.1rem; border-radius: var(--radius); background: var(--surface-2); box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55); animation: menu-in 0.15s ease-out; }
 .info-dialog { width: min(100%, 44rem); }
 .info-dialog section { display: grid; gap: 0.5rem; }
 .info-list { display: grid; gap: 0.3rem; margin: 0; }
@@ -968,7 +968,7 @@ body:has(.cast-bar) .tog-bar:not(.in-player) { bottom: 8.5rem; }
 .tog-faces .tog-avatar:first-child { margin-left: 0; }
 .tog-bar-join { display: flex; align-items: center; gap: 0.3rem; padding: 0.2rem 0.6rem; border-radius: 99px; background: var(--accent); color: var(--on-accent, #000); font-weight: 600; }
 .relay-setting { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
-.relay-setting input { min-width: 16rem; font: inherit; padding: 0.4rem 0.7rem; border-radius: var(--radius); border: 1px solid var(--surface-2); background: var(--surface-2); color: var(--text); }
+.relay-setting { min-width: 0; } .relay-setting input { min-width: min(16rem, 100%); max-width: 100%; font: inherit; padding: 0.4rem 0.7rem; border-radius: var(--radius); border: 1px solid var(--surface-2); background: var(--surface-2); color: var(--text); }
 .relay-ok { color: #4caf50; }
 .relay-ko { color: #ff8a80; }
 .player-together { position: absolute; top: 1.2rem; right: 1.2rem; z-index: 5; display: grid; justify-items: end; gap: 0.4rem; pointer-events: none; }
@@ -1473,3 +1473,22 @@ input.search-input:focus-visible { background-color: var(--glass-2); }
 .page-gate:not(.ready)::after { content: ''; position: fixed; left: 50%; top: 45%; z-index: 21; width: 2.2rem; height: 2.2rem; margin: -1.1rem 0 0 -1.1rem; border-radius: 50%; border: 3px solid color-mix(in srgb, var(--text) 18%, transparent); border-top-color: var(--accent); opacity: 0; animation: gate-spin 0.8s linear infinite, gate-show 0.2s 0.5s forwards; }
 @keyframes gate-spin { to { transform: rotate(360deg); } }
 @keyframes gate-show { to { opacity: 1; } }
+
+/* Téléphone : la barre du bas tient sur l'écran (Recherche et Réglages en icônes seules),
+   le bouton Retour ne recouvre plus le titre des pages sans grande image, et les réglages
+   ne débordent plus à droite. */
+@media (max-width: 760px) {
+  .nav-link { flex: 1 1 0; min-width: 3.2rem; }
+  .nav-link span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  .nav-link.icon-only { flex: 0 0 2.8rem; min-width: 0; justify-content: center; }
+  .nav-link.icon-only span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .sidebar .nav-profile { margin: auto 0.4rem; }
+}
+@media (max-width: 760px), (orientation: landscape) and (max-height: 500px) {
+  .page.themes, .page.profiles, .page.person { padding-top: 4.4rem; }
+}
+.set-row > span:first-child { min-width: 0; }
+.set-row > select { flex: 0 1 auto; min-width: 0; max-width: 60%; }
+.set-row > .btn, .set-row > button { flex: none; white-space: nowrap; }
+.set-row select { text-overflow: ellipsis; }
+@media (max-width: 480px) { .set-row:has(.relay-setting) { flex-wrap: wrap; } }
