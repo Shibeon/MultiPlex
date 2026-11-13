@@ -310,10 +310,6 @@ export interface MediaServer {
    */
   forDevice(url: string): Promise<string>;
   /** Listes de lecture vidéo de l'utilisateur (hors listes intelligentes). */
-  playlists(): Promise<Metadata[]>;
-  playlistItems(playlistId: string): Promise<Metadata[]>;
-  /** Ajoute un élément à une liste existante, ou en crée une (`playlistId` null) portant `title`. */
-  addToPlaylist(playlistId: string | null, ratingKey: string, title?: string): Promise<void>;
   /** Lectures en cours. Réservé au propriétaire du serveur : sinon l'appel échoue en 401/403. */
   sessions(): Promise<ActiveSession[]>;
 }

@@ -74,55 +74,11 @@ function Entry({ icon, label, onClick, disabled, children }: { icon?: string; la
   );
 }
 
-/** Sous-menu « Ajouter à » : listes de lecture existantes, ou une nouvelle. */
-function PlaylistMenu({ item, done }: { item: Metadata; done: (text: string) => void }) {
-  const srv = server.value!;
-  const lists = useData(`${srv.id}:playlists`, () => srv.playlists());
-  const [naming, setNaming] = useState(false);
-  const [name, setName] = useState('');
-  const [busy, setBusy] = useState(false);
-  const add = async (id: string | null, title: string) => {
-    setBusy(true);
-    try {
-      await srv.addToPlaylist(id, item.ratingKey, title);
-      invalidate(`${srv.id}:playlist`);
-      done(t('menu.addedTo').replace('{list}', title));
-    } catch {
-      done(t('menu.failed'));
-    }
-  };
-  return (
-    <div class="menu sub" role="menu">
-      {!lists.data && !lists.error && <span class="menu-note">{t('common.loading')}</span>}
-      {lists.data?.map((p) => <Entry key={p.ratingKey} icon="list" label={p.title} disabled={busy} onClick={() => void add(p.ratingKey, p.title)} />)}
-      {lists.data?.length === 0 && !naming && <span class="menu-note">{t('menu.noPlaylist')}</span>}
-      <div class="menu-sep" />
-      {naming ? (
-        <form
-          class="menu-new"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (name.trim()) void add(null, name.trim());
-          }}
-        >
-          <input autoFocus placeholder={t('menu.playlistName')} value={name} maxLength={80} onInput={(e) => setName(e.currentTarget.value)} onKeyDown={(e) => e.stopPropagation()} />
-          <button class="btn primary" disabled={busy || !name.trim()}>
-            {t('menu.create')}
-          </button>
-        </form>
-      ) : (
-        <Entry icon="plus" label={t('menu.newPlaylist')} onClick={() => setNaming(true)} />
-      )}
-    </div>
-  );
-}
-
 function Menu({ at }: { at: MenuTarget }) {
   const srv = server.value!;
   const d = discover.value;
   const ref = useRef<HTMLDivElement>(null);
-  const [sub, setSub] = useState(false);
-  const [pos, setPos] = useState({ x: at.x, y: at.y, flip: false });
+  const [pos, setPos] = useState({ x: at.x, y: at.y });
 
   const local = useData(at.kind === 'item' ? `${srv.id}:item:${at.id}` : null, () => srv.metadata(at.id));
   const online = useData(at.kind === 'discover' && d ? `disc:item:${at.id}` : null, () => d!.details(at.id));
@@ -154,7 +110,7 @@ function Menu({ at }: { at: MenuTarget }) {
     );
   };
 
-  // Le menu reste dans la fenêtre ; le sous-menu s'ouvre du côté où il y a de la place.
+  // Le menu reste dans la fenêtre.
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -162,7 +118,7 @@ function Menu({ at }: { at: MenuTarget }) {
     const h = el.offsetHeight;
     const x = Math.max(8, Math.min(at.x, innerWidth - w - 8));
     const y = at.y + h > innerHeight - 8 ? Math.max(8, Math.min(at.y - h, innerHeight - h - 8)) : at.y;
-    setPos({ x, y, flip: x + w * 2 + 8 > innerWidth });
+    setPos({ x, y });
   }, [at, m?.type, full, trailer.data, onList]);
 
   useEffect(() => {
@@ -264,18 +220,6 @@ function Menu({ at }: { at: MenuTarget }) {
             go(`/play/${trailer.data}?t=0`);
           }}
         />
-      )}
-      {at.kind === 'item' && playable && (
-        <div class="menu-sub-host" onMouseEnter={() => setSub(true)} onMouseLeave={() => setSub(false)}>
-          <Entry icon="list" label={t('menu.addTo')} onClick={() => setSub(!sub)}>
-            <span class="menu-chevron">›</span>
-          </Entry>
-          {sub && m && (
-            <div class={`menu-sub-place${pos.flip ? ' flip' : ''}`}>
-              <PlaylistMenu item={m} done={(text) => done(text)} />
-            </div>
-          )}
-        </div>
       )}
       {at.kind === 'item' && playable && (
         <>

@@ -62,8 +62,6 @@ const routes: Record<string, (q: URLSearchParams) => unknown> = {
   '/library/metadata/10/extras': () => ({ Metadata: [{ ratingKey: '91', type: 'clip', extraType: 5, title: 'Coulisses' }, { ratingKey: '92', type: 'clip', extraType: 1, subtype: 'trailer', title: 'Bande-annonce' }] }),
   '/actions/removeFromContinueWatching': () => ({}),
   '/hubs/continueWatching': () => ({ Hub: [{ hubIdentifier: 'continueWatching', title: 'Continuer', type: 'mixed', Metadata: [movie] }] }),
-  '/playlists': () => ({ Metadata: [{ ratingKey: '300', type: 'playlist', title: 'Soirée' }, { ratingKey: '301', type: 'playlist', title: 'Récents', smart: 1 }] }),
-  '/playlists/300/items': () => ({ Metadata: [movie] }),
   '/:/unscrobble': () => ({}),
   '/library/parts/77': () => ({}),
   '/video/:/transcode/universal/stop': () => ({}),
@@ -116,18 +114,11 @@ const last = () => log[log.length - 1];
 const yes = () => true;
 
 describe('PlexServer contre un faux PMS', () => {
-  it('menu d’un titre : bande-annonce, continuer à regarder, listes de lecture', async () => {
+  it('menu d’un titre : bande-annonce, continuer à regarder', async () => {
     expect(await srv.trailer('10')).toBe('92');
     expect((await srv.continueWatching()).map((m) => m.ratingKey)).toEqual(['10']);
     await srv.removeFromContinueWatching('10');
     expect([last().method, last().path, last().q.get('ratingKey')]).toEqual(['PUT', '/actions/removeFromContinueWatching', '10']);
-    expect((await srv.playlists()).map((p) => p.title)).toEqual(['Soirée']);
-    expect(last().q.get('playlistType')).toBe('video');
-    expect(await srv.playlistItems('300')).toHaveLength(1);
-    await srv.addToPlaylist('300', '10');
-    expect([last().method, last().path, last().q.get('uri')]).toEqual(['PUT', '/playlists/300/items', 'server://id/com.plexapp.plugins.library/library/metadata/10']);
-    await srv.addToPlaylist(null, '10', 'Ciné du dimanche');
-    expect([last().method, last().path, last().q.get('title'), last().q.get('type'), last().q.get('smart')]).toEqual(['POST', '/playlists', 'Ciné du dimanche', 'video', '0']);
   });
 
   it('authentifie chaque requête sans en-tête personnalisé (pas de pré-requête CORS)', async () => {

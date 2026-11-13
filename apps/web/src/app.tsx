@@ -9,7 +9,6 @@ import { NativePlayer } from './pages/NativePlayer';
 import { Player } from './pages/Player';
 import { PersonPage, ResumePill, resumeAfter } from './pages/Person';
 import { ProfilesPage } from './pages/Profiles';
-import { PlaylistPage, PlaylistsPage } from './pages/Playlists';
 import { ItemMenuHost } from './menu';
 import { OfflinePage, OfflinePlayer } from './pages/Offline';
 import { offlineApi } from './offline';
@@ -93,11 +92,11 @@ function useFitNav() {
 }
 
 /** Pages où l'on arrive depuis une autre : elles ont un bouton Retour. Les pages de la navigation n'en ont pas. */
-const DEEP = new Set(['item', 'discover', 'person', 'playlist', 'themes', 'profiles']);
+const DEEP = new Set(['item', 'discover', 'person', 'themes', 'profiles']);
 
 function BackBar() {
-  const [kind, id] = route.value.parts;
-  if (!DEEP.has(kind) || (kind === 'playlist' && !id)) return null;
+  const [kind] = route.value.parts;
+  if (!DEEP.has(kind)) return null;
   return (
     <div class="page-back-bar">
       <button class="btn page-back" onClick={back} title={`${t('common.back')} (Retour arrière)`}>
@@ -120,9 +119,7 @@ function Page() {
   if (kind === 'themes') return <ThemesPage />;
   if (kind === 'profiles') return <ProfilesPage />;
   if (kind === 'person' && id) return <PersonPage key={id} id={id} />;
-  if (kind === 'playlists' || (kind === 'playlist' && !id)) return <PlaylistsPage />;
   if (kind === 'offline') return <OfflinePage />;
-  if (kind === 'playlist' && id) return <PlaylistPage key={id} id={id} title={route.value.query.get('n') ?? ''} />;
   return <Home />;
 }
 
@@ -182,7 +179,6 @@ function Routes() {
         <NavLink href="#/" icon="home" label={t('nav.home')} />
         {discover.value && <NavLink href="#/watchlist" icon="bookmark" label={t('nav.watchlist')} />}
         <NavLink href="#/activity" icon="live" label={t('nav.live')} />
-        <NavLink href="#/playlist" icon="list" label={t('nav.playlists')} />
         {offlineApi && <NavLink href="#/offline" icon="download" label={t('nav.offline')} />}
         <div class="nav-sep" />
         {libraries.value.map((l) => (
