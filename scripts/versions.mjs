@@ -9,7 +9,8 @@
 //       remplie dans le journal, et l'application de bureau porte le bon numéro.
 //   node scripts/versions.mjs get <plateforme>
 //       Affiche le numéro d'une plateforme.
-//   node scripts/versions.mjs notes <plateforme> <fichier>
+//   node scripts/versions.mjs notes <plateforme> <fichier> [--md]   (--md : texte lisible pour GitHub)
+//   node scripts/versions.mjs body <version> <fichier> < notes.json  (ancienne page JSON → lisible)
 //       Écrit les nouveautés de la version en cours de cette plateforme, à joindre à sa
 //       publication (pour le bureau : le format que lit la mise à jour automatique).
 //
@@ -82,13 +83,34 @@ function bump(args) {
   console.log(`${list.map((p) => `${p} ${v[p]}`).join(', ')}.\nÀ remplir : les lignes « fr » et « en » de la première entrée de apps/web/src/changelog.json.`);
 }
 
-function notes(platform, out) {
-  if (!PLATFORMS.includes(platform) || !out) fail('Usage : notes <plateforme> <fichier>');
+// Texte lisible pour la page de la version sur GitHub (titre, liste française, puis anglaise).
+function markdown(platform, v, entry) {
+  const list = (lines) => (lines ?? []).map((l) => `- ${l}`).join('\n');
+  return `**${NAMES[platform]} ${v}**\n\n${list(entry.fr)}\n\n---\n\n${list(entry.en)}\n`;
+}
+
+// Anciennes pages de version dont le texte est le JSON destiné à l'application :
+// lit ce JSON sur l'entrée standard et écrit sa version lisible (rien si ce n'est pas du JSON).
+function bodyFromJson(v, out) {
+  if (!v || !out) fail('Usage : body <version> <fichier> < notes.json');
+  let data;
+  try {
+    data = JSON.parse(readFileSync(0, 'utf8'));
+  } catch {
+    return;
+  }
+  if (!Array.isArray(data?.fr)) return;
+  writeFileSync(out, markdown('desktop', v, data));
+  console.log(`Page ${v} convertie → ${out}`);
+}
+
+function notes(platform, out, md) {
+  if (!PLATFORMS.includes(platform) || !out) fail('Usage : notes <plateforme> <fichier> [--md]');
   const log = logOf(platform);
   const v = versions()[platform];
   if (log[0]?.version !== v) fail(`Pas d'entrée ${platform} ${v} en tête du journal des nouveautés.`);
   let text;
-  if (platform === 'desktop') {
+  if (platform === 'desktop' && !md) {
     // Lu par l'application installée. Les versions 0.1.6 et antérieures coupent les notes à
     // 6 000 caractères (un JSON tronqué s'affichait tel quel) : l'historique est raccourci.
     const LIMIT = 5800;
@@ -99,7 +121,7 @@ function notes(platform, out) {
       text = JSON.stringify(n ? { fr: log[0].fr, en: log[0].en, log: log.slice(0, n) } : { fr: log[0].fr, en: log[0].en });
     }
   } else {
-    text = `**${NAMES[platform]} ${v}**\n\n${log[0].fr.map((l) => `- ${l}`).join('\n')}\n\n---\n\n${log[0].en.map((l) => `- ${l}`).join('\n')}\n`;
+    text = markdown(platform, v, log[0]);
   }
   writeFileSync(out, text);
   console.log(`Nouveautés ${platform} ${v} : ${log[0].fr.length} lignes → ${out}`);
@@ -113,6 +135,7 @@ if (import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.endsWith
     const v = versions()[args[0]];
     if (!v) fail(`Plateformes : ${PLATFORMS.join(', ')}`);
     console.log(v);
-  } else if (cmd === 'notes') notes(args[0], args[1]);
-  else fail('Commandes : check, bump <plateformes…|all> [--set x.y.z], get <plateforme>, notes <plateforme> <fichier>');
+  } else if (cmd === 'notes') notes(args[0], args[1], args.includes('--md'));
+  else if (cmd === 'body') bodyFromJson(args[0], args[1]);
+  else fail('Commandes : check, bump <plateformes…|all> [--set x.y.z], get <plateforme>, notes <plateforme> <fichier> [--md], body <version> <fichier>');
 }

@@ -110,13 +110,14 @@ jobs:
             echo desktop=false >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # Les nouveautés de la version accompagnent la publication (affichées par l'app installée).
-          node scripts/versions.mjs notes desktop apps/desktop/release-notes.txt
+          # Page de la version sur GitHub : nouveautés en texte lisible. L'application installée lit,
+          # elle, le JSON écrit dans « latest.yml » et le manifeste à chaud (étape bureau).
+          node scripts/versions.mjs notes desktop release-body.md --md
           if [ "$draft" = none ]; then
-            gh release create "$tag" --repo "$repo" --draft --title "$version" --notes-file apps/desktop/release-notes.txt
+            gh release create "$tag" --repo "$repo" --draft --title "$version" --notes-file release-body.md
             echo "$tag (bureau) préparée en brouillon."
           else
-            gh release edit "$tag" --repo "$repo" --notes-file apps/desktop/release-notes.txt
+            gh release edit "$tag" --repo "$repo" --notes-file release-body.md
             echo "$tag (bureau) : brouillon existant repris."
           fi
           echo desktop=true >> "$GITHUB_OUTPUT"
@@ -187,7 +188,16 @@ jobs:
           TAG: ${{ needs.release.outputs.tag }}
         run: |
           repo=$(node -p "const p = require('./apps/desktop/package.json').build.publish[0]; p.owner + '/' + p.repo")
-          gh release edit "$TAG" --repo "$repo" --draft=false --latest
+          node scripts/versions.mjs notes desktop release-body.md --md
+          gh release edit "$TAG" --repo "$repo" --draft=false --latest --notes-file release-body.md
+          # Anciennes versions dont la page affichait le JSON destiné à l'application : remises
+          # en texte lisible (sans effet sur les mises à jour, qui lisent « latest.yml »).
+          for t in $(gh release list --repo "$repo" --limit 100 --json tagName -q '.[].tagName'); do
+            gh release view "$t" --repo "$repo" --json body -q .body > old-body.json || continue
+            rm -f fixed-body.md
+            node scripts/versions.mjs body "${t#v}" fixed-body.md < old-body.json
+            if [ -s fixed-body.md ]; then gh release edit "$t" --repo "$repo" --notes-file fixed-body.md; fi
+          done
       - name: Étiqueter le commit publié
         env:
           TAG: ${{ needs.release.outputs.tag }}
