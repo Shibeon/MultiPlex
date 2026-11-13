@@ -1,6 +1,24 @@
 [
   {
     "versions": {
+      "desktop": "0.1.25",
+      "web": "0.1.25",
+      "android": "0.1.25",
+      "tv": "0.1.25"
+    },
+    "fr": [
+      "Les pages s’affichent d’un coup une fois prêtes : plus d’affiches qui arrivent une à une.",
+      "Lecteur : les formats tiennent sur une ligne, avec le bouton ⓘ pour le détail (source, sortie, conversions).",
+      "En ce moment sur MultiPlex : l’appareil et le mode de lecture de vos amis ne sont plus affichés ni conservés."
+    ],
+    "en": [
+      "Pages now appear all at once when ready: no more posters popping in one by one.",
+      "Player: formats fit on one line, with the ⓘ button for details (source, output, conversions).",
+      "Now on MultiPlex: your friends’ device and playback mode are no longer shown or kept."
+    ]
+  },
+  {
+    "versions": {
       "desktop": "0.1.24",
       "web": "0.1.24",
       "android": "0.1.24",
