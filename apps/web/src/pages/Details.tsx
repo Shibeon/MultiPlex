@@ -1,4 +1,4 @@
-import { seasonCatalogId, upcomingEpisodes, type Metadata } from '@multiplex/core';
+import { seasonCatalogId, techBadges, upcomingEpisodes, type Metadata } from '@multiplex/core';
 import { resolvePlayable } from '../queue';
 import { useState } from 'preact/hooks';
 import { formatDuration, t } from '../i18n';
@@ -111,39 +111,43 @@ export function Details({ id }: { id: string }) {
   };
 
   const playable = ['movie', 'episode', 'show', 'season'].includes(item.type);
-  const title = item.title;
+  // Comme sur la maquette : la série en titre, l'épisode (ou la saison) en dessous.
+  const parentKey = item.type === 'episode' ? item.grandparentRatingKey : item.type === 'season' ? item.parentRatingKey : undefined;
+  const heading = item.type === 'episode' ? (item.grandparentTitle ?? item.title) : item.type === 'season' ? (item.parentTitle ?? item.title) : item.title;
   const poster = item.type === 'episode' ? item.grandparentThumb : (item.thumb ?? item.parentThumb);
-  const facts = [
-    item.type === 'episode' && `S${item.parentIndex} · E${item.index}`,
-    item.year,
-    formatDuration(item.duration),
-    item.contentRating,
-  ].filter(Boolean);
+  const art = settings.value.backdrops ? (item.art ?? item.grandparentArt ?? item.parentArt) : undefined;
+  const facts = [item.year, formatDuration(item.duration), item.contentRating].filter(Boolean);
   const leftMin = item.viewOffset && item.duration ? Math.round((item.duration - item.viewOffset) / 60000) : 0;
+  const hasTech = !!techBadges(item.Media?.[0]).length;
 
   return (
-    <div class="details">
-      {settings.value.backdrops && item.art && <div class="backdrop" style={{ backgroundImage: `url("${srv.image(item.art, ...artSize())}")` }} />}
-      <div class="details-main">
+    <div class={`details dx${art ? ' has-art' : ''}`}>
+      {art && <div class="backdrop dx-art" style={{ backgroundImage: `url("${srv.image(art, ...artSize())}")` }} />}
+      <div class="details-main dx-hero">
         {poster && <img class="details-poster" src={srv.image(poster, 600, 900)} alt="" />}
         <div class="details-info">
-          {item.type === 'season' && item.parentRatingKey && (
-            <a class="crumb" href={`#/item/${item.parentRatingKey}`}>
-              {item.parentTitle}
-            </a>
+          <h1 class="dx-title">{parentKey ? <a href={`#/item/${parentKey}`}>{heading}</a> : heading}</h1>
+          {item.type === 'episode' && (
+            <p class="dx-sub">
+              <b>
+                S{item.parentIndex} · E{item.index}
+              </b>
+              <span>{item.title}</span>
+            </p>
           )}
-          {item.type === 'episode' && item.grandparentRatingKey && (
-            <a class="crumb" href={`#/item/${item.grandparentRatingKey}`}>
-              {item.grandparentTitle}
-            </a>
+          {item.type === 'season' && (
+            <p class="dx-sub">
+              <span>{item.title}</span>
+            </p>
           )}
-          <h1>{title}</h1>
           {item.tagline && <p class="tagline">{item.tagline}</p>}
-          <p class="facts">
-            {facts.map((f, i) => (
-              <span key={i}>{f}</span>
-            ))}
-          </p>
+          {!!facts.length && (
+            <p class="facts">
+              {facts.map((f, i) => (
+                <span key={i}>{f}</span>
+              ))}
+            </p>
+          )}
           {(item.type === 'movie' || item.type === 'show' || item.type === 'episode') && (
             <p class="ratings-row">
               <Ratings item={item} />
@@ -160,7 +164,6 @@ export function Details({ id }: { id: string }) {
               />
             </p>
           )}
-          <TechBadges item={item} />
           <div class="actions">
             {playable && (
               <button class="btn primary big" disabled={busy} onClick={() => void play(false)}>
@@ -175,50 +178,66 @@ export function Details({ id }: { id: string }) {
             )}
             {!!item.viewOffset && (
               <button class="btn" disabled={busy} onClick={() => void play(true)}>
-                {t('item.restart')}
+                <Icon name="restart" size={18} /> {t('item.restart')}
               </button>
             )}
+            <ServerWatchlistButton item={item} />
             {playable && (
               <button class="btn" disabled={busy} onClick={() => void toggleWatched()}>
                 <Icon name={isWatched(item) ? 'eye' : 'check'} size={18} /> {isWatched(item) ? t('item.unwatched') : t('item.watched')}
               </button>
             )}
-            <ServerWatchlistButton item={item} />
             <OfflineButton item={item} />
             {playable && <CastButton item={item} start={(item.viewOffset ?? 0) / 1000} />}
             {(item.type === 'movie' || item.type === 'episode') && <TogetherButton item={item} />}
           </div>
-          {item.summary && <p class="summary">{item.summary}</p>}
-          <dl class="credits">
-            {!!item.Genre?.length && <div>{item.Genre.map((g) => g.tag).join(' · ')}</div>}
-            {!!item.Director?.length && (
-              <div>
-                <dt>{t('item.director')}</dt> <dd>
-                  <PeopleLinks people={item.Director} />
-                </dd>
-              </div>
-            )}
-            {!!item.Writer?.length && (
-              <div>
-                <dt>{t('item.writer')}</dt>{' '}
-                <dd>
-                  <PeopleLinks people={item.Writer} />
-                </dd>
-              </div>
-            )}
-            {!!item.Producer?.length && (
-              <div>
-                <dt>{t('item.producer')}</dt>{' '}
-                <dd>
-                  <PeopleLinks people={item.Producer.slice(0, 8)} />
-                </dd>
-              </div>
-            )}
-          </dl>
         </div>
       </div>
+      {(item.summary || hasTech || item.Genre?.length || item.Director?.length || item.Writer?.length) && (
+        <div class="dx-info">
+          <div class="dx-synopsis">
+            {item.summary && (
+              <>
+                <h3>{t('item.synopsis')}</h3>
+                <p class="summary">{item.summary}</p>
+              </>
+            )}
+            <dl class="credits">
+              {!!item.Genre?.length && <div>{item.Genre.map((g) => g.tag).join(' · ')}</div>}
+              {!!item.Director?.length && (
+                <div>
+                  <dt>{t('item.director')}</dt> <dd>
+                    <PeopleLinks people={item.Director} />
+                  </dd>
+                </div>
+              )}
+              {!!item.Writer?.length && (
+                <div>
+                  <dt>{t('item.writer')}</dt>{' '}
+                  <dd>
+                    <PeopleLinks people={item.Writer} />
+                  </dd>
+                </div>
+              )}
+              {!!item.Producer?.length && (
+                <div>
+                  <dt>{t('item.producer')}</dt>{' '}
+                  <dd>
+                    <PeopleLinks people={item.Producer.slice(0, 8)} />
+                  </dd>
+                </div>
+              )}
+            </dl>
+          </div>
+          {hasTech && (
+            <div class="dx-formats">
+              <h3>{t('item.formats')}</h3>
+              <TechBadges item={item} />
+            </div>
+          )}
+        </div>
+      )}
       <CastRow people={item.Role} title={t('item.cast')} />
-      {(item.type === 'movie' || item.type === 'show') && <RelatedRows item={item} />}
       {hasKids && (
         <section class="children">
           <h2>{item.type === 'season' ? t('item.episodes') : item.type === 'show' ? t('item.seasons') : ''}</h2>
@@ -234,6 +253,7 @@ export function Details({ id }: { id: string }) {
           )}
         </section>
       )}
+      {(item.type === 'movie' || item.type === 'show') && <RelatedRows item={item} />}
     </div>
   );
 }

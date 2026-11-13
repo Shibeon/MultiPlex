@@ -60,9 +60,14 @@ export function CastRow({ people, title }: { people: Tag[] | undefined; title: s
   if (!people?.length) return null;
   return (
     <section class="hub cast">
-      <h2>
-        {title} <span class="muted">{people.length}</span>
-      </h2>
+      <div class="hub-head">
+        <h2>{title}</h2>
+        {people.length > 6 && (
+          <button class="btn see-all" aria-expanded={all} onClick={() => setAll(!all)}>
+            {all ? t('item.seeLess') : t('item.seeAll')} <span class="muted">{people.length}</span> <Icon name={all ? 'up' : 'next'} size={16} />
+          </button>
+        )}
+      </div>
       <div class={`row cast-row${all ? ' wrap' : ''}`}>
         {people.slice(0, all ? 400 : CAST_SHOWN).map((p, i) => {
           const body = (
@@ -83,14 +88,6 @@ export function CastRow({ people, title }: { people: Tag[] | undefined; title: s
             </div>
           );
         })}
-        {!all && people.length > CAST_SHOWN && (
-          <button class="cast-card cast-more" onClick={() => setAll(true)}>
-            <span class="cast-face">
-              <b>+{people.length - CAST_SHOWN}</b>
-            </span>
-            <strong>{t('disc.more')}</strong>
-          </button>
-        )}
       </div>
     </section>
   );

@@ -19,7 +19,7 @@ function store(list: Queued[]): void {
 
 /** Ajoute en tête (`front`) ou en fin de file ; un titre déjà présent change de place. */
 export function enqueue(items: Metadata[], front: boolean): void {
-  const add = items.map((m) => ({ ratingKey: m.ratingKey, title: m.type === 'episode' ? `${labels(m).title} — ${labels(m).sub}` : labels(m).title }));
+  const add = items.map((m) => ({ ratingKey: m.ratingKey, title: m.type === 'episode' ? `${labels(m).title} · ${labels(m).sub}` : labels(m).title }));
   const rest = upNext.value.filter((q) => !add.some((a) => a.ratingKey === q.ratingKey));
   store(front ? [...add, ...rest] : [...rest, ...add]);
 }

@@ -2,7 +2,7 @@ import { castPick } from '../cast';
 import { effect } from '@preact/signals';
 import { attachPlayer, peers, together } from '../together';
 import { noticeText } from '../togetherui';
-import { QUALITIES, randomId, streamsOf, type Metadata, type Stream } from '@multiplex/core';
+import { QUALITIES, randomId, streamsOf, techBadges, type Metadata, type Stream } from '@multiplex/core';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { t } from '../i18n';
 import { native, type NativeMeta } from '../native';
@@ -153,6 +153,7 @@ export function NativePlayer({ id }: { id: string }) {
       xray: settings.value.xray,
       quality: quality.current,
       qualities: QUALITIES.map((q) => ({ id: q.id, label: q.label })),
+      tech: techBadges(it.Media?.[0]),
     });
   };
 

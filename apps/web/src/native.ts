@@ -47,6 +47,8 @@ export interface NativeMeta {
   /** Qualité en cours et choix proposés (« original » = fichier lu tel quel). */
   quality?: string;
   qualities?: { id: string; label: string }[];
+  /** Pastilles du fichier : définition, plage dynamique, son. */
+  tech?: { kind: string; label: string }[];
 }
 
 export type NativeCommand = 'toggle' | 'pause' | 'seek' | 'seekBy' | 'volume' | 'mute' | 'speed' | 'aid' | 'sid' | 'stats' | 'key' | 'audioDevice';

@@ -1,4 +1,5 @@
-import { QUALITIES, hdrKind, srtToVtt, streamsOf, type Media, type Metadata, type PlaybackPlan, type Stream } from '@multiplex/core';
+import { PlayerClock, PlayerTech, Pill, SkipButton } from '../playerui';
+import { QUALITIES, hdrKind, srtToVtt, streamsOf, techBadges, type Media, type Metadata, type PlaybackPlan, type Stream } from '@multiplex/core';
 import type Hls from 'hls.js';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { serverThumbs } from '../thumbs';
@@ -12,7 +13,7 @@ import { Icon, Spinner, labels, SeekPreview } from '../ui';
 import { castApi, castEnabled, openCast } from '../cast';
 import { attachPlayer } from '../together';
 
-type Menu = null | 'audio' | 'sub' | 'quality' | 'speed' | 'chapter' | 'version';
+type Menu = null | 'audio' | 'sub' | 'quality' | 'speed' | 'chapter' | 'version' | 'more';
 
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
@@ -405,6 +406,7 @@ export function Player({ id }: { id: string }) {
       return;
     }
     if (kind === 'chapter') return void (v().currentTime = Number(value) / 1000);
+    if (kind === 'more') return moreAction(String(value));
     if (kind === 'version') {
       // Autre fichier du même titre : ses propres pistes par défaut.
       c.media = Number(value);
@@ -522,6 +524,17 @@ export function Player({ id }: { id: string }) {
   const marker = (item?.Marker ?? []).find((m) => ui.time * 1000 >= m.startTimeOffset && ui.time * 1000 < m.endTimeOffset - 1000 && (m.type === 'intro' || m.type === 'credits'));
   const head = item ? labels(item) : { title: '', sub: '' };
   const chapters = item?.Chapter ?? [];
+  // « Plus » : ce qui ne tient pas dans la rangée du bas.
+  const moreItems: { id: string; label: string; on: boolean }[] = [
+    ui.time > 5 ? { id: 'restart', label: t('player.restart'), on: false } : null,
+    chapters.length > 1 ? { id: 'chapter', label: t('player.chapters'), on: false } : null,
+    (item?.Media?.length ?? 0) > 1 ? { id: 'version', label: t('player.version'), on: false } : null,
+    { id: 'quality', label: `${t('player.quality')} · ${QUALITIES.find((q) => q.id === choice.current.quality)?.label ?? ''}`, on: false },
+    { id: 'speed', label: `${t('player.speed')} · ${choice.current.speed === 1 ? 'Normale' : `×${choice.current.speed}`}`, on: false },
+    { id: 'stats', label: t('player.stats'), on: !!stats },
+    remote.ok || castEnabled.value ? { id: 'cast', label: t('cast.title'), on: remote.on } : null,
+    document.pictureInPictureEnabled ? { id: 'pip', label: t('player.pip'), on: false } : null,
+  ].filter((x): x is { id: string; label: string; on: boolean } => !!x);
   const menuItems: { id: number | string; label: string; on: boolean }[] =
     menu === 'audio'
       ? audioStreams.map((s) => ({ id: s.id, label: streamLabel(s), on: s.id === choice.current.audio || (!choice.current.audio && s === audioStreams[0]) }))
@@ -535,12 +548,17 @@ export function Player({ id }: { id: string }) {
               ? chapters.map((c, i) => ({ id: c.startTimeOffset, label: `${formatClock(c.startTimeOffset / 1000)} — ${c.tag || `${t('player.chapters')} ${i + 1}`}`, on: ui.time * 1000 >= c.startTimeOffset && ui.time * 1000 < c.endTimeOffset }))
               : menu === 'version'
                 ? (item?.Media ?? []).map((m, i) => ({ id: i, label: versionLabel(m), on: i === choice.current.media }))
-                : [];
-  const menuButton = (kind: Exclude<Menu, null>, label: string) => (
-    <button class="btn" aria-expanded={menu === kind} onClick={() => setMenu(menu === kind ? null : kind)}>
-      {label}
-    </button>
-  );
+                : menu === 'more'
+                  ? moreItems
+                  : [];
+  function moreAction(id: string) {
+    if (id === 'restart') return void (v().currentTime = 0);
+    if (id === 'stats') return setStats(stats ? null : readStats());
+    if (id === 'cast') return castHere();
+    if (id === 'pip') return pip();
+    setMenu(id as Menu);
+  }
+  const openMenu = (kind: Exclude<Menu, null>) => () => setMenu(menu === kind ? null : kind);
 
   return (
     <div ref={root} class={`player${visible || menu || error ? ' show-ui' : ''}`} data-focus-scope onMouseMove={wake} onTouchStart={wake}>
@@ -598,9 +616,15 @@ export function Player({ id }: { id: string }) {
         </button>
         <div class="player-title">
           <strong>{head.title}</strong>
-          <span>{head.sub}</span>
+          {head.sub && <span>{head.sub}</span>}
+          <PlayerTech badges={item ? techBadges(item.Media?.[choice.current.media]) : undefined} />
         </div>
-        {ui.reason && <span class="chip">{ui.reason}</span>}
+        <PlayerClock remaining={ui.duration - ui.time} speed={choice.current.speed} />
+        {ui.reason && (
+          <span class="chips">
+            <span class="chip">{ui.reason}</span>
+          </span>
+        )}
       </div>
 
       <div class="player-bottom">
@@ -625,46 +649,29 @@ export function Player({ id }: { id: string }) {
                   <span key={m.type + m.startTimeOffset} class={`seek-mark ${m.type}`} data-label={m.type === 'intro' ? 'Intro' : t('player.credits')} style={{ left: `${(m.startTimeOffset / 1000 / ui.duration) * 100}%`, width: `${(Math.max(0, m.endTimeOffset - m.startTimeOffset) / 1000 / ui.duration) * 100}%` }} />
                 ))}
           </SeekPreview>
-          <span>{formatClock(ui.duration)}</span>
+          <span>−{formatClock(Math.max(0, ui.duration - ui.time))}</span>
         </div>
-        <div class="controls">
-          <button class="btn icon-btn" aria-label={t('player.prev')} title={t('player.prev')} onClick={() => (ui.time > 5 || !prev ? void (v().currentTime = 0) : go(`/play/${prev.ratingKey}?t=0`, true))}>
-            <Icon name="prev" size={20} />
-          </button>
-          <button class="btn icon-btn" aria-label={ui.playing ? 'Pause' : t('item.play')} onClick={toggle}>
+        <div class="transport">
+          {prev && <Pill icon="prev" act="prev" label={t('player.prevEp')} onClick={() => go(`/play/${prev.ratingKey}?t=0`, true)} />}
+          <SkipButton seconds={-30} act="back" onClick={() => void seekBy(-30)} />
+          <button class="btn icon-btn play" data-act="toggle" aria-label={ui.playing ? 'Pause' : t('item.play')} onClick={toggle}>
             <Icon name={ui.playing ? 'pause' : 'play'} size={26} />
           </button>
-          <button class="btn icon-btn" aria-label="Volume" onClick={() => (v().muted = !v().muted)}>
-            <Icon name={ui.muted ? 'mute' : 'volume'} />
-          </button>
-          {next && (
-            <button class="btn" onClick={playNext} title={next.type === 'queued' ? next.title : undefined}>
-              <Icon name="next" size={18} /> {next.type === 'queued' ? t('player.upNext') : t('player.next')}
+          <SkipButton seconds={30} act="fwd" onClick={() => void seekBy(30)} />
+          {next && <Pill icon="next" act="next" label={next.type === 'queued' ? t('player.upNext') : t('player.next')} title={next.type === 'queued' ? next.title : undefined} onClick={playNext} />}
+        </div>
+        <div class="controls">
+          {audioStreams.length > 0 && <Pill icon="audio" label={t('player.audio')} expanded={menu === 'audio'} onClick={openMenu('audio')} />}
+          {subStreams.length > 0 && <Pill icon="subtitles" label={t('player.subs')} expanded={menu === 'sub'} onClick={openMenu('sub')} />}
+          <Pill icon="plus" label={t('player.more')} expanded={!!menu && menu !== 'audio' && menu !== 'sub'} onClick={() => setMenu(menu ? null : 'more')} />
+          <span class="side">
+            <button class="btn icon-btn" aria-label="Volume" aria-pressed={ui.muted} onClick={() => (v().muted = !v().muted)}>
+              <Icon name={ui.muted ? 'mute' : 'volume'} />
             </button>
-          )}
-          <span class="spacer" />
-          {chapters.length > 1 && menuButton('chapter', t('player.chapters'))}
-          {(item?.Media?.length ?? 0) > 1 && menuButton('version', t('player.version'))}
-          {audioStreams.length > 1 && menuButton('audio', t('player.audio'))}
-          {subStreams.length > 0 && menuButton('sub', t('player.subs'))}
-          {menuButton('quality', t('player.quality'))}
-          {menuButton('speed', ui.playing && choice.current.speed !== 1 ? `×${choice.current.speed}` : t('player.speed'))}
-          <button class={`btn icon-btn${stats ? ' on' : ''}`} aria-label={t('player.stats')} aria-pressed={!!stats} title={t('player.stats')} onClick={() => setStats(stats ? null : readStats())}>
-            <Icon name="info" />
-          </button>
-          {(remote.ok || castEnabled.value) && (
-            <button class={`btn icon-btn${remote.on ? ' on' : ''}`} aria-label={t('cast.title')} aria-pressed={remote.on} title={t('cast.title')} onClick={castHere}>
-              <Icon name="cast" />
+            <button class="btn icon-btn" aria-label={t('player.fullscreen')} title={t('player.fullscreen')} onClick={fullscreen}>
+              <Icon name="full" />
             </button>
-          )}
-          {document.pictureInPictureEnabled && (
-            <button class="btn icon-btn" aria-label={t('player.pip')} title={t('player.pip')} onClick={pip}>
-              <Icon name="pip" />
-            </button>
-          )}
-          <button class="btn icon-btn" aria-label={t('player.fullscreen')} onClick={fullscreen}>
-            <Icon name="full" />
-          </button>
+          </span>
         </div>
         {menu && (
           <div class="player-menu" role="menu">

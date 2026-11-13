@@ -42,6 +42,9 @@ const ICONS: Record<string, string> = {
   plus: 'M11 4h2v7h7v2h-7v7h-2v-7H4v-2h7z',
   close: 'M6.4 5L12 10.6 17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6l5.6-5.6L5 6.4z',
   download: 'M11 3h2v9.2l3.3-3.3 1.4 1.4-5.7 5.7-5.7-5.7 1.4-1.4 3.3 3.3zM4 18h16v2H4z',
+  restart: 'M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z',
+  audio: 'M12 3a9 9 0 0 0-9 9v7c0 1.1.9 2 2 2h3v-8H5v-1a7 7 0 0 1 14 0v1h-3v8h3c1.1 0 2-.9 2-2v-7a9 9 0 0 0-9-9z',
+  subtitles: 'M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V6h16v12zM6 10h2v2H6zm0 4h8v2H6zm10 0h2v2h-2zm-6-4h8v2h-8z',
   mute: 'M4 9h4l5-4v14l-5-4H4zm11.6 0L17 10.4 18.4 9l1.4 1.4-1.4 1.4 1.4 1.4-1.4 1.4-1.4-1.4-1.4 1.4-1.4-1.4 1.4-1.4-1.4-1.4z',
 };
 
@@ -239,7 +242,7 @@ export function artSize(): [number, number] {
 
 export function labels(item: Metadata): { title: string; sub: string } {
   if (item.type === 'episode') {
-    return { title: item.grandparentTitle ?? item.title, sub: `S${item.parentIndex ?? '?'} · E${item.index ?? '?'} — ${item.title}` };
+    return { title: item.grandparentTitle ?? item.title, sub: `S${item.parentIndex ?? '?'} · E${item.index ?? '?'} · ${item.title}` };
   }
   if (item.type === 'season') return { title: item.parentTitle ?? item.title, sub: item.title };
   return { title: item.title, sub: item.year ? String(item.year) : '' };

@@ -5,8 +5,9 @@ import { moveFocus } from '../nav';
 import { setCouch, settings } from '../settings';
 import { cancelXray, runXray, xrayAvailable } from '../xray';
 import { CouchBanner, Icon, SeekPreview } from '../ui';
+import { PlayerClock, PlayerTech, Pill, SkipButton } from '../playerui';
 
-type Menu = null | 'audio' | 'sub' | 'speed' | 'chapter' | 'quality' | 'output';
+type Menu = null | 'audio' | 'sub' | 'speed' | 'chapter' | 'quality' | 'output' | 'more';
 
 interface Track {
   id: number;
@@ -27,7 +28,6 @@ const HIDE_AFTER_MS = 3000;
 /** En mode TV, les contrôles restent un peu plus longtemps : on les lit de loin. */
 const HIDE_AFTER_COUCH_MS = 5000;
 
-const clockOf = (d: Date) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
 /**
  * Commandes du lecteur natif. Cette page s'affiche dans une fenêtre transparente
@@ -252,6 +252,19 @@ export function NativeOverlay() {
     // Les libellés du serveur, plus parlants, quand le compte de pistes concorde.
     (labels?.length === list.length ? labels[i] : undefined) ?? ([x.title, x.lang?.toUpperCase(), x.codec?.toUpperCase(), x['demux-channel-count'] && `${x['demux-channel-count']} canaux`].filter(Boolean).join(' · ') || `#${x.id}`);
 
+  // « Plus » : ce qui ne tient pas dans la rangée du bas. Un choix qui ouvre une liste la remplace.
+  const qualityLabel = meta.quality && meta.quality !== 'original' ? meta.qualities?.find((q) => q.id === meta.quality)?.label.split(' · ')[0] : undefined;
+  const moreItems: { key: string; label: string; on: boolean; run: () => void }[] = [
+    time > 5 ? { key: 'restart', label: t('player.restart'), on: false, run: () => void n.command('seek', 0) } : null,
+    chapters.length > 1 ? { key: 'chapter', label: t('player.chapters'), on: false, run: () => setMenu('chapter') } : null,
+    outputs.length > 0 ? { key: 'output', label: t('player.output'), on: false, run: () => setMenu('output') } : null,
+    meta.qualities?.length ? { key: 'quality', label: `${t('player.quality')}${qualityLabel ? ` · ${qualityLabel}` : ''}`, on: false, run: () => setMenu('quality') } : null,
+    { key: 'speed', label: `${t('player.speed')} · ${speed !== 1 ? `×${speed}` : 'Normale'}`, on: false, run: () => setMenu('speed') },
+    { key: 'stats', label: t('player.stats'), on: false, run: () => void n.command('stats') },
+    castAvailable ? { key: 'cast', label: t('cast.title'), on: false, run: () => n.action('cast') } : null,
+    { key: 'couch', label: `${t('couch.title')} (F10)`, on: couch, run: () => setCouch(!couch) },
+  ].filter((x): x is { key: string; label: string; on: boolean; run: () => void } => !!x);
+
   const items: { key: string; label: string; on: boolean; run: () => void }[] =
     menu === 'audio'
       ? audio.map((x, i) => ({ key: `a${x.id}`, label: trackLabel(audio, meta.audioLabels, x, i), on: !!x.selected, run: () => void n.command('aid', x.id) }))
@@ -266,6 +279,8 @@ export function NativeOverlay() {
             ? [{ id: '', label: t('set.audioAuto') }, ...outputs].map((d) => ({ key: `o${d.id}`, label: d.label, on: (d.id || 'auto') === String(s['audio-device'] ?? 'auto'), run: () => void n.command('audioDevice', d.id) }))
             : menu === 'quality'
             ? (meta.qualities ?? []).map((q) => ({ key: `q${q.id}`, label: q.label, on: q.id === (meta.quality ?? 'original'), run: () => n.action(`quality:${q.id}`) }))
+            : menu === 'more'
+            ? moreItems
             : menu === 'chapter'
             ? chapters.map((c, i) => ({
                 key: `c${i}`,
@@ -275,11 +290,7 @@ export function NativeOverlay() {
               }))
             : [];
 
-  const menuButton = (kind: Exclude<Menu, null>, label: string) => (
-    <button class="btn" data-menu={kind} aria-expanded={menu === kind} onClick={() => setMenu(menu === kind ? null : kind)}>
-      {label}
-    </button>
-  );
+  const openMenu = (kind: Exclude<Menu, null>) => () => setMenu(menu === kind ? null : kind);
   const shownTime = scrub ?? time;
 
   return (
@@ -321,14 +332,10 @@ export function NativeOverlay() {
         </button>
         <div class="player-title">
           <strong>{meta.title}</strong>
-          <span>{meta.sub}</span>
+          {meta.sub && <span>{meta.sub}</span>}
+          <PlayerTech badges={meta.tech} />
         </div>
-        {couch && (
-          <div class="couch-clock" aria-hidden="true">
-            <b>{clockOf(new Date())}</b>
-            {duration > 0 && <small>{t('couch.ends').replace('{t}', clockOf(new Date(Date.now() + ((duration - time) * 1000) / (speed || 1))))}</small>}
-          </div>
-        )}
+        <PlayerClock remaining={duration - time} speed={speed} />
         <span class="chips">
           {outLabel && (
             <span class={`chip${out?.format?.startsWith('spdif') ? ' raw' : ''}`} data-audio-out={out?.format}>
@@ -395,65 +402,33 @@ export function NativeOverlay() {
                 <span key={m.type + m.start} class={`seek-mark ${m.type}`} data-label={m.type === 'intro' ? 'Intro' : t('player.credits')} style={{ left: `${(m.start / duration) * 100}%`, width: `${(Math.max(0, m.end - m.start) / duration) * 100}%` }} />
               ))}
           </SeekPreview>
-          <span>-{formatClock(Math.max(0, duration - shownTime))}</span>
+          <span>−{formatClock(Math.max(0, duration - shownTime))}</span>
         </div>
-        <div class="controls">
-          <button
-            class="btn icon-btn"
-            data-act="prev"
-            aria-label={t('player.prev')}
-            title={t('player.prev')}
-            onClick={() => {
-              // Comme sur une platine : au-delà de quelques secondes, on revient d'abord au début.
-              if (time > 5 || !meta.hasPrev) void n.command('seek', 0);
-              else n.action('prev');
-            }}
-          >
-            <Icon name="prev" size={20} />
-          </button>
-          {couch && (
-            <button class="btn icon-btn jump" data-act="back10" aria-label={t('player.back10')} title={t('player.back10')} onClick={() => void n.command('seekBy', -10)}>
-              −10
-            </button>
-          )}
+        <div class="transport">
+          {meta.hasPrev && <Pill icon="prev" act="prev" label={t('player.prevEp')} onClick={() => n.action('prev')} />}
+          <SkipButton seconds={-30} act="back" onClick={() => void n.command('seekBy', -30)} />
           <button class="btn icon-btn play" data-act="toggle" aria-label={paused ? t('item.play') : 'Pause'} onClick={() => void n.command('toggle')}>
             <Icon name={paused ? 'play' : 'pause'} size={26} />
           </button>
-          {couch && (
-            <button class="btn icon-btn jump" data-act="fwd30" aria-label={t('player.fwd30')} title={t('player.fwd30')} onClick={() => void n.command('seekBy', 30)}>
-              +30
+          <SkipButton seconds={30} act="fwd" onClick={() => void n.command('seekBy', 30)} />
+          {meta.hasNext && <Pill icon="next" act="next" label={meta.nextTitle ? t('player.upNext') : t('player.next')} title={meta.nextTitle} onClick={() => n.action('next')} />}
+        </div>
+        <div class="controls">
+          {audio.length > 0 && <Pill icon="audio" act="audio" label={t('player.audio')} expanded={menu === 'audio'} onClick={openMenu('audio')} />}
+          {subs.length > 0 && <Pill icon="subtitles" act="sub" label={t('player.subs')} expanded={menu === 'sub'} onClick={openMenu('sub')} />}
+          <Pill icon="plus" act="more" label={t('player.more')} expanded={!!menu && menu !== 'audio' && menu !== 'sub'} onClick={() => setMenu(menu ? null : 'more')} />
+          <span class="side">
+            <button class="btn icon-btn" data-act="mute" aria-label="Volume" aria-pressed={muted} onClick={() => void n.command('mute')}>
+              <Icon name={muted || volume === 0 ? 'mute' : 'volume'} />
             </button>
-          )}
-          <button class="btn icon-btn" data-act="mute" aria-label="Volume" aria-pressed={muted} onClick={() => void n.command('mute')}>
-            <Icon name={muted || volume === 0 ? 'mute' : 'volume'} />
-          </button>
-          <input class="volume" type="range" aria-label="Volume" min={0} max={100} step={1} value={muted ? 0 : Math.min(100, volume)} style={{ '--fill': `${muted ? 0 : Math.min(100, volume)}%` }} onInput={(e) => void n.command('volume', Number(e.currentTarget.value))} />
-          {meta.hasNext && (
-            <button class="btn" data-act="next" title={meta.nextTitle} onClick={() => n.action('next')}>
-              <Icon name="next" size={18} /> {meta.nextTitle ? t('player.upNext') : t('player.next')}
+            <input class="volume" type="range" aria-label="Volume" min={0} max={100} step={1} value={muted ? 0 : Math.min(100, volume)} style={{ '--fill': `${muted ? 0 : Math.min(100, volume)}%` }} onInput={(e) => void n.command('volume', Number(e.currentTarget.value))} />
+            <button class="btn icon-btn" data-act="couch" aria-label={t('couch.title')} title={`${t('couch.title')} (F10)`} aria-pressed={couch} onClick={() => setCouch(!couch)}>
+              <Icon name="tv" />
             </button>
-          )}
-          <span class="spacer" />
-          {chapters.length > 1 && menuButton('chapter', t('player.chapters'))}
-          {audio.length > 1 && menuButton('audio', t('player.audio'))}
-          {subs.length > 0 && menuButton('sub', t('player.subs'))}
-          {outputs.length > 0 && menuButton('output', t('player.output'))}
-          {!!meta.qualities?.length && menuButton('quality', meta.quality && meta.quality !== 'original' ? (meta.qualities.find((q) => q.id === meta.quality)?.label.split(' · ')[0] ?? t('player.quality')) : t('player.quality'))}
-          {menuButton('speed', speed !== 1 ? `×${speed}` : t('player.speed'))}
-          <button class="btn icon-btn" aria-label={t('player.stats')} title={t('player.stats')} onClick={() => void n.command('stats')}>
-            <Icon name="info" />
-          </button>
-          {castAvailable && (
-            <button class="btn icon-btn" data-act="cast" aria-label={t('cast.title')} title={t('cast.title')} onClick={() => n.action('cast')}>
-              <Icon name="cast" />
+            <button class="btn icon-btn" aria-label={t('player.fullscreen')} onClick={() => n.action('fullscreen')}>
+              <Icon name="full" />
             </button>
-          )}
-          <button class="btn icon-btn" data-act="couch" aria-label={t('couch.title')} title={`${t('couch.title')} (F10)`} aria-pressed={couch} onClick={() => setCouch(!couch)}>
-            <Icon name="tv" />
-          </button>
-          <button class="btn icon-btn" aria-label={t('player.fullscreen')} onClick={() => n.action('fullscreen')}>
-            <Icon name="full" />
-          </button>
+          </span>
         </div>
         {menu && (
           <div class="player-menu" role="menu">
@@ -464,8 +439,8 @@ export function NativeOverlay() {
                 aria-checked={m.on}
                 class={m.on ? 'on' : ''}
                 onClick={() => {
-                  m.run();
                   setMenu(null);
+                  m.run();
                 }}
               >
                 {m.label}

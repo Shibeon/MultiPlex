@@ -154,6 +154,8 @@ export interface Metadata {
   grandparentRatingKey?: string;
   grandparentTitle?: string;
   grandparentThumb?: string;
+  grandparentArt?: string;
+  parentArt?: string;
   /** Identifiant Plex universel de la série (épisodes). */
   grandparentGuid?: string;
   contentRating?: string;
