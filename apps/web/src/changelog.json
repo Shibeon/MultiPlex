@@ -1,6 +1,22 @@
 [
   {
     "versions": {
+      "desktop": "0.1.29",
+      "web": "0.1.29",
+      "android": "0.1.29",
+      "tv": "0.1.29"
+    },
+    "fr": [
+      "Téléviseur : connexion par QR code à scanner avec son téléphone, ou par code à saisir sur plex.tv/link.",
+      "L’écran de connexion ne propose plus le mode démo ni la connexion manuelle."
+    ],
+    "en": [
+      "TV: sign in by scanning a QR code with your phone, or by entering a code at plex.tv/link.",
+      "The sign-in screen no longer offers demo mode or manual connection."
+    ]
+  },
+  {
+    "versions": {
       "desktop": "0.1.28",
       "web": "0.1.28",
       "android": "0.1.28",
