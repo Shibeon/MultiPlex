@@ -1,4 +1,5 @@
 import type { Metadata, Tag } from '@multiplex/core';
+import { tvDevice } from '../platform';
 import { signal } from '@preact/signals';
 import { useState } from 'preact/hooks';
 import { t } from '../i18n';
@@ -160,7 +161,8 @@ export function PersonPage({ id }: { id: string }) {
               {bio}
             </p>
           )}
-          {!!person.data?.links?.length && (
+          {/* Sur un téléviseur, on ne peut pas ouvrir ces liens : on ne les montre pas. */}
+          {!tvDevice && !!person.data?.links?.length && (
             <p class="person-links">
               {person.data.links.map((l) => (
                 <a key={l.url} class="social" href={l.url} target="_blank" rel="noreferrer" aria-label={l.title} title={l.title}>

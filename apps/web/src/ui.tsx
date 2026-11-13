@@ -1,4 +1,5 @@
 import { imdbIdOf, ratingBadges, techBadges, type Hub, type Metadata } from '@multiplex/core';
+import { tvDevice } from './platform';
 import type { ComponentChildren, JSX } from 'preact';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { t } from './i18n';
@@ -154,7 +155,7 @@ export function Ratings({ item }: { item: Metadata }) {
         </span>
       ))}
       {/* Letterboxd ne publie pas ses notes : on mène à la fiche du film, où elle se lit. */}
-      {item.type === 'movie' && imdbIdOf(item) && (
+      {!tvDevice && item.type === 'movie' && imdbIdOf(item) && (
         <a class="rating rating-lb" href={`https://letterboxd.com/imdb/${imdbIdOf(item)}/`} target="_blank" rel="noreferrer" title="Letterboxd">
           <i class="rating-word">Letterboxd</i>
           <Icon name="next" size={10} />
