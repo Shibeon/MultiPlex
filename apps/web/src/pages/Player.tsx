@@ -656,13 +656,17 @@ export function Player({ id }: { id: string }) {
           <span>−{formatClock(Math.max(0, ui.duration - ui.time))}</span>
         </div>
         <div class="transport">
-          {prev && <Pill icon="prev" act="prev" label={t('player.prevEp')} onClick={() => go(`/play/${prev.ratingKey}?t=0`, true)} />}
-          <SkipButton seconds={-30} act="back" onClick={() => void seekBy(-30)} />
+          <span class="tr-side tr-left">
+            {prev && <Pill icon="prev" act="prev" label={t('player.prevEp')} onClick={() => go(`/play/${prev.ratingKey}?t=0`, true)} />}
+            <SkipButton seconds={-30} act="back" onClick={() => void seekBy(-30)} />
+          </span>
           <button class="btn icon-btn play" data-act="toggle" aria-label={ui.playing ? 'Pause' : t('item.play')} onClick={toggle}>
             <Icon name={ui.playing ? 'pause' : 'play'} size={26} />
           </button>
-          <SkipButton seconds={30} act="fwd" onClick={() => void seekBy(30)} />
-          {next && <Pill icon="next" act="next" label={next.type === 'queued' ? t('player.upNext') : t('player.next')} title={next.type === 'queued' ? next.title : undefined} onClick={playNext} />}
+          <span class="tr-side tr-right">
+            <SkipButton seconds={30} act="fwd" onClick={() => void seekBy(30)} />
+            {next && <Pill icon="next" act="next" label={next.type === 'queued' ? t('player.upNext') : t('player.next')} title={next.type === 'queued' ? next.title : undefined} onClick={playNext} />}
+          </span>
         </div>
         <div class="controls">
           {audioStreams.length > 0 && <PillMenu icon="audio" act="audio" label={t('player.audio')} open={menu === 'audio'} menu={menuList} onClick={openMenu('audio')} />}

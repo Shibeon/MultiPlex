@@ -410,13 +410,17 @@ export function NativeOverlay() {
           <span>−{formatClock(Math.max(0, duration - shownTime))}</span>
         </div>
         <div class="transport">
-          {meta.hasPrev && <Pill icon="prev" act="prev" label={t('player.prevEp')} onClick={() => n.action('prev')} />}
-          <SkipButton seconds={-30} act="back" onClick={() => void n.command('seekBy', -30)} />
+          <span class="tr-side tr-left">
+            {meta.hasPrev && <Pill icon="prev" act="prev" label={t('player.prevEp')} onClick={() => n.action('prev')} />}
+            <SkipButton seconds={-30} act="back" onClick={() => void n.command('seekBy', -30)} />
+          </span>
           <button class="btn icon-btn play" data-act="toggle" aria-label={paused ? t('item.play') : 'Pause'} onClick={() => void n.command('toggle')}>
             <Icon name={paused ? 'play' : 'pause'} size={26} />
           </button>
-          <SkipButton seconds={30} act="fwd" onClick={() => void n.command('seekBy', 30)} />
-          {meta.hasNext && <Pill icon="next" act="next" label={meta.nextTitle ? t('player.upNext') : t('player.next')} title={meta.nextTitle} onClick={() => n.action('next')} />}
+          <span class="tr-side tr-right">
+            <SkipButton seconds={30} act="fwd" onClick={() => void n.command('seekBy', 30)} />
+            {meta.hasNext && <Pill icon="next" act="next" label={meta.nextTitle ? t('player.upNext') : t('player.next')} title={meta.nextTitle} onClick={() => n.action('next')} />}
+          </span>
         </div>
         <div class="controls">
           {audio.length > 0 && <PillMenu icon="audio" act="audio" label={t('player.audio')} open={menu === 'audio'} menu={menuList} onClick={openMenu('audio')} />}
