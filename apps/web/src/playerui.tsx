@@ -58,3 +58,18 @@ export function Pill({ icon, label, expanded, onClick, title, act }: { icon: str
     </button>
   );
 }
+
+/** Sous-titre du lecteur (« S2 · E3 · titre ») : les points y sont plus marqués, comme dans la maquette. */
+export function PlayerSub({ text }: { text: string }) {
+  const parts = text.split(' · ');
+  return (
+    <span class="player-sub">
+      {parts.map((p, i) => (
+        <>
+          {i > 0 && <i class="psep" aria-hidden="true">•</i>}
+          {p}
+        </>
+      ))}
+    </span>
+  );
+}

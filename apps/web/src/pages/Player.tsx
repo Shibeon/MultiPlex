@@ -1,4 +1,4 @@
-import { PlayerClock, PlayerTech, Pill, SkipButton } from '../playerui';
+import { PlayerClock, PlayerSub, PlayerTech, Pill, SkipButton } from '../playerui';
 import { QUALITIES, hdrKind, srtToVtt, streamsOf, techBadges, type Media, type Metadata, type PlaybackPlan, type Stream } from '@multiplex/core';
 import type Hls from 'hls.js';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
@@ -616,15 +616,10 @@ export function Player({ id }: { id: string }) {
         </button>
         <div class="player-title">
           <strong>{head.title}</strong>
-          {head.sub && <span>{head.sub}</span>}
+          {head.sub && <PlayerSub text={head.sub} />}
           <PlayerTech badges={item ? techBadges(item.Media?.[choice.current.media]) : undefined} />
         </div>
         <PlayerClock remaining={ui.duration - ui.time} speed={choice.current.speed} />
-        {ui.reason && (
-          <span class="chips">
-            <span class="chip">{ui.reason}</span>
-          </span>
-        )}
       </div>
 
       <div class="player-bottom">

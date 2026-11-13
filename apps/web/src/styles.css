@@ -1017,6 +1017,7 @@ body:has(.cast-bar) .tog-bar:not(.in-player) { bottom: 8.5rem; }
 .player-title { flex: 1; min-width: 0; display: grid; gap: 0.15rem; padding-left: 1.4rem; border-left: 1px solid rgba(255, 255, 255, 0.3); }
 .player-title strong { font-size: 1.9rem; font-weight: 700; line-height: 1.12; letter-spacing: -0.02em; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 .player-title span { font-size: 1.1rem; color: rgba(255, 255, 255, 0.78); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.player-title .psep { font-style: normal; margin: 0 0.45em; opacity: 0.85; }
 .player-clock { display: grid; justify-items: end; gap: 0.2rem; padding-left: 1.4rem; border-left: 1px solid rgba(255, 255, 255, 0.3); font-variant-numeric: tabular-nums; }
 .player-clock b { font-size: 1.75rem; font-weight: 700; line-height: 1; }
 .player-clock small { font-size: 0.95rem; opacity: 0.8; }

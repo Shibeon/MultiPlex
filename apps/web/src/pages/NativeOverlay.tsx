@@ -5,7 +5,7 @@ import { moveFocus } from '../nav';
 import { setCouch, settings } from '../settings';
 import { cancelXray, runXray, xrayAvailable } from '../xray';
 import { CouchBanner, Icon, SeekPreview } from '../ui';
-import { PlayerClock, PlayerTech, Pill, SkipButton } from '../playerui';
+import { PlayerClock, PlayerSub, PlayerTech, Pill, SkipButton } from '../playerui';
 
 type Menu = null | 'audio' | 'sub' | 'speed' | 'chapter' | 'quality' | 'output' | 'more';
 
@@ -332,7 +332,7 @@ export function NativeOverlay() {
         </button>
         <div class="player-title">
           <strong>{meta.title}</strong>
-          {meta.sub && <span>{meta.sub}</span>}
+          {meta.sub && <PlayerSub text={meta.sub} />}
           <PlayerTech badges={meta.tech} />
         </div>
         <PlayerClock remaining={duration - time} speed={speed} />
@@ -342,7 +342,6 @@ export function NativeOverlay() {
               {outLabel}
             </span>
           )}
-          <span class="chip">{meta.quality && meta.quality !== 'original' ? t('native.chipConverted') : t('native.chip')}</span>
         </span>
       </div>
 
