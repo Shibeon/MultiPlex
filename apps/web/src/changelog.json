@@ -1,6 +1,20 @@
 [
   {
     "versions": {
+      "desktop": "0.1.13",
+      "web": "0.1.13",
+      "android": "0.1.13",
+      "tv": "0.1.13"
+    },
+    "fr": [
+      "Fiche : le menu « ⋯ » passe désormais au-dessus du casting ; « Infos techniques » et les dernières entrées sont de nouveau cliquables."
+    ],
+    "en": [
+      "Details page: the “⋯” menu now sits above the cast row; “Technical info” and the last entries can be clicked again."
+    ]
+  },
+  {
+    "versions": {
       "desktop": "0.1.12"
     },
     "fr": [
