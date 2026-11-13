@@ -1,6 +1,26 @@
 [
   {
     "versions": {
+      "desktop": "0.1.26",
+      "web": "0.1.26",
+      "android": "0.1.26",
+      "tv": "0.1.26"
+    },
+    "fr": [
+      "Correction : les affiches qui n’apparaissaient qu’au passage de la souris s’affichent de nouveau normalement.",
+      "Bandeau de mise à jour : les nouveautés s’ouvrent dans une carte lisible.",
+      "Téléphone : la barre du bas tient sur l’écran, le bouton Retour ne recouvre plus les titres et les réglages ne débordent plus.",
+      "Écran tactile : la coche d’une affiche n’est plus cachée par le bouton ⋮."
+    ],
+    "en": [
+      "Fix: posters that only appeared on mouse hover display normally again.",
+      "Update banner: the release notes open in a readable card.",
+      "Phone: the bottom bar fits on screen, the Back button no longer covers titles and settings no longer overflow.",
+      "Touch screens: a poster’s check mark is no longer hidden by the ⋮ button."
+    ]
+  },
+  {
+    "versions": {
       "desktop": "0.1.25",
       "web": "0.1.25",
       "android": "0.1.25",
