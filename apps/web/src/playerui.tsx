@@ -220,7 +220,8 @@ export function liveTechNative(s: Record<string, unknown>, meta: { tech?: TechBa
     const ch = channelsLabel(ao['channel-count']);
     if (ch) out.push({ kind: 'channels', label: ch });
   }
-  if (meta.playMode) out.push(meta.playMode === 'direct' ? { kind: 'mode', label: 'Direct Play', hint: t('live.directNote') } : { kind: 'mode', label: t('live.transcoding'), hint: t('live.transcodeNote') });
+  // Lecture directe : rien à signaler. Seul le transcodage (qui peut coûter en qualité) est montré.
+  if (meta.playMode === 'transcode') out.push({ kind: 'mode', label: t('live.transcoding'), hint: t('live.transcodeNote') });
   return [...out, ...proc];
 }
 
@@ -244,9 +245,8 @@ export function liveTechWeb(v: HTMLVideoElement | null, plan: { mode: 'direct' |
     const a = src(tech, 'audio');
     if (a) out.push({ kind: 'audio', label: a, unsure: true, hint: t('live.browserAudio') });
   }
-  if (plan.mode === 'direct') out.push({ kind: 'mode', label: 'Direct Play', hint: t('live.directNote') });
-  else if (plan.video === 'copy') out.push({ kind: 'mode', label: 'Direct Stream', hint: t('live.streamNote') });
-  else out.push({ kind: 'mode', label: t('live.transcoding'), hint: t('live.transcodeNote') });
+  // Lecture directe ou image transmise telle quelle : rien à signaler. Seul le transcodage de l'image est montré.
+  if (plan.mode !== 'direct' && plan.video !== 'copy') out.push({ kind: 'mode', label: t('live.transcoding'), hint: t('live.transcodeNote') });
   return out;
 }
 
