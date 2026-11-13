@@ -11,7 +11,7 @@ import { boot, status } from './store';
 import './styles.css';
 
 initSettings();
-if (!isXrayWindow) initLiquidGlass();
+if (!isXrayWindow && !tvDevice) initLiquidGlass();
 
 if (isXrayWindow) {
   // Fenêtre invisible : uniquement la reconnaissance de visages, chargée à la demande.

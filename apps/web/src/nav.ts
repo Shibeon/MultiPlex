@@ -1,4 +1,8 @@
 import { back } from './router';
+import { tvDevice } from './platform';
+
+/** Sur téléviseur, défilement instantané : l'animation fluide saccade et retarde les appuis suivants. */
+const SCROLL: ScrollBehavior = tvDevice ? 'auto' : 'smooth';
 
 /**
  * Navigation spatiale : les flèches (clavier, télécommande TV, manette)
@@ -46,19 +50,21 @@ export function moveFocus(dx: number, dy: number): boolean {
   }
   if (!best) return false;
   best.focus({ preventScroll: true });
-  best.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+  best.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: SCROLL });
   // Élément visible en entier page remontée tout en haut (première rangée sous l'affiche) : on
   // remonte plutôt que de défiler de quelques centimètres, ce qui coupait l'affiche et collait
   // son titre contre la barre du haut.
   const page = document.scrollingElement;
   if (page && best.getBoundingClientRect().bottom + page.scrollTop < innerHeight - 24) {
-    page.scrollTo({ top: 0, behavior: 'smooth' });
+    page.scrollTo({ top: 0, behavior: SCROLL });
   }
   return true;
 }
 
 /** Vrai tant que l'utilisateur pilote au clavier ou à la télécommande (et non au doigt ou à la souris). */
 let usingKeys = false;
+/** Un déplacement est en cours d'affichage (voir la touche maintenue, plus bas). */
+let moving = false;
 
 /**
  * Après un changement de page, l'élément qui avait le focus a disparu : on le
@@ -130,6 +136,17 @@ export function initNav(): void {
     }
     if (typing && dir[0]) return;
     if (tag === 'INPUT' && (el as HTMLInputElement).type === 'range' && dir[0]) return;
-    if (moveFocus(dir[0], dir[1])) e.preventDefault();
+    // Touche maintenue : la télécommande répète plus vite que la télé ne redessine. On saute les
+    // répétitions qui arrivent avant la fin de l'image en cours, sinon elles s'empilent et l'appli
+    // semble ne plus répondre.
+    if (e.repeat && moving) {
+      e.preventDefault();
+      return;
+    }
+    if (moveFocus(dir[0], dir[1])) {
+      e.preventDefault();
+      moving = true;
+      requestAnimationFrame(() => requestAnimationFrame(() => (moving = false)));
+    }
   });
 }
