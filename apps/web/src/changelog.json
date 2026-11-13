@@ -1,6 +1,24 @@
 [
   {
     "versions": {
+      "desktop": "0.1.24",
+      "web": "0.1.24",
+      "android": "0.1.24",
+      "tv": "0.1.24"
+    },
+    "fr": [
+      "Affiches : une coche sur ce que vous avez déjà vu, à la place de la pastille sur ce qui ne l’a pas été.",
+      "Lecteur : les formats s’affichent sur deux lignes, Vidéo et Audio, et le bouton ⓘ montre la source, ce qui sort réellement et pourquoi c’est converti.",
+      "Lecteur : la mention « Direct Play » disparaît ; seul un transcodage est signalé."
+    ],
+    "en": [
+      "Posters: a check mark on what you have already watched, instead of a dot on what you haven’t.",
+      "Player: formats now show on two lines, Video and Audio, and the ⓘ button shows the source, what is actually output and why it is converted.",
+      "Player: the “Direct Play” label is gone; only transcoding is shown."
+    ]
+  },
+  {
+    "versions": {
       "desktop": "0.1.23",
       "web": "0.1.23",
       "android": "0.1.23",
