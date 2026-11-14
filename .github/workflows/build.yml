@@ -52,12 +52,12 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: web
-          retention-days: 3
+          retention-days: 1
           path: apps/web/dist
       - uses: actions/upload-artifact@v4
         with:
           name: tv-tizen-webos
-          retention-days: 3
+          retention-days: 1
           path: dist-platforms
 
 
@@ -186,7 +186,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: desktop-${{ matrix.os }}
-          retention-days: 3
+          retention-days: 1
           path: |
             apps/desktop/release/*.exe
             apps/desktop/release/*.dmg
@@ -277,7 +277,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: android-apk
-          retention-days: 3
+          retention-days: 1
           path: |
             apps/mobile/android/app/build/outputs/apk/debug/*.apk
             out/*.apk
