@@ -10,6 +10,7 @@ import {
   discoverId,
   discoverImage,
   clearLogoPath,
+  ultraBlurCorners,
   directPlayMime,
   hdrKind,
   luminance,
@@ -375,5 +376,18 @@ describe('clearLogoPath', () => {
   });
   it('adresse générique quand le serveur ne donne pas de liste d’images', () => {
     expect(clearLogoPath({ ...base, type: 'movie' })).toBe('/library/metadata/42/clearLogo');
+  });
+});
+
+describe('ultraBlurCorners', () => {
+  it('lit l’objet ou le tableau, avec ou sans dièse', () => {
+    const c = { topLeft: '1A2B3C', topRight: '#445566', bottomLeft: '778899', bottomRight: 'aabbcc' };
+    const want = { tl: '#1a2b3c', tr: '#445566', bl: '#778899', br: '#aabbcc' };
+    expect(ultraBlurCorners({ UltraBlurColors: c })).toEqual(want);
+    expect(ultraBlurCorners({ UltraBlurColors: [c] })).toEqual(want);
+  });
+  it('ignore l’absence et les quatre coins noirs', () => {
+    expect(ultraBlurCorners({})).toBeUndefined();
+    expect(ultraBlurCorners({ UltraBlurColors: [{ topLeft: '000000', topRight: '000000', bottomLeft: '000000', bottomRight: '000000' }] })).toBeUndefined();
   });
 });

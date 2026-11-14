@@ -19,6 +19,8 @@
 
 * { box-sizing: border-box; }
 html { background: var(--bg); }
+/* Fond du thème, gardé à part : une fiche teintée redéfinit --bg pour elle-même. */
+:root { --bg-page: var(--bg); }
 body {
   margin: 0;
   background: var(--bg);
@@ -1189,6 +1191,19 @@ body:has(.cast-bar) .tog-bar:not(.in-player) { bottom: 8.5rem; }
 .dx-kicker { font-size: 1.05rem; font-weight: 600; color: color-mix(in srgb, var(--text) 85%, transparent); text-decoration: none; }
 .dx-kicker:hover { text-decoration: underline; }
 .dx .dx-title { margin: 0.15rem 0 0; font-size: clamp(2rem, 4.2vw, 3.6rem); font-weight: 800; line-height: 1.05; letter-spacing: -0.025em; text-wrap: balance; }
+/* Fiche teintée aux couleurs de son image (UltraBlurColors du serveur), comme Plex :
+   chaque coin prend sa couleur, assombrie vers le fond du thème pour garder le texte lisible.
+   Le fond local (--bg) devient la teinte, si bien que l'image et les dégradés s'y fondent. */
+.details.dx.dx-tinted {
+  --ub-mix: 42%;
+  --bg: color-mix(in srgb, color-mix(in srgb, var(--ub-bl) 50%, var(--ub-br)) 30%, var(--bg-page));
+  background:
+    radial-gradient(farthest-side at 0 0, color-mix(in srgb, var(--ub-tl) var(--ub-mix), var(--bg-page)), transparent),
+    radial-gradient(farthest-side at 100% 0, color-mix(in srgb, var(--ub-tr) var(--ub-mix), var(--bg-page)), transparent),
+    radial-gradient(farthest-side at 0 100%, color-mix(in srgb, var(--ub-bl) var(--ub-mix), var(--bg-page)), transparent),
+    radial-gradient(farthest-side at 100% 100%, color-mix(in srgb, var(--ub-br) var(--ub-mix), var(--bg-page)), transparent),
+    var(--bg);
+}
 /* Logo officiel à la place du titre : proportions d'origine, jamais étiré ni recadré.
    La boîte réserve sa hauteur pendant le chargement pour que rien ne saute. */
 .dx .dx-title-logo { display: flex; align-items: flex-end; height: clamp(5rem, 15vh, 9.5rem); margin-top: 0.4rem; }

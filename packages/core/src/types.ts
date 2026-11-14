@@ -135,6 +135,8 @@ export interface Metadata {
   guid?: string;
   /** Images d'un titre du catalogue en ligne (affiche, fond…). */
   Image?: { type: string; url: string }[];
+  /** Couleurs dominantes de l'image, une par coin (hexadécimal) ; objet ou tableau selon le serveur. */
+  UltraBlurColors?: UltraBlurColors | UltraBlurColors[];
   type: string;
   title: string;
   summary?: string;
@@ -339,4 +341,11 @@ export interface MediaServer {
   /** Listes de lecture vidéo de l'utilisateur (hors listes intelligentes). */
   /** Lectures en cours. Réservé au propriétaire du serveur : sinon l'appel échoue en 401/403. */
   sessions(): Promise<ActiveSession[]>;
+}
+
+export interface UltraBlurColors {
+  topLeft?: string;
+  topRight?: string;
+  bottomLeft?: string;
+  bottomRight?: string;
 }

@@ -1,4 +1,4 @@
-import { clearLogoPath, seasonCatalogId, techBadges, upcomingEpisodes, type Metadata } from '@multiplex/core';
+import { clearLogoPath, seasonCatalogId, ultraBlurCorners, techBadges, upcomingEpisodes, type Metadata } from '@multiplex/core';
 import { resolvePlayable } from '../queue';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
@@ -189,6 +189,8 @@ export function Details({ id }: { id: string }) {
   const kicker = item.type === 'episode' ? item.grandparentTitle : item.type === 'season' ? item.parentTitle : undefined;
   const poster = item.type === 'episode' ? (item.grandparentThumb ?? item.parentThumb) : (item.thumb ?? item.parentThumb);
   const art = settings.value.backdrops ? (item.art ?? item.grandparentArt ?? item.parentArt) : undefined;
+  // Comme Plex : la page prend les couleurs de l'image (fournies par le serveur), et le logo s'y fond.
+  const tint = settings.value.backdrops ? ultraBlurCorners(item) : undefined;
   const facts = [
     item.type === 'episode' && item.parentIndex !== undefined && `S${item.parentIndex}`,
     item.type === 'episode' && item.index !== undefined && `E${item.index}`,
@@ -206,7 +208,7 @@ export function Details({ id }: { id: string }) {
   ];
 
   return (
-    <div class={`details dx${art ? ' dx-backdrop' : ''}`}>
+    <div class={`details dx${art ? ' dx-backdrop' : ''}${tint ? ' dx-tinted' : ''}`} style={tint && { '--ub-tl': tint.tl, '--ub-tr': tint.tr, '--ub-bl': tint.bl, '--ub-br': tint.br }}>
       {art && <div class="backdrop dx-art" style={{ backgroundImage: `url("${srv.image(art, ...artSize())}")` }} />}
       <div class="details-main dx-hero">
         {poster && <img class="details-poster" src={srv.image(poster, 600, 900)} alt="" />}

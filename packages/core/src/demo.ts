@@ -20,6 +20,19 @@ function poster(title: string, hue: number, wide = false): string {
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
+/** Couleurs de coin d'une image de démonstration, comme les UltraBlurColors d'un serveur. */
+function blur(hue: number): Metadata['UltraBlurColors'] {
+  const hex = (h: number, sat: number, l: number) => {
+    const a = (sat / 100) * Math.min(l / 100, 1 - l / 100);
+    const f = (n: number) => {
+      const k = (n + h / 30) % 12;
+      return Math.round(255 * (l / 100 - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)))).toString(16).padStart(2, '0');
+    };
+    return `${f(0)}${f(8)}${f(4)}`;
+  };
+  return [{ topLeft: hex(hue, 55, 34), topRight: hex((hue + 30) % 360, 60, 30), bottomLeft: hex((hue + 45) % 360, 60, 20), bottomRight: hex((hue + 60) % 360, 60, 14) }];
+}
+
 function build(): Map<string, Metadata & { _section: string; _children?: string[] }> {
   const db = new Map<string, Metadata & { _section: string; _children?: string[] }>();
   let n = 0;
@@ -36,6 +49,7 @@ function build(): Map<string, Metadata & { _section: string; _children?: string[
       summary: `« ${title} » est un film de démonstration. Connectez votre compte Plex pour retrouver votre vraie bibliothèque.`,
       thumb: poster(title, hue),
       art: poster(title, hue, true),
+      UltraBlurColors: blur(hue),
       duration: (85 + (i % 60)) * 60000,
       viewOffset: i % 17 === 3 ? 25 * 60000 : undefined,
       viewCount: i % 3 === 0 ? 1 : 0,
@@ -78,6 +92,7 @@ function build(): Map<string, Metadata & { _section: string; _children?: string[
           grandparentThumb: poster(title, hue),
           thumb: poster(`${title} · S${se}E${e}`, hue, true),
           art: poster(title, hue, true),
+          UltraBlurColors: blur(hue),
           summary: 'Épisode de démonstration.',
           duration: 42 * 60000,
           viewCount: se === 1 && e < 3 ? 1 : 0,
@@ -97,6 +112,7 @@ function build(): Map<string, Metadata & { _section: string; _children?: string[
         parentTitle: title,
         thumb: poster(`${title} — S${se}`, hue),
         art: poster(title, hue, true),
+        UltraBlurColors: blur(hue),
         leafCount: 6,
         viewedLeafCount: se === 1 ? 2 : 0,
       });
@@ -112,6 +128,7 @@ function build(): Map<string, Metadata & { _section: string; _children?: string[
       summary: `« ${title} » est une série de démonstration.`,
       thumb: poster(title, hue),
       art: poster(title, hue, true),
+      UltraBlurColors: blur(hue),
       leafCount: 12,
       viewedLeafCount: 2,
       Genre: [{ tag: 'Drame' }],

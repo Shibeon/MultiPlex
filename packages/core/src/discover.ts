@@ -101,6 +101,21 @@ export function clearLogoPath(item: Pick<Metadata, 'type' | 'ratingKey' | 'paren
   return `/library/metadata/${owner}/clearLogo`;
 }
 
+/**
+ * Les quatre couleurs de coin d'une fiche (`#rrggbb`), ou undefined. Le serveur envoie
+ * parfois la clé avec quatre coins noirs : ce n'est pas une palette, on l'ignore.
+ */
+export function ultraBlurCorners(item: Pick<Metadata, 'UltraBlurColors'>): { tl: string; tr: string; bl: string; br: string } | undefined {
+  const raw = Array.isArray(item.UltraBlurColors) ? item.UltraBlurColors[0] : item.UltraBlurColors;
+  if (!raw) return undefined;
+  const hex = (v: string | undefined) => {
+    const m = /^#?([0-9a-f]{6})$/i.exec((v ?? '').trim());
+    return m ? `#${m[1].toLowerCase()}` : '#000000';
+  };
+  const c = { tl: hex(raw.topLeft), tr: hex(raw.topRight), bl: hex(raw.bottomLeft), br: hex(raw.bottomRight) };
+  return Object.values(c).some((v) => v !== '#000000') ? c : undefined;
+}
+
 type SearchResponse = { MediaContainer: { SearchResults?: { SearchResult?: { Metadata?: Metadata; score?: number }[] }[] } };
 type ListResponse = { MediaContainer: { Metadata?: Metadata[]; totalSize?: number; size?: number; UserState?: { watchlistedAt?: number }[] } };
 
