@@ -725,9 +725,7 @@ input.switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 3
 .seek-preview span { padding: 0.15em 0.6em; border-radius: 99px; font-size: 0.8rem; font-weight: 700; font-variant-numeric: tabular-nums; color: #fff; background: rgba(20, 20, 24, 0.9); }
 
 /* ---------- mode TV : lisible et pilotable depuis le canapé ---------- */
-/* scrollbar-width ne s'hérite pas, et dès qu'un élément le fixe (.row : thin) Chromium ignore
-   ::-webkit-scrollbar : la barre de défilement des rangées restait visible sous Windows. */
-.couch, .couch * { scrollbar-width: none; }
+.couch { scrollbar-width: none; }
 .couch ::-webkit-scrollbar { display: none; }
 .couch.idle, .couch.idle * { cursor: none !important; }
 /* L'élément sélectionné doit se voir de loin : contour épais, halo, léger agrandissement. */
@@ -741,6 +739,10 @@ input.switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 3
 .couch .card:focus-visible .card-text { transform: translateY(var(--lift)); }
 .couch.reduce-motion .card:focus-visible .card-text { transform: translateY(10px); }
 .couch .row:not(.wrap) { padding: 28px 28px calc(14px + 1.4rem); margin: -28px -28px calc(-14px - 1.4rem); scroll-padding-inline: 28px; }
+/* Barres de défilement toujours visibles (Windows, Linux) : celle d'une rangée se dessine au bas de
+   sa marge intérieure, que la marge négative ci-dessus fait chevaucher le titre de la rangée
+   suivante. On lui rend la place. Elle reste : à la souris, c'est le seul moyen de faire défiler. */
+.couch.solid-scrollbars .row:not(.wrap) { margin-bottom: -14px; }
 .couch .row.wrap { row-gap: calc(var(--gap) + var(--card-w) * 1.5 * 0.045 + 10px); }
 .couch .btn:focus-visible, .couch .nav-link:focus-visible { transform: scale(1.06); box-shadow: 0 0 34px color-mix(in srgb, var(--accent) 50%, transparent); }
 .couch .card-title { font-weight: 600; }

@@ -205,6 +205,21 @@ const viewport = signal({ tv: typeof window !== 'undefined' && isTv(), wide: typ
  */
 export const couchOn = computed(() => viewport.value.wide);
 
+/** Le système dessine-t-il des barres de défilement qui prennent de la place (Windows, Linux),
+ *  plutôt que des barres superposées qui n'apparaissent qu'en défilant (macOS, Android) ? */
+let solid: boolean | undefined;
+function solidScrollbars(): boolean {
+  if (solid === undefined) {
+    if (!document.body) return false;
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:absolute;top:-999px;width:100px;height:100px;overflow:scroll;scrollbar-width:thin';
+    document.body.appendChild(probe);
+    solid = probe.offsetHeight - probe.clientHeight > 0;
+    probe.remove();
+  }
+  return solid;
+}
+
 /** Largeur d'affiche effective, réduite sur téléviseur. */
 export function cardWidth(): number {
   return Math.round(settings.value.cardSize * (viewport.value.tv ? 0.72 : 1) * (couchOn.value ? COUCH_SCALE : 1));
@@ -267,6 +282,7 @@ export function initSettings(): void {
         : `${s.uiScale * (viewport.value.tv ? 0.72 : 1) * (couchOn.value ? COUCH_SCALE : 1)}%`;
     root.classList.toggle('tv', viewport.value.tv);
     root.classList.toggle('couch', couchOn.value);
+    root.classList.toggle('solid-scrollbars', solidScrollbars());
     // Illustration du thème : uniquement une image embarquée, jamais une adresse à charger
   // (des réglages importés pourraient en contenir une).
     const art = isThemeImage(s.themeImage) ? s.themeImage : '';
