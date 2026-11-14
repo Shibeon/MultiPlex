@@ -1,11 +1,12 @@
 import { RelaySetting } from '../togetherui';
 import { tvDevice } from '../platform';
-import { QUALITIES } from '@multiplex/core';
+import { AUDIO_MODES, QUALITIES, audioModeOf } from '@multiplex/core';
 import type { ComponentChildren } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { t } from '../i18n';
 import { DEFAULTS, THEMES, load, sanitize, settings, update, type Settings } from '../settings';
 import { native, nativeAvailable } from '../native';
+import { webAudioModesPossible } from '../audiograph';
 import { auth, home, logout, server, switchServer } from '../store';
 import { Icon } from '../ui';
 import { UpdateSettings, canUpdate } from './Update';
@@ -279,6 +280,21 @@ export function SettingsPage() {
         <Toggle k="directPlay" label={t('set.directPlay')} />
         {!(nativeAvailable.value && s.nativePlayer) && <Toggle k="hdrServerOnSdr" label={t('set.hdrServerOnSdr')} />}
         <Toggle k="autoNext" label={t('set.autoNext')} />
+        {/* Mode audio : seulement là où un lecteur peut l'appliquer (lecteur natif du bureau, ou Web Audio). */}
+        {(nativeAvailable.value || webAudioModesPossible()) && (
+          <>
+            <Row label={t('set.audioMode')}>
+              <select value={audioModeOf(s.audioMode)} onChange={(e) => update({ audioMode: audioModeOf(e.currentTarget.value) })}>
+                {AUDIO_MODES.map((m) => (
+                  <option key={m} value={m}>
+                    {t(`audio.${m}`)}
+                  </option>
+                ))}
+              </select>
+            </Row>
+            <p class="muted">{t('set.audioModeHelp')}</p>
+          </>
+        )}
         {!!native?.segments && <Toggle k="communityMarkers" label={t('set.communityMarkers')} />}
         {!!native?.segments && <p class="muted">{t('set.communityMarkersHelp')}</p>}
         {!!native?.thumb && s.nativePlayer && <Toggle k="seekPreview" label={t('set.seekPreview')} />}

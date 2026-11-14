@@ -2,7 +2,7 @@ import { castPick } from '../cast';
 import { effect } from '@preact/signals';
 import { attachPlayer, peers, together } from '../together';
 import { noticeText } from '../togetherui';
-import { QUALITIES, randomId, streamsOf, techBadges, type Metadata, type Stream } from '@multiplex/core';
+import { QUALITIES, audioModeOf, randomId, streamsOf, techBadges, type Metadata, type Stream } from '@multiplex/core';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { t } from '../i18n';
 import { native, type NativeMeta } from '../native';
@@ -121,6 +121,7 @@ export function NativePlayer({ id }: { id: string }) {
         subFiles: subs.external.map((s) => srv.fileRequest(s.key!).url),
         passthrough: settings.value.passthrough,
         audioDevice: settings.value.audioDevice || undefined,
+        audioMode: audioModeOf(settings.value.audioMode),
         matchRefresh: settings.value.matchRefresh,
         seekPreview: settings.value.seekPreview,
       });
@@ -137,7 +138,7 @@ export function NativePlayer({ id }: { id: string }) {
       // Le jeton quitte l'adresse pour un en-tête, comme pour le fichier d'origine.
       const url = new URL(plan.url);
       url.searchParams.delete('X-Plex-Token');
-      await native!.play({ url: url.toString(), headers: file.headers, title: sub ? `${title} — ${sub}` : title, start: at, buffered: true, audioDevice: settings.value.audioDevice || undefined, matchRefresh: settings.value.matchRefresh });
+      await native!.play({ url: url.toString(), headers: file.headers, title: sub ? `${title} — ${sub}` : title, start: at, buffered: true, audioDevice: settings.value.audioDevice || undefined, audioMode: audioModeOf(settings.value.audioMode), matchRefresh: settings.value.matchRefresh });
     }
 
     // La fenêtre de contrôles ne connaît pas le serveur : on lui décrit le titre.
