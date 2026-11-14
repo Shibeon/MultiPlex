@@ -372,6 +372,8 @@ video::cue { font-family: inherit; }
 /* Barre de progression fine, remplie en blanc, dont la poignée n'apparaît qu'au survol. */
 .player.overlay .spinner { position: absolute; inset: 0; margin: auto; border-color: rgba(255, 255, 255, 0.25); border-top-color: #fff; }
 .player-notice { position: absolute; top: 5.5rem; left: 50%; transform: translateX(-50%); z-index: 4; display: flex; align-items: center; gap: 0.7rem; width: max-content; max-width: min(46rem, 92vw); padding: 0.6rem 0.7rem 0.6rem 1.2rem; border-radius: 1.6rem; background: rgba(30, 30, 33, 0.95); color: #fff; box-shadow: 0 12px 34px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.1); font-size: 0.95rem; }
+/* Deux avis à la fois (lecture lente et mode audio) : le second sous le premier. */
+.player-notice + .player-notice { top: 9.2rem; }
 
 /* ---------- galerie de thèmes ---------- */
 .themes > p { max-width: 46rem; }

@@ -60,11 +60,16 @@ function channelsOf(layout) {
   return { spec: names.join('+'), names };
 }
 
-/** Centre relevé, les autres canaux baissés, même disposition en sortie. Rien sans canal central. */
+/**
+ * Centre relevé, les autres canaux baissés, même disposition en sortie. Rien sans canal central.
+ * L'entrée est d'abord mise à cette disposition (aformat) : après un changement de piste (5.1
+ * vers stéréo), la chaîne en place reste valable le temps que syncAf la remplace, au lieu que
+ * pan refuse une entrée sans canal central et coupe le son.
+ */
 function centreBoost(layout) {
   const ch = channelsOf(layout);
   if (!ch || ch.names.length < 3 || !ch.names.includes('FC')) return null;
-  return `pan=${ch.spec}|${ch.names.map((n) => `${n}=${n === 'FC' ? CENTRE_GAIN : OTHERS_GAIN}*${n}`).join('|')}`;
+  return `aformat=channel_layouts=${ch.spec},pan=${ch.spec}|${ch.names.map((n) => `${n}=${n === 'FC' ? CENTRE_GAIN : OTHERS_GAIN}*${n}`).join('|')}`;
 }
 
 /**

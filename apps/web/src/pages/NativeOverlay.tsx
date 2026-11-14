@@ -253,7 +253,13 @@ export function NativeOverlay() {
   // pas de refus du filtre pour ce fichier). Le réglage enregistré, lui, ne change pas.
   const audioMode = audioModeOf(settings.value.audioMode);
   const modeFailed = !!s['audio-mode-failed'];
-  const modeShown = audio.length > 0 && !modeFailed && nativeAudioModeShown({ outFormat: (s['audio-out-params'] as { format?: string } | undefined)?.format, passthrough: settings.value.passthrough });
+  // Dernier format de sortie connu : mpv le vide un instant à chaque réinitialisation du son,
+  // l'entrée ne doit pas clignoter pour autant (même règle que mpv.cjs).
+  const outFormat = useRef('');
+  const fmt = (s['audio-out-params'] as { format?: string } | undefined)?.format;
+  if (fmt) outFormat.current = fmt;
+  useEffect(() => void (outFormat.current = ''), [meta]);
+  const modeShown = audio.length > 0 && !modeFailed && nativeAudioModeShown({ outFormat: outFormat.current, passthrough: settings.value.passthrough });
   useEffect(() => {
     if (!modeShown && menu === 'audiomode') setMenu(null);
   }, [modeShown, menu]);
@@ -271,7 +277,7 @@ export function NativeOverlay() {
     chapters.length > 1 ? { key: 'chapter', label: t('player.chapters'), on: false, run: () => setMenu('chapter') } : null,
     outputs.length > 0 ? { key: 'output', label: t('player.output'), on: false, run: () => setMenu('output') } : null,
     meta.qualities?.length ? { key: 'quality', label: `${t('player.quality')}${qualityLabel ? ` · ${qualityLabel}` : ''}`, on: false, run: () => setMenu('quality') } : null,
-    { key: 'speed', label: `${t('player.speed')} · ${speed !== 1 ? `×${speed}` : 'Normale'}`, on: false, run: () => setMenu('speed') },
+    { key: 'speed', label: `${t('player.speed')} · ${speed !== 1 ? `×${speed}` : t('player.normal')}`, on: false, run: () => setMenu('speed') },
     modeShown ? { key: 'audiomode', label: `${t('player.audioMode')} · ${t(`audio.${audioMode}`)}`, on: audioMode !== 'off', run: () => setMenu('audiomode') } : null,
     { key: 'stats', label: t('player.stats'), on: false, run: () => void n.command('stats') },
     castAvailable ? { key: 'cast', label: t('cast.title'), on: false, run: () => n.action('cast') } : null,
@@ -286,7 +292,7 @@ export function NativeOverlay() {
             ...subs.map((x, i) => ({ key: `s${x.id}`, label: trackLabel(subs, meta.subLabels, x, i), on: !!x.selected, run: () => void n.command('sid', x.id) })),
           ]
         : menu === 'speed'
-          ? SPEEDS.map((v) => ({ key: `v${v}`, label: v === 1 ? 'Normale' : `×${v}`, on: Math.abs(v - speed) < 0.01, run: () => void n.command('speed', v) }))
+          ? SPEEDS.map((v) => ({ key: `v${v}`, label: v === 1 ? t('player.normal') : `×${v}`, on: Math.abs(v - speed) < 0.01, run: () => void n.command('speed', v) }))
           : menu === 'output'
             ? [{ id: '', label: t('set.audioAuto') }, ...outputs].map((d) => ({ key: `o${d.id}`, label: d.label, on: (d.id || 'auto') === String(s['audio-device'] ?? 'auto'), run: () => void n.command('audioDevice', d.id) }))
             : menu === 'quality'
@@ -353,7 +359,7 @@ export function NativeOverlay() {
           <button class="btn" onClick={() => (setSlow(false), (stalls.current = []), setMenu('quality'))}>
             {t('player.quality')}
           </button>
-          <button class="btn icon-btn" aria-label="Fermer" onClick={() => (setSlow(false), (stalls.current = []))}>
+          <button class="btn icon-btn" aria-label={t('common.close')} onClick={() => (setSlow(false), (stalls.current = []))}>
             ✕
           </button>
         </div>
@@ -362,7 +368,7 @@ export function NativeOverlay() {
       {modeNotice && (
         <div class="player-notice" role="status">
           <span>{t('audio.failed')}</span>
-          <button class="btn icon-btn" aria-label="Fermer" onClick={() => setModeNotice(false)}>
+          <button class="btn icon-btn" aria-label={t('common.close')} onClick={() => setModeNotice(false)}>
             ✕
           </button>
         </div>

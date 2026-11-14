@@ -142,6 +142,12 @@ class MpvPlayer {
     this.modeFailed = false;
     this.af = '';
     this.afHasMode = false;
+    // Disposition pour laquelle la chaîne en place a été faite (un échec ne compte que si elle
+    // n'a pas changé depuis), et filtre « désactivé » en attente de verdict.
+    this.afLayout = '';
+    this.afLayoutAt = 0;
+    this.afRetried = false;
+    this.disabledAt = 0;
     // Dernier format de sortie et dernière disposition connus : pendant qu'une chaîne de filtres
     // se réinitialise, mpv les signale un instant vides, ce qui ne doit rien faire basculer.
     this.outFormat = '';
@@ -235,7 +241,7 @@ class MpvPlayer {
     if (msg.request_id && this.requests.has(msg.request_id)) {
       const { resolve } = this.requests.get(msg.request_id);
       this.requests.delete(msg.request_id);
-      resolve(msg.error === 'success' ? msg.data : undefined);
+      resolve(msg.error === 'success' ? { ok: true, data: msg.data } : { ok: false, error: msg.error });
       return;
     }
     if (msg.event === 'property-change') {
@@ -248,7 +254,12 @@ class MpvPlayer {
       // Autre piste audio : on réévalue (une piste stéréo n'a pas besoin d'être réencodée).
       if (msg.name === 'aid' && this.spdif && (this.ac3enc || this.ac3Tried)) void this.stopAc3Encode(false);
       // Ce que mpv décode ou envoie a changé : le filtre du mode audio suit (disposition, son brut).
-      if (msg.name === 'audio-params' || msg.name === 'audio-out-params') void this.syncAf();
+      if (msg.name === 'audio-params' || msg.name === 'audio-out-params' || msg.name === 'aid') void this.syncAf();
+      // Autre piste : mpv 0.37 ne renvoie pas toujours la nouvelle disposition (la chaîne en place
+      // la convertit, la sortie ne change pas) ; on la lui demande.
+      if (msg.name === 'aid') void this.refreshAudioParams();
+      // Filtre « désactivé » : jugé une fois la sortie réinitialisée (format de nouveau connu).
+      if (msg.name === 'audio-out-params' && this.disabledAt && msg.data?.format) this.judgeDisabled();
       this.emit('state', { name: msg.name, value: msg.data });
     } else if (msg.event === 'log-message') {
       this.onLog(msg);
@@ -338,7 +349,8 @@ class MpvPlayer {
   /**
    * Chaîne de filtres audio voulue : mode audio (sauf son brut, ou refus de mpv pour ce
    * fichier), puis réencodage Dolby Digital s'il est actif. Envoyée seulement si elle change :
-   * mpv la remplace à chaud, sans relancer le fichier.
+   * mpv la remplace à chaud, sans relancer le fichier. Refusée d'emblée (erreur de la
+   * commande) : le mode est abandonné pour ce fichier.
    */
   async syncAf() {
     const channels = this.state['audio-params']?.channels;
@@ -353,39 +365,104 @@ class MpvPlayer {
     });
     if (want === this.af) return;
     this.af = want;
+    // Chaîne refaite pour une autre piste : un refus juste après peut encore viser l'ancienne.
+    if (layout !== this.afLayout) {
+      this.afLayoutAt = this.afLayout ? Date.now() : 0;
+      this.afRetried = false;
+    }
+    this.afLayout = layout;
     this.afHasMode = want !== '' && want !== AC3_ENCODE;
-    await this.send(['set_property', 'af', want]);
+    const r = await this.request(['set_property', 'af', want]);
+    if (!r.ok && r.error !== 'timeout' && this.af === want) this.modeFailure();
+  }
+
+  /** Relit `audio-params` après un changement de piste, jusqu'à ce que mpv la donne (5 s au plus). */
+  async refreshAudioParams() {
+    const session = this.session;
+    const aid = this.state.aid;
+    for (let i = 0; i < 20; i++) {
+      await new Promise((r) => setTimeout(r, 250));
+      if (session !== this.session || this.state.aid !== aid) return;
+      const params = await this.send(['get_property', 'audio-params']);
+      if (params?.channels) {
+        if (params.channels !== this.state['audio-params']?.channels) {
+          this.state['audio-params'] = params;
+          this.emit('state', { name: 'audio-params', value: params });
+          await this.syncAf();
+        }
+        return;
+      }
+    }
+  }
+
+  /** Disposition décodée à l'instant (la dernière connue si mpv la signale vide). */
+  currentLayout() {
+    const channels = this.state['audio-params']?.channels;
+    return typeof channels === 'string' && channels ? channels : this.layout;
+  }
+
+  /**
+   * Le mode n'a pas pu s'appliquer. Si la piste a changé de disposition depuis que la chaîne a
+   * été faite (changement de piste 5.1 → stéréo), ce n'est pas un échec : la chaîne est refaite
+   * pour la nouvelle piste. Refus arrivé juste après une chaîne refaite pour une autre piste
+   * (il peut viser l'ancienne) : un nouvel essai. Sinon, plus de mode pour ce fichier ; le son
+   * continue sans.
+   */
+  modeFailure() {
+    if (!this.afHasMode || this.modeFailed) return;
+    this.af = null;
+    if (this.currentLayout() !== this.afLayout) return void this.syncAf();
+    if (this.afLayoutAt && Date.now() - this.afLayoutAt < 2000 && !this.afRetried) {
+      this.afRetried = true;
+      return void this.syncAf();
+    }
+    this.setModeFailed(true);
+    void this.syncAf();
+  }
+
+  /** Verdict sur un filtre « désactivé » : échec seulement si le son reste décodé. */
+  judgeDisabled() {
+    if (!this.disabledAt) return;
+    if (Date.now() - this.disabledAt < 1500) return;
+    this.disabledAt = 0;
+    if (!this.passthroughActive()) this.modeFailure();
   }
 
   /**
    * Un filtre refusé (FFmpeg trop ancien, disposition inattendue) : mpv garde l'ancienne chaîne
-   * et l'écrit dans son journal. Le mode est alors abandonné pour ce fichier, le son continue.
-   * Un filtre « désactivé » en cours de route l'est aussi quand le son passe brut (piste Dolby
-   * choisie avec la transmission activée) : ce n'est un échec que si le son reste décodé.
+   * et l'écrit dans son journal. Un filtre « désactivé » en cours de route l'est aussi quand le
+   * son passe brut (piste Dolby choisie avec la transmission activée) : on attend que la sortie
+   * soit réinitialisée (1,5 s au moins, une sortie WASAPI peut être plus lente) avant de juger.
    */
   onLog(msg) {
     const text = String(msg.text ?? '');
-    const failed = () => {
-      if (!this.afHasMode || this.modeFailed) return;
-      this.setModeFailed(true);
-      this.af = null;
-      void this.syncAf();
-    };
-    if (msg.prefix === 'cplayer' && text.startsWith('Audio filter initialized failed')) failed();
-    else if (text.startsWith('Disabling filter lavfi')) {
-      const session = this.session;
-      setTimeout(() => session === this.session && !this.passthroughActive() && failed(), 500);
-    }
+    if (msg.prefix === 'cplayer' && text.startsWith('Audio filter initialized failed')) return this.modeFailure();
+    if (!text.startsWith('Disabling filter lavfi')) return;
+    const session = this.session;
+    this.disabledAt = Date.now();
+    setTimeout(() => {
+      if (session !== this.session || !this.disabledAt) return;
+      // Sortie encore en cours de réinitialisation : le prochain format connu décidera.
+      if (!this.state['audio-out-params']?.format) return;
+      this.judgeDisabled();
+    }, 1500);
   }
 
-  send(command) {
-    if (!this.sock) return Promise.resolve(undefined);
+  /** Commande mpv avec sa réponse : `ok`, la donnée, ou l'erreur de mpv (`timeout` sans réponse). */
+  request(command) {
+    if (!this.sock) return Promise.resolve({ ok: false, error: 'closed' });
     const request_id = this.nextId++;
     return new Promise((resolve) => {
       this.requests.set(request_id, { resolve });
       this.sock.write(JSON.stringify({ command, request_id }) + '\n');
-      setTimeout(() => this.requests.delete(request_id) && resolve(undefined), 3000);
+      setTimeout(() => this.requests.delete(request_id) && resolve({ ok: false, error: 'timeout' }), 3000);
     });
+  }
+
+  /** Commande mpv : sa donnée, ou rien en cas d'erreur. */
+  async send(command) {
+    const r = await this.request(command);
+    return r.ok ? r.data : undefined;
   }
 
   /** Commandes autorisées depuis l'interface : jamais de commande mpv arbitraire. */

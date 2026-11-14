@@ -1,7 +1,7 @@
 import { lockLandscape, useLandscape } from '../orientation';
 import { tvDevice } from '../platform';
 import { PillMenu, PlayerClock, PlayerOutput, PlayerSub, Pill, SkipButton, liveTechWeb } from '../playerui';
-import { AUDIO_MODES, QUALITIES, audioModeOf, webAudioSafe, type AudioMode, hdrKind, srtToVtt, streamsOf, techBadges, type Media, type Metadata, type PlaybackPlan, type Stream } from '@multiplex/core';
+import { AUDIO_MODES, QUALITIES, audioModeOf, audioRouteDecision, webAudioSafe, type AudioMode, type MediaKind, hdrKind, srtToVtt, streamsOf, techBadges, type Media, type Metadata, type PlaybackPlan, type Stream } from '@multiplex/core';
 import type Hls from 'hls.js';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { serverThumbs } from '../thumbs';
@@ -9,7 +9,7 @@ import { formatClock, t } from '../i18n';
 import { back, go, route } from '../router';
 import { withCommunityMarkers } from '../markers';
 import { settings, update } from '../settings';
-import { AudioGraph, corsReadable, graphOf, webAudioAvailable } from '../audiograph';
+import { AudioGraph, audioKindFailed, corsReadable, graphOf, markAudioKindFailed, webAudioAvailable, type GraphFailure } from '../audiograph';
 import { invalidate, server } from '../store';
 import { dequeue, upNext } from '../queue';
 import { Icon, Spinner, labels, SeekPreview } from '../ui';
@@ -82,18 +82,31 @@ export function Player({ id }: { id: string }) {
   const patch = (p: Partial<typeof ui>) => setUi((u) => ({ ...u, ...p }));
 
   // Mode audio (Web Audio, voir audiograph.ts). Un élément <video> branché sur Web Audio ne peut
-  // plus jouer sans : quand le média suivant ne le permet pas (ou que le mode est désactivé),
-  // le lecteur remplace l'élément (`videoKey`) et reprend au même endroit.
+  // plus jouer sans : quand le média ne le permet pas (ou que le mode est désactivé), le lecteur
+  // remplace l'élément (`videoKey`) et reprend au même endroit, son coupé et volume compris.
+  // Seule perte : une image dans l'image en cours se referme (elle suit l'ancien élément).
   const [videoKey, setVideoKey] = useState(0);
-  const restartAt = useRef<number | null>(null);
+  const restart = useRef<{ at: number; how: 'start' | 'reuse'; muted: boolean; volume: number } | null>(null);
   const graph = useRef<AudioGraph | null>(null);
   /** Le média en cours peut-il passer par Web Audio : oui, non, ou pas encore vérifié (CORS). */
   const audioSafe = useRef<boolean | null>(null);
-  /** Le garde-fou a entendu du silence : plus de mode audio pour ce titre. */
+  /** Chargement en cours : un mode choisi pendant ce temps est relu par le chargement lui-même. */
+  const loading = useRef(false);
+  /** Type du média en cours (pour retenir un échec pour la séance). */
+  const audioKind = useRef<MediaKind>('direct');
+  /** L'élément a été chargé en `crossorigin` pour le mode (pas pour la lecture elle-même). */
+  const modeCors = useRef(false);
+  /** Le garde-fou a vu un échec : plus de mode audio pour ce titre. */
   const audioBlocked = useRef(false);
   const failNoticed = useRef(false);
-  const [audioUi, setAudioUi] = useState({ shown: webAudioAvailable(), waiting: false, failed: false });
+  const audioOffered = () => !tvDevice && webAudioAvailable();
+  const [audioUi, setAudioUi] = useState({ shown: audioOffered(), waiting: false, failed: false });
   const patchAudio = (p: Partial<typeof audioUi>) => setAudioUi((a) => ({ ...a, ...p }));
+  /**
+   * Mode appliqué par ce lecteur : aucun sur téléviseur (son décodé par le matériel, que Web
+   * Audio reçoit muet) ni sans Web Audio. Le réglage, lui, reste tel quel.
+   */
+  const effectiveMode = (): AudioMode => (audioOffered() ? audioModeOf(settings.value.audioMode) : 'off');
 
   const media = item?.Media?.[choice.current.media] ?? item?.Media?.[0];
   const part = media?.Part?.[0];
@@ -141,6 +154,11 @@ export function Player({ id }: { id: string }) {
     setError('');
     patch({ buffering: true });
     lastTime.current = at;
+    loading.current = true;
+    audioSafe.current = null;
+    // Élément branché sur Web Audio alors que le mode est désactivé (ou a échoué) : remplacé
+    // avant de demander le média, pour ne pas le demander deux fois.
+    if (graphOf(v) && (effectiveMode() === 'off' || audioBlocked.current)) return remount(at, 'start');
     // On attend l'arrêt de la session précédente : en lancer deux à la fois fait répondre 400 au serveur.
     await teardown();
     if (mine !== gen.current) return;
@@ -177,32 +195,72 @@ export function Player({ id }: { id: string }) {
       // On le préfère à la lecture HLS native : lui seul affiche les sous-titres livrés à part.
       const HlsLib = p.mode === 'hls' ? (await import('hls.js')).default : null;
       if (mine !== gen.current) return;
-      // Mode audio : ce média peut-il passer par Web Audio sans être muet ?
-      const mode = audioModeOf(settings.value.audioMode);
-      dropPendingAudio();
-      const kind = HlsLib?.isSupported() ? 'mse' : p.mode === 'hls' ? 'native-hls' : 'direct';
-      const claimed = !!graphOf(v);
-      let safe: boolean | null = webAudioSafe({ kind, url: p.url, pageOrigin: location.origin });
-      let cors = false;
-      if (!safe && kind === 'direct' && webAudioAvailable() && !audioBlocked.current) {
-        // Vérifié seulement si l'on en a besoin : la lecture par défaut ne change pas.
-        if (mode !== 'off' || claimed) {
-          cors = await corsReadable(p.url);
-          if (mine !== gen.current) return;
-          safe = cors;
-        } else safe = null;
+      await load(p, HlsLib, at, mine);
+    } catch (e) {
+      if (mine === gen.current) {
+        loading.current = false;
+        setError((e as Error).message);
       }
-      if (audioBlocked.current) safe = false;
-      // Élément déjà branché : il ne rejouera ce média qu'avec Web Audio. S'il ne le faut pas
-      // (mode désactivé) ou s'il ne le peut pas (CORS absent), on prend un élément neuf.
-      if (claimed && (mode === 'off' || !safe)) return remount(at);
-      if (cors) v.crossOrigin = 'anonymous';
+    }
+  };
+
+  /** Recharge le plan en cours (sans nouvelle session serveur) dans l'élément actuel. */
+  const reload = async (at: number) => {
+    const p = plan.current;
+    if (!p || !video.current) return;
+    const mine = ++gen.current;
+    loading.current = true;
+    audioSafe.current = null;
+    hls.current?.destroy();
+    hls.current = null;
+    patch({ buffering: true });
+    try {
+      const HlsLib = p.mode === 'hls' ? (await import('hls.js')).default : null;
+      if (mine !== gen.current) return;
+      await load(p, HlsLib, at, mine);
+    } catch (e) {
+      if (mine === gen.current) {
+        loading.current = false;
+        setError((e as Error).message);
+      }
+    }
+  };
+
+  /**
+   * Charge le plan dans l'élément. Le choix (Web Audio ou non, `crossorigin` ou non, élément à
+   * remplacer) est refait après chaque attente avec l'état du moment : un mode choisi pendant
+   * la vérification CORS, ou un élément branché entre-temps, sont pris en compte.
+   */
+  const load = async (p: PlaybackPlan, HlsLib: typeof Hls | null, at: number, mine: number) => {
+    const v = video.current;
+    if (!v) return;
+    const c = choice.current;
+    const kind: MediaKind = HlsLib?.isSupported() ? 'mse' : p.mode === 'hls' ? 'native-hls' : 'direct';
+    audioKind.current = kind;
+    const sameOrigin = webAudioSafe({ kind: 'direct', url: p.url, pageOrigin: location.origin });
+    let cors: boolean | undefined;
+    for (;;) {
+      const mode = effectiveMode();
+      const d = audioRouteDecision({ mode, kind, sameOrigin, claimed: !!graphOf(v), blocked: audioBlocked.current || audioKindFailed(kind), cors });
+      if (d.action === 'probe') {
+        // Vérifié seulement si un mode le demande : la lecture par défaut ne change pas.
+        cors = await corsReadable(p.url);
+        if (mine !== gen.current) return;
+        continue;
+      }
+      // Élément déjà branché qui ne doit (ou ne peut) plus l'être : élément neuf, même plan.
+      if (d.action === 'swap') return remount(at, 'reuse');
+      dropPendingAudio();
+      modeCors.current = d.crossOrigin;
+      if (d.crossOrigin) v.crossOrigin = 'anonymous';
       else v.removeAttribute('crossorigin');
-      audioSafe.current = safe;
+      audioSafe.current = d.safe;
       // Mode enregistré mais inapplicable ici : l'entrée disparaît de « Plus », et on le dit une fois.
-      const failed = mode !== 'off' && safe === false && !failNoticed.current;
+      // Échec déjà retenu pour la séance : annoncé une fois, au titre où il a eu lieu.
+      const failed = mode !== 'off' && d.safe === false && !failNoticed.current && !audioKindFailed(kind);
       if (failed) failNoticed.current = true;
-      patchAudio({ shown: webAudioAvailable() && safe !== false, failed });
+      // (Une note déjà affichée par le garde-fou ou une erreur de chargement reste.)
+      patchAudio(failed ? { shown: audioOffered() && d.safe !== false, failed } : { shown: audioOffered() && d.safe !== false });
 
       if (HlsLib?.isSupported()) {
         // Réglages pour les gros fichiers (4K d'origine copiée, 50 à 100 Mbps) : par défaut, hls.js
@@ -234,6 +292,7 @@ export function Player({ id }: { id: string }) {
         h.loadSource(p.url);
         h.attachMedia(v);
       } else if (p.mode === 'hls' && !v.canPlayType('application/vnd.apple.mpegurl')) {
+        loading.current = false;
         return setError(t('player.unsupported'));
       } else {
         v.src = p.url;
@@ -242,9 +301,9 @@ export function Player({ id }: { id: string }) {
       v.defaultPlaybackRate = c.speed;
       v.playbackRate = c.speed;
       v.play().catch(() => {});
-      if (mode !== 'off' && safe) attachAudio(mode);
-    } catch (e) {
-      if (mine === gen.current) setError((e as Error).message);
+      loading.current = false;
+      if (d.route) attachAudio(mode);
+      return;
     }
   };
 
@@ -264,57 +323,88 @@ export function Player({ id }: { id: string }) {
     patchAudio({ waiting: false });
   };
 
+  /** Le média a-t-il une piste audio (d'après le serveur) ? Sans piste, des zéros ne prouvent rien. */
+  const hasAudio = () => {
+    const m = itemRef.current?.Media?.[choice.current.media] ?? itemRef.current?.Media?.[0];
+    return streamsOf(m?.Part?.[0], 2).length > 0 || !!m?.audioCodec;
+  };
+
   const attachAudio = (mode: AudioMode) => {
     const el = video.current;
     if (!el) return;
-    graph.current = AudioGraph.attach(el, mode, audioChannels(), {
+    graph.current = AudioGraph.attach(el, mode, { channels: audioChannels(), hasAudio: hasAudio() }, {
       onWaiting: (waiting) => patchAudio({ waiting }),
-      onSilent: () => {
-        // Le navigateur ne livre que du silence (décodage matériel, média protégé…) : élément
-        // neuf, sans Web Audio, au même endroit. Le réglage reste ; il vaudra au titre suivant.
+      onFail: (why: GraphFailure) => {
+        // Web Audio ne rend pas le son : élément neuf, sans Web Audio, au même endroit. Le
+        // réglage reste. Silence confirmé (l'élément a du son, Web Audio rien) : plus d'essai
+        // pour ce type de lecture jusqu'à la fermeture de l'application.
+        if (why === 'no-signal') markAudioKindFailed(audioKind.current);
         audioBlocked.current = true;
         patchAudio({ shown: false, failed: true, waiting: false });
-        if (el === video.current) remount(el.currentTime);
+        if (el === video.current) remount(el.currentTime, 'reuse');
       },
     });
   };
 
-  /** Remplace l'élément <video> (le précédent reste branché sur Web Audio) et relance la lecture. */
-  const remount = (at: number) => {
+  /**
+   * Remplace l'élément <video> (le précédent reste branché sur Web Audio) et relance la lecture :
+   * `start` redemande le média au serveur, `reuse` recharge le plan en cours.
+   */
+  const remount = (at: number, how: 'start' | 'reuse') => {
     gen.current++;
     graph.current?.dispose();
     graph.current = null;
-    restartAt.current = at;
+    const old = video.current;
+    // hls.js lâche l'ancien élément (la session serveur, elle, reste ouverte pour `reuse`).
+    hls.current?.destroy();
+    hls.current = null;
+    restart.current = { at, how, muted: old?.muted ?? false, volume: old?.volume ?? 1 };
+    if (old) {
+      old.pause();
+      old.removeAttribute('src');
+      old.load();
+    }
+    loading.current = true;
+    patchAudio({ waiting: false });
     setVideoKey((k) => k + 1);
   };
   useEffect(() => {
-    const at = restartAt.current;
-    if (at === null || !video.current) return;
-    restartAt.current = null;
-    void start(at);
+    const r = restart.current;
+    const el = video.current;
+    if (!r || !el) return;
+    restart.current = null;
+    el.muted = r.muted;
+    el.volume = r.volume;
+    void (r.how === 'start' ? start(r.at) : reload(r.at));
   }, [videoKey]);
   useEffect(() => () => graph.current?.dispose(), []);
 
   /** Mode choisi dans « Plus » : appliqué tout de suite au média en cours. */
-  const chooseAudioMode = (mode: AudioMode) => {
-    update({ audioMode: mode });
+  const chooseAudioMode = (chosen: AudioMode) => {
+    update({ audioMode: chosen });
     patchAudio({ failed: false });
     failNoticed.current = false;
+    // Chargement en cours : il relit le mode après chaque attente.
+    if (loading.current) return;
     const el = video.current;
     if (!el || !plan.current) return;
-    const g = graphOf(el) ?? (graph.current?.el === el ? graph.current : undefined);
-    if (g && (g.connected || mode !== 'off')) return g.setMode(mode, audioChannels());
+    const mode = effectiveMode();
+    const g = graphOf(el);
+    // Désactivé sur un élément branché : élément neuf tout de suite, sans nouvelle session.
+    if (g) return mode === 'off' ? remount(el.currentTime, 'reuse') : g.setMode(mode, { channels: audioChannels() });
     dropPendingAudio();
     if (mode === 'off') return;
     if (audioSafe.current) attachAudio(mode);
     // Fichier d'un autre serveur chargé sans CORS : rechargé (après vérification) au même endroit.
-    else if (audioSafe.current === null) void start(el.currentTime);
+    else if (audioSafe.current === null) void reload(el.currentTime);
   };
 
   // Chargement de l'élément, puis de l'épisode suivant.
   useEffect(() => {
     let alive = true;
     audioBlocked.current = false;
+    failNoticed.current = false;
+    patchAudio({ failed: false });
     skipped.current.clear();
     recovered.current = false;
     setNext(null);
@@ -620,6 +710,15 @@ export function Player({ id }: { id: string }) {
   const onError = () => {
     const p = plan.current;
     if (!p || hls.current) return;
+    if (modeCors.current) {
+      // Chargé en `crossorigin` pour le mode, puis refusé (le média lui-même n'a pas les
+      // en-têtes CORS) : même plan, sans `crossorigin` ni mode pour ce titre.
+      modeCors.current = false;
+      audioBlocked.current = true;
+      patchAudio({ shown: false, failed: !failNoticed.current });
+      failNoticed.current = true;
+      return void reload(video.current?.currentTime || lastTime.current);
+    }
     if (p.mode === 'direct' && !choice.current.force) {
       // La lecture directe a échoué (codec annoncé mais illisible) : repli sur le transcodage.
       choice.current.force = true;
@@ -642,7 +741,7 @@ export function Player({ id }: { id: string }) {
     chapters.length > 1 ? { id: 'chapter', label: t('player.chapters'), on: false } : null,
     (item?.Media?.length ?? 0) > 1 ? { id: 'version', label: t('player.version'), on: false } : null,
     { id: 'quality', label: `${t('player.quality')} · ${QUALITIES.find((q) => q.id === choice.current.quality)?.label ?? ''}`, on: false },
-    { id: 'speed', label: `${t('player.speed')} · ${choice.current.speed === 1 ? 'Normale' : `×${choice.current.speed}`}`, on: false },
+    { id: 'speed', label: `${t('player.speed')} · ${choice.current.speed === 1 ? t('player.normal') : `×${choice.current.speed}`}`, on: false },
     audioUi.shown ? { id: 'audiomode', label: `${t('player.audioMode')} · ${t(`audio.${audioModeOf(settings.value.audioMode)}`)}`, on: audioModeOf(settings.value.audioMode) !== 'off' } : null,
     { id: 'stats', label: t('player.stats'), on: !!stats },
     remote.ok || castEnabled.value ? { id: 'cast', label: t('cast.title'), on: remote.on } : null,
@@ -656,7 +755,7 @@ export function Player({ id }: { id: string }) {
         : menu === 'quality'
           ? QUALITIES.map((q) => ({ id: q.id, label: q.label, on: q.id === choice.current.quality }))
           : menu === 'speed'
-            ? SPEEDS.map((s) => ({ id: s, label: s === 1 ? 'Normale' : `×${s}`, on: s === choice.current.speed }))
+            ? SPEEDS.map((s) => ({ id: s, label: s === 1 ? t('player.normal') : `×${s}`, on: s === choice.current.speed }))
             : menu === 'chapter'
               ? chapters.map((c, i) => ({ id: c.startTimeOffset, label: `${formatClock(c.startTimeOffset / 1000)} — ${c.tag || `${t('player.chapters')} ${i + 1}`}`, on: ui.time * 1000 >= c.startTimeOffset && ui.time * 1000 < c.endTimeOffset }))
               : menu === 'version'
@@ -712,7 +811,7 @@ export function Player({ id }: { id: string }) {
       {(audioUi.failed || audioUi.waiting) && (
         <div class="player-notice" role="status">
           <span>{t(audioUi.waiting ? 'audio.waiting' : 'audio.failed')}</span>
-          <button class="btn icon-btn" aria-label="Fermer" onClick={() => patchAudio({ failed: false, waiting: false })}>
+          <button class="btn icon-btn" aria-label={t('common.close')} onClick={() => patchAudio({ failed: false, waiting: false })}>
             ✕
           </button>
         </div>
