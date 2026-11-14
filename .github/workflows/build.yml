@@ -49,16 +49,6 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm package:tv
-      - uses: actions/upload-artifact@v4
-        with:
-          name: web
-          retention-days: 1
-          path: apps/web/dist
-      - uses: actions/upload-artifact@v4
-        with:
-          name: tv-tizen-webos
-          retention-days: 1
-          path: dist-platforms
 
 
   # Envoi sur main : quelles plateformes ont un numéro pas encore publié ?
@@ -184,6 +174,7 @@ jobs:
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
 
       - uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: desktop-${{ matrix.os }}
           retention-days: 1
@@ -275,6 +266,7 @@ jobs:
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
         run: scripts/publish-release.sh android out/*.apk
       - uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: android-apk
           retention-days: 1
@@ -289,16 +281,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      # Reconstruit ici plutôt que de passer par un artefact : le quota de stockage
+      # des artefacts du compte a déjà bloqué une publication entière.
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
         with:
-          name: web
-          path: web
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
       - name: Publier
         env:
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
         run: |
           version=$(node scripts/versions.mjs get web)
-          (cd web && zip -qr "../MultiPlex-web-$version.zip" .)
+          (cd apps/web/dist && zip -qr "../../../MultiPlex-web-$version.zip" .)
           scripts/publish-release.sh web "MultiPlex-web-$version.zip"
 
   # Image Docker de la version web (ghcr.io/shibeon/multiplex-web).
@@ -317,13 +314,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Reconstruit ici plutôt que de passer par un artefact (voir web-release).
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - uses: actions/download-artifact@v4
-        with:
-          name: tv-tizen-webos
-          path: dist-platforms
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm package:tv
       - name: Paquets
         run: |
           version=$(node scripts/versions.mjs get tv)
