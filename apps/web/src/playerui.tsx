@@ -55,7 +55,7 @@ function SurroundMark() {
   );
 }
 
-const VIDEO_KINDS = new Set(['resolution', 'hdr', 'sdr', 'mode']);
+const VIDEO_KINDS = new Set(['resolution', 'hdr', 'sdr']);
 const join = (...parts: (string | undefined)[]) => parts.filter(Boolean).join(' ');
 
 /** Son : format et canaux en une seule pastille (« Dolby Digital 5.1 »). */
@@ -205,8 +205,9 @@ export function liveTechNative(s: Record<string, unknown>, meta: { tech?: TechBa
     const ch = channelsLabel(ao['channel-count']);
     if (ch) out.push({ kind: 'channels', label: ch });
   }
-  // Lecture directe : rien à signaler. Seul le transcodage (qui peut coûter en qualité) est montré.
-  if (meta.playMode === 'transcode') out.push({ kind: 'mode', label: t('live.transcoding'), hint: t('live.transcodeNote') });
+  // Lecture directe ou transcodage : pas de pastille, l'utilisateur n'en a que faire. Le
+  // transcodage reste expliqué dans le détail ⓘ (source → sortie et note).
+  if (meta.playMode === 'transcode') proc.push({ kind: 'proc', label: t('live.transcoding'), hint: t('live.transcodeNote') });
   return [...out, ...proc];
 }
 
@@ -230,8 +231,8 @@ export function liveTechWeb(v: HTMLVideoElement | null, plan: { mode: 'direct' |
     const a = src(tech, 'audio');
     if (a) out.push({ kind: 'audio', label: a, unsure: true, hint: t('live.browserAudio') });
   }
-  // Lecture directe ou image transmise telle quelle : rien à signaler. Seul le transcodage de l'image est montré.
-  if (plan.mode !== 'direct' && plan.video !== 'copy') out.push({ kind: 'mode', label: t('live.transcoding'), hint: t('live.transcodeNote') });
+  // Pas de pastille de mode : le transcodage de l'image n'est expliqué que dans le détail ⓘ.
+  if (plan.mode !== 'direct' && plan.video !== 'copy') out.push({ kind: 'proc', label: t('live.transcoding'), hint: t('live.transcodeNote') });
   return out;
 }
 
