@@ -2,12 +2,13 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { formatClock, t } from '../i18n';
 import { native, type NativeMeta } from '../native';
 import { moveFocus } from '../nav';
-import { couchOn, settings } from '../settings';
+import { couchOn, settings, update } from '../settings';
+import { AUDIO_MODES, audioModeOf, nativeAudioModeShown } from '@multiplex/core';
 import { cancelXray, runXray, xrayAvailable } from '../xray';
 import { Icon, SeekPreview } from '../ui';
 import { PillMenu, PlayerClock, PlayerOutput, PlayerSub, Pill, SkipButton, liveTechNative } from '../playerui';
 
-type Menu = null | 'audio' | 'sub' | 'speed' | 'chapter' | 'quality' | 'output' | 'more';
+type Menu = null | 'audio' | 'sub' | 'speed' | 'chapter' | 'quality' | 'output' | 'audiomode' | 'more';
 
 interface Track {
   id: number;
@@ -248,6 +249,21 @@ export function NativeOverlay() {
     // Les libellés du serveur, plus parlants, quand le compte de pistes concorde.
     (labels?.length === list.length ? labels[i] : undefined) ?? ([x.title, x.lang?.toUpperCase(), x.codec?.toUpperCase(), x['demux-channel-count'] && `${x['demux-channel-count']} canaux`].filter(Boolean).join(' · ') || `#${x.id}`);
 
+  // Mode audio : proposé seulement quand mpv peut filtrer le son (pas de son brut vers un ampli,
+  // pas de refus du filtre pour ce fichier). Le réglage enregistré, lui, ne change pas.
+  const audioMode = audioModeOf(settings.value.audioMode);
+  const modeFailed = !!s['audio-mode-failed'];
+  const modeShown = audio.length > 0 && !modeFailed && nativeAudioModeShown({ outFormat: (s['audio-out-params'] as { format?: string } | undefined)?.format, passthrough: settings.value.passthrough });
+  useEffect(() => {
+    if (!modeShown && menu === 'audiomode') setMenu(null);
+  }, [modeShown, menu]);
+  const [modeNotice, setModeNotice] = useState(false);
+  useEffect(() => setModeNotice(modeFailed && audioMode !== 'off'), [modeFailed]);
+  const chooseMode = (m: (typeof AUDIO_MODES)[number]) => {
+    update({ audioMode: m });
+    void n.command('audioMode', m);
+  };
+
   // « Plus » : ce qui ne tient pas dans la rangée du bas. Un choix qui ouvre une liste la remplace.
   const qualityLabel = meta.quality && meta.quality !== 'original' ? meta.qualities?.find((q) => q.id === meta.quality)?.label.split(' · ')[0] : undefined;
   const moreItems: { key: string; label: string; on: boolean; run: () => void }[] = [
@@ -256,11 +272,12 @@ export function NativeOverlay() {
     outputs.length > 0 ? { key: 'output', label: t('player.output'), on: false, run: () => setMenu('output') } : null,
     meta.qualities?.length ? { key: 'quality', label: `${t('player.quality')}${qualityLabel ? ` · ${qualityLabel}` : ''}`, on: false, run: () => setMenu('quality') } : null,
     { key: 'speed', label: `${t('player.speed')} · ${speed !== 1 ? `×${speed}` : 'Normale'}`, on: false, run: () => setMenu('speed') },
+    modeShown ? { key: 'audiomode', label: `${t('player.audioMode')} · ${t(`audio.${audioMode}`)}`, on: audioMode !== 'off', run: () => setMenu('audiomode') } : null,
     { key: 'stats', label: t('player.stats'), on: false, run: () => void n.command('stats') },
     castAvailable ? { key: 'cast', label: t('cast.title'), on: false, run: () => n.action('cast') } : null,
   ].filter((x): x is { key: string; label: string; on: boolean; run: () => void } => !!x);
 
-  const items: { key: string; label: string; on: boolean; run: () => void }[] =
+  const items: { key: string; label: string; title?: string; on: boolean; run: () => void }[] =
     menu === 'audio'
       ? audio.map((x, i) => ({ key: `a${x.id}`, label: trackLabel(audio, meta.audioLabels, x, i), on: !!x.selected, run: () => void n.command('aid', x.id) }))
       : menu === 'sub'
@@ -274,6 +291,8 @@ export function NativeOverlay() {
             ? [{ id: '', label: t('set.audioAuto') }, ...outputs].map((d) => ({ key: `o${d.id}`, label: d.label, on: (d.id || 'auto') === String(s['audio-device'] ?? 'auto'), run: () => void n.command('audioDevice', d.id) }))
             : menu === 'quality'
             ? (meta.qualities ?? []).map((q) => ({ key: `q${q.id}`, label: q.label, on: q.id === (meta.quality ?? 'original'), run: () => n.action(`quality:${q.id}`) }))
+            : menu === 'audiomode'
+            ? AUDIO_MODES.map((m) => ({ key: `m${m}`, label: t(`audio.${m}`), title: m === 'off' ? undefined : t(`audio.${m}Hint`), on: m === audioMode, run: () => chooseMode(m) }))
             : menu === 'more'
             ? moreItems
             : menu === 'chapter'
@@ -294,6 +313,7 @@ export function NativeOverlay() {
           role="menuitemradio"
           aria-checked={m.on}
           class={m.on ? 'on' : ''}
+          title={m.title}
           onClick={() => {
             setMenu(null);
             m.run();
@@ -334,6 +354,15 @@ export function NativeOverlay() {
             {t('player.quality')}
           </button>
           <button class="btn icon-btn" aria-label="Fermer" onClick={() => (setSlow(false), (stalls.current = []))}>
+            ✕
+          </button>
+        </div>
+      )}
+
+      {modeNotice && (
+        <div class="player-notice" role="status">
+          <span>{t('audio.failed')}</span>
+          <button class="btn icon-btn" aria-label="Fermer" onClick={() => setModeNotice(false)}>
             ✕
           </button>
         </div>

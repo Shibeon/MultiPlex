@@ -428,6 +428,8 @@ async function startPlayback(url, headers, subFiles, opts) {
     subFiles,
     passthrough: !!opts.passthrough,
     audioDevice: await knownAudioDevice(opts.audioDevice),
+    // Mode audio (nuit, voix) : validé par le lecteur, tout inconnu vaut « off ».
+    audioMode: typeof opts.audioMode === 'string' ? opts.audioMode : undefined,
     buffered: !!opts.buffered,
   });
   // Aperçus : seulement pour le fichier d'origine (un flux converti ne se parcourt pas librement).

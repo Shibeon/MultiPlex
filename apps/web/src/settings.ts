@@ -1,4 +1,4 @@
-import { THEME_EFFECTS, isThemeImage, luminance } from '@multiplex/core';
+import { AUDIO_MODES, THEME_EFFECTS, isThemeImage, luminance, type AudioMode } from '@multiplex/core';
 import { computed, effect, signal } from '@preact/signals';
 import { isOverlayWindow } from './native';
 
@@ -65,6 +65,12 @@ export interface Settings {
   passthrough: boolean;
   /** Lecteur natif : sortie audio choisie (vide = celle du système). */
   audioDevice: string;
+  /**
+   * Tous les lecteurs : mode audio. « night » compresse la dynamique (scènes fortes moins fortes,
+   * dialogues faibles plus audibles) ; « voice » relève le canal central (ou, en stéréo, compresse
+   * doucement et met la voix en avant). Sans effet quand le son part brut vers un ampli.
+   */
+  audioMode: AudioMode;
   /** Lecteur natif, Windows : accorder la fréquence de l'écran à la cadence de la vidéo. */
   matchRefresh: boolean;
   /** Application de bureau : compléter les repères d'intro avec IntroDB quand Plex n'en fournit pas. */
@@ -113,6 +119,7 @@ export const DEFAULTS: Settings = {
   autoUpdate: true,
   passthrough: false,
   audioDevice: '',
+  audioMode: 'off',
   matchRefresh: false,
   communityMarkers: true,
   askProfile: false,
@@ -170,6 +177,8 @@ export function sanitize(input: unknown): Partial<Settings> {
           Object.entries(v as Record<string, unknown>).filter(([name, val]) => name.startsWith('--') && typeof val === 'string'),
         );
       }
+    } else if (k === 'audioMode') {
+      if (AUDIO_MODES.includes(v as AudioMode)) out[k] = v;
     } else if (typeof v === typeof def) out[k] = v;
   }
   return out as Partial<Settings>;

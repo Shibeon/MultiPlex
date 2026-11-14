@@ -17,6 +17,8 @@ export interface NativePlayOptions {
   passthrough?: boolean;
   /** Sortie audio à utiliser (identifiant donné par audioDevices) ; absent = celle du système. */
   audioDevice?: string;
+  /** Mode audio (nuit, voix renforcées) ; absent ou « off » = son tel quel. */
+  audioMode?: import('@multiplex/core').AudioMode;
   /** Accorder la fréquence de l'écran à la cadence de la vidéo (Windows). */
   matchRefresh?: boolean;
   /** Préparer les aperçus en image de la barre de lecture. */
@@ -53,7 +55,7 @@ export interface NativeMeta {
   playMode?: 'direct' | 'transcode';
 }
 
-export type NativeCommand = 'toggle' | 'pause' | 'seek' | 'seekBy' | 'volume' | 'mute' | 'speed' | 'aid' | 'sid' | 'stats' | 'key' | 'audioDevice';
+export type NativeCommand = 'toggle' | 'pause' | 'seek' | 'seekBy' | 'volume' | 'mute' | 'speed' | 'aid' | 'sid' | 'stats' | 'key' | 'audioDevice' | 'audioMode';
 export type NativeEvent = 'state' | 'ended' | 'error' | 'next' | 'prev' | 'quality' | 'notice' | 'audioDevice';
 
 /** État de la mise à jour de l'application de bureau. */

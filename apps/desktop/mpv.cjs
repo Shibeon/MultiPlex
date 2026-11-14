@@ -7,9 +7,10 @@ const fs = require('node:fs');
 const { existsSync } = fs;
 const net = require('node:net');
 const path = require('node:path');
+const { afChain, modeOf } = require('./audiomode.cjs');
 
 /** Propriétés suivies en continu ; chaque changement est transmis à l'interface. */
-const OBSERVED = ['time-pos', 'duration', 'pause', 'paused-for-cache', 'aid', 'sid', 'eof-reached', 'volume', 'mute', 'speed', 'track-list', 'chapter-list', 'demuxer-cache-time', 'current-ao', 'container-fps', 'audio-device', 'audio-out-params', 'video-params', 'video-target-params'];
+const OBSERVED = ['time-pos', 'duration', 'pause', 'paused-for-cache', 'aid', 'sid', 'eof-reached', 'volume', 'mute', 'speed', 'track-list', 'chapter-list', 'demuxer-cache-time', 'current-ao', 'container-fps', 'audio-device', 'audio-params', 'audio-out-params', 'video-params', 'video-target-params'];
 
 /**
  * Transmission du son à un ampli : du plus riche au plus simple. Quand la sortie refuse
@@ -136,6 +137,15 @@ class MpvPlayer {
     this.stage = 0;
     this.ac3enc = false;
     this.ac3Tried = false;
+    // Mode audio (nuit, voix) : appliqué par la chaîne `af` dès que mpv sait ce qu'il décode.
+    this.audioMode = modeOf(opts.audioMode);
+    this.modeFailed = false;
+    this.af = '';
+    this.afHasMode = false;
+    // Dernier format de sortie et dernière disposition connus : pendant qu'une chaîne de filtres
+    // se réinitialise, mpv les signale un instant vides, ce qui ne doit rien faire basculer.
+    this.outFormat = '';
+    this.layout = '';
     // Le mode exclusif donne la main à MultiPlex sur la sortie : c'est ce qui permet le son brut,
     // et le multicanal décodé (5.1, 7.1) même si Windows est réglé en stéréo.
     if (this.spdif) args.push(`--audio-spdif=${AUDIO_STAGES[0].spdif}`, '--audio-exclusive=yes', '--audio-channels=auto', `--ao=${NATIVE_AO},null`);
@@ -161,6 +171,9 @@ class MpvPlayer {
     this.enteredFullscreen = false;
     await this.connect(pipe, session);
     for (const [i, name] of OBSERVED.entries()) this.send(['observe_property', i + 1, name]);
+    // Erreurs de mpv : c'est là qu'il dit qu'un filtre audio a échoué (la propriété reste acceptée).
+    this.send(['request_log_messages', 'error']);
+    this.setModeFailed(false);
     // Le jeton part en en-tête HTTP : l'adresse affichée par mpv (statistiques, titre) reste propre.
     if (opts.headers?.length) await this.send(['set_property', 'http-header-fields', opts.headers]);
     const options = { start: String(Math.max(0, Number(opts.start) || 0)) };
@@ -234,7 +247,11 @@ class MpvPlayer {
       if (msg.name === 'audio-out-params' && this.spdif) void this.maybeAc3Encode(msg.data);
       // Autre piste audio : on réévalue (une piste stéréo n'a pas besoin d'être réencodée).
       if (msg.name === 'aid' && this.spdif && (this.ac3enc || this.ac3Tried)) void this.stopAc3Encode(false);
+      // Ce que mpv décode ou envoie a changé : le filtre du mode audio suit (disposition, son brut).
+      if (msg.name === 'audio-params' || msg.name === 'audio-out-params') void this.syncAf();
       this.emit('state', { name: msg.name, value: msg.data });
+    } else if (msg.event === 'log-message') {
+      this.onLog(msg);
     } else if (msg.event === 'end-file' && this.loaded) {
       // Démarré à vide, mpv resterait ouvert sur un écran noir : on le ferme à la fin du fichier.
       if (msg.reason === 'eof') this.reachedEnd = true;
@@ -262,7 +279,7 @@ class MpvPlayer {
     this.ac3Tried = true;
     this.ac3enc = true;
     const session = this.session;
-    await this.send(['set_property', 'af', AC3_ENCODE]);
+    await this.syncAf();
     this.emit('state', { name: 'ac3-encode', value: true });
     await new Promise((r) => setTimeout(r, 900));
     if (session === this.session && this.ac3enc && (await this.send(['get_property', 'current-ao'])) === 'null') await this.stopAc3Encode(true);
@@ -275,7 +292,7 @@ class MpvPlayer {
     this.ac3enc = false;
     this.ac3Tried = failed;
     if (was) {
-      await this.send(['set_property', 'af', '']);
+      await this.syncAf();
       this.emit('state', { name: 'ac3-encode', value: false });
       if (failed) await this.send(['ao-reload']);
     }
@@ -301,6 +318,64 @@ class MpvPlayer {
     this.stepping = false;
     // La sortie a accepté, mais peut-être en stéréo seulement : réencodage en Dolby Digital si besoin.
     if (session === this.session) void this.maybeAc3Encode(this.state['audio-out-params']);
+  }
+
+  /** Échec du mode audio pour ce fichier : retenu dans l'état (fenêtre de contrôles) et annoncé. */
+  setModeFailed(on) {
+    this.modeFailed = on;
+    this.state['audio-mode-failed'] = on;
+    this.emit('state', { name: 'audio-mode-failed', value: on });
+  }
+
+  /** Son brut vers l'ampli, ou pas encore connu alors que la transmission est demandée. */
+  passthroughActive() {
+    const format = this.state['audio-out-params']?.format;
+    if (typeof format === 'string' && format) this.outFormat = format;
+    if (this.outFormat) return this.outFormat.startsWith('spdif');
+    return this.spdif;
+  }
+
+  /**
+   * Chaîne de filtres audio voulue : mode audio (sauf son brut, ou refus de mpv pour ce
+   * fichier), puis réencodage Dolby Digital s'il est actif. Envoyée seulement si elle change :
+   * mpv la remplace à chaud, sans relancer le fichier.
+   */
+  async syncAf() {
+    const channels = this.state['audio-params']?.channels;
+    if (typeof channels === 'string' && channels) this.layout = channels;
+    const layout = this.layout;
+    const want = afChain({
+      mode: layout ? this.audioMode : 'off',
+      layout,
+      passthrough: this.passthroughActive(),
+      failed: this.modeFailed,
+      ac3: this.ac3enc ? AC3_ENCODE : '',
+    });
+    if (want === this.af) return;
+    this.af = want;
+    this.afHasMode = want !== '' && want !== AC3_ENCODE;
+    await this.send(['set_property', 'af', want]);
+  }
+
+  /**
+   * Un filtre refusé (FFmpeg trop ancien, disposition inattendue) : mpv garde l'ancienne chaîne
+   * et l'écrit dans son journal. Le mode est alors abandonné pour ce fichier, le son continue.
+   * Un filtre « désactivé » en cours de route l'est aussi quand le son passe brut (piste Dolby
+   * choisie avec la transmission activée) : ce n'est un échec que si le son reste décodé.
+   */
+  onLog(msg) {
+    const text = String(msg.text ?? '');
+    const failed = () => {
+      if (!this.afHasMode || this.modeFailed) return;
+      this.setModeFailed(true);
+      this.af = null;
+      void this.syncAf();
+    };
+    if (msg.prefix === 'cplayer' && text.startsWith('Audio filter initialized failed')) failed();
+    else if (text.startsWith('Disabling filter lavfi')) {
+      const session = this.session;
+      setTimeout(() => session === this.session && !this.passthroughActive() && failed(), 500);
+    }
   }
 
   send(command) {
@@ -334,6 +409,11 @@ class MpvPlayer {
       case 'sid':
         // Numéro de piste donné par mpv (track-list), ou 0 pour aucune.
         return this.send(['set_property', name, Number.isInteger(value) && value > 0 ? value : 'no']);
+      case 'audioMode':
+        // Mode audio changé pendant la lecture : appliqué à chaud ; un nouveau choix efface un échec.
+        this.audioMode = modeOf(value);
+        this.setModeFailed(false);
+        return this.syncAf();
       case 'stats':
         return this.send(['script-binding', 'stats/display-stats-toggle']);
       case 'key':

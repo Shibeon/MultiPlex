@@ -1,6 +1,6 @@
 import { RelaySetting } from '../togetherui';
 import { tvDevice } from '../platform';
-import { QUALITIES } from '@multiplex/core';
+import { AUDIO_MODES, QUALITIES, audioModeOf } from '@multiplex/core';
 import type { ComponentChildren } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { t } from '../i18n';
@@ -279,6 +279,16 @@ export function SettingsPage() {
         <Toggle k="directPlay" label={t('set.directPlay')} />
         {!(nativeAvailable.value && s.nativePlayer) && <Toggle k="hdrServerOnSdr" label={t('set.hdrServerOnSdr')} />}
         <Toggle k="autoNext" label={t('set.autoNext')} />
+        <Row label={t('set.audioMode')}>
+          <select value={audioModeOf(s.audioMode)} onChange={(e) => update({ audioMode: audioModeOf(e.currentTarget.value) })}>
+            {AUDIO_MODES.map((m) => (
+              <option key={m} value={m}>
+                {t(`audio.${m}`)}
+              </option>
+            ))}
+          </select>
+        </Row>
+        <p class="muted">{t('set.audioModeHelp')}</p>
         {!!native?.segments && <Toggle k="communityMarkers" label={t('set.communityMarkers')} />}
         {!!native?.segments && <p class="muted">{t('set.communityMarkersHelp')}</p>}
         {!!native?.thumb && s.nativePlayer && <Toggle k="seekPreview" label={t('set.seekPreview')} />}

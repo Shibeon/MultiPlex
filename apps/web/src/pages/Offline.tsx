@@ -1,4 +1,4 @@
-import { streamsOf, type Metadata } from '@multiplex/core';
+import { audioModeOf, streamsOf, type Metadata } from '@multiplex/core';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { transfers } from '../downloads';
 import { formatDuration, t } from '../i18n';
@@ -297,6 +297,7 @@ export function OfflinePlayer({ id }: { id: string }) {
           sid: streamsOf(part, 3).length || e.subs.length ? Math.max(0, sid) : undefined,
           passthrough: settings.value.passthrough,
           audioDevice: settings.value.audioDevice || undefined,
+          audioMode: audioModeOf(settings.value.audioMode),
           matchRefresh: settings.value.matchRefresh,
           seekPreview: settings.value.seekPreview,
         });

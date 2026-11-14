@@ -6,7 +6,7 @@
   "main": "boot.cjs",
   "scripts": {
     "start": "electron .",
-    "typecheck": "node --check boot.cjs && node --check main.cjs && node --check mpv.cjs && node --check updater.cjs && node --check preload.cjs && node --check display.cjs && node --check thumbs.cjs && node --check offline.cjs && node --check cast.cjs",
+    "typecheck": "node --check boot.cjs && node --check main.cjs && node --check mpv.cjs && node --check audiomode.cjs && node --check updater.cjs && node --check preload.cjs && node --check display.cjs && node --check thumbs.cjs && node --check offline.cjs && node --check cast.cjs",
     "dist": "electron-builder"
   },
   "devDependencies": {
@@ -28,6 +28,7 @@
       "base.json",
       "main.cjs",
       "mpv.cjs",
+      "audiomode.cjs",
       "updater.cjs",
       "preload.cjs",
       "display.cjs",
