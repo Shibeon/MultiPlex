@@ -1,21 +1,22 @@
 import { lockLandscape, useLandscape } from '../orientation';
 import { tvDevice } from '../platform';
 import { PillMenu, PlayerClock, PlayerOutput, PlayerSub, Pill, SkipButton, liveTechWeb } from '../playerui';
-import { QUALITIES, hdrKind, srtToVtt, streamsOf, techBadges, type Media, type Metadata, type PlaybackPlan, type Stream } from '@multiplex/core';
+import { AUDIO_MODES, QUALITIES, audioModeOf, webAudioSafe, type AudioMode, hdrKind, srtToVtt, streamsOf, techBadges, type Media, type Metadata, type PlaybackPlan, type Stream } from '@multiplex/core';
 import type Hls from 'hls.js';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { serverThumbs } from '../thumbs';
 import { formatClock, t } from '../i18n';
 import { back, go, route } from '../router';
 import { withCommunityMarkers } from '../markers';
-import { settings } from '../settings';
+import { settings, update } from '../settings';
+import { AudioGraph, corsReadable, graphOf, webAudioAvailable } from '../audiograph';
 import { invalidate, server } from '../store';
 import { dequeue, upNext } from '../queue';
 import { Icon, Spinner, labels, SeekPreview } from '../ui';
 import { castApi, castEnabled, openCast } from '../cast';
 import { attachPlayer } from '../together';
 
-type Menu = null | 'audio' | 'sub' | 'quality' | 'speed' | 'chapter' | 'version' | 'more';
+type Menu = null | 'audio' | 'sub' | 'quality' | 'speed' | 'chapter' | 'version' | 'audiomode' | 'more';
 
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
@@ -79,6 +80,20 @@ export function Player({ id }: { id: string }) {
   const [stats, setStats] = useState<string[] | null>(null);
   const [ui, setUi] = useState({ playing: false, time: 0, duration: 0, buffering: true, muted: false, reason: '' });
   const patch = (p: Partial<typeof ui>) => setUi((u) => ({ ...u, ...p }));
+
+  // Mode audio (Web Audio, voir audiograph.ts). Un élément <video> branché sur Web Audio ne peut
+  // plus jouer sans : quand le média suivant ne le permet pas (ou que le mode est désactivé),
+  // le lecteur remplace l'élément (`videoKey`) et reprend au même endroit.
+  const [videoKey, setVideoKey] = useState(0);
+  const restartAt = useRef<number | null>(null);
+  const graph = useRef<AudioGraph | null>(null);
+  /** Le média en cours peut-il passer par Web Audio : oui, non, ou pas encore vérifié (CORS). */
+  const audioSafe = useRef<boolean | null>(null);
+  /** Le garde-fou a entendu du silence : plus de mode audio pour ce titre. */
+  const audioBlocked = useRef(false);
+  const failNoticed = useRef(false);
+  const [audioUi, setAudioUi] = useState({ shown: webAudioAvailable(), waiting: false, failed: false });
+  const patchAudio = (p: Partial<typeof audioUi>) => setAudioUi((a) => ({ ...a, ...p }));
 
   const media = item?.Media?.[choice.current.media] ?? item?.Media?.[0];
   const part = media?.Part?.[0];
@@ -162,6 +177,33 @@ export function Player({ id }: { id: string }) {
       // On le préfère à la lecture HLS native : lui seul affiche les sous-titres livrés à part.
       const HlsLib = p.mode === 'hls' ? (await import('hls.js')).default : null;
       if (mine !== gen.current) return;
+      // Mode audio : ce média peut-il passer par Web Audio sans être muet ?
+      const mode = audioModeOf(settings.value.audioMode);
+      dropPendingAudio();
+      const kind = HlsLib?.isSupported() ? 'mse' : p.mode === 'hls' ? 'native-hls' : 'direct';
+      const claimed = !!graphOf(v);
+      let safe: boolean | null = webAudioSafe({ kind, url: p.url, pageOrigin: location.origin });
+      let cors = false;
+      if (!safe && kind === 'direct' && webAudioAvailable() && !audioBlocked.current) {
+        // Vérifié seulement si l'on en a besoin : la lecture par défaut ne change pas.
+        if (mode !== 'off' || claimed) {
+          cors = await corsReadable(p.url);
+          if (mine !== gen.current) return;
+          safe = cors;
+        } else safe = null;
+      }
+      if (audioBlocked.current) safe = false;
+      // Élément déjà branché : il ne rejouera ce média qu'avec Web Audio. S'il ne le faut pas
+      // (mode désactivé) ou s'il ne le peut pas (CORS absent), on prend un élément neuf.
+      if (claimed && (mode === 'off' || !safe)) return remount(at);
+      if (cors) v.crossOrigin = 'anonymous';
+      else v.removeAttribute('crossorigin');
+      audioSafe.current = safe;
+      // Mode enregistré mais inapplicable ici : l'entrée disparaît de « Plus », et on le dit une fois.
+      const failed = mode !== 'off' && safe === false && !failNoticed.current;
+      if (failed) failNoticed.current = true;
+      patchAudio({ shown: webAudioAvailable() && safe !== false, failed });
+
       if (HlsLib?.isSupported()) {
         // Réglages pour les gros fichiers (4K d'origine copiée, 50 à 100 Mbps) : par défaut, hls.js
         // plafonne l'avance à 60 Mo (6 s à 80 Mbps, d'où des arrêts) et garde tout ce qui a été lu,
@@ -200,14 +242,79 @@ export function Player({ id }: { id: string }) {
       v.defaultPlaybackRate = c.speed;
       v.playbackRate = c.speed;
       v.play().catch(() => {});
+      if (mode !== 'off' && safe) attachAudio(mode);
     } catch (e) {
       if (mine === gen.current) setError((e as Error).message);
     }
   };
 
+  /** Canaux de la piste qui sort (inconnus si le serveur réencode l'audio). */
+  const audioChannels = (): number | undefined => {
+    if (plan.current?.audio === 'transcode') return undefined;
+    const p = (itemRef.current?.Media?.[choice.current.media] ?? itemRef.current?.Media?.[0])?.Part?.[0];
+    const list = streamsOf(p, 2);
+    return (list.find((s) => s.id === choice.current.audio) ?? list[0])?.channels;
+  };
+
+  /** Graphe qui attend encore un geste pour se brancher (l'élément n'est pas touché) : abandonné. */
+  const dropPendingAudio = () => {
+    if (!graph.current || graph.current.connected) return;
+    graph.current.dispose();
+    graph.current = null;
+    patchAudio({ waiting: false });
+  };
+
+  const attachAudio = (mode: AudioMode) => {
+    const el = video.current;
+    if (!el) return;
+    graph.current = AudioGraph.attach(el, mode, audioChannels(), {
+      onWaiting: (waiting) => patchAudio({ waiting }),
+      onSilent: () => {
+        // Le navigateur ne livre que du silence (décodage matériel, média protégé…) : élément
+        // neuf, sans Web Audio, au même endroit. Le réglage reste ; il vaudra au titre suivant.
+        audioBlocked.current = true;
+        patchAudio({ shown: false, failed: true, waiting: false });
+        if (el === video.current) remount(el.currentTime);
+      },
+    });
+  };
+
+  /** Remplace l'élément <video> (le précédent reste branché sur Web Audio) et relance la lecture. */
+  const remount = (at: number) => {
+    gen.current++;
+    graph.current?.dispose();
+    graph.current = null;
+    restartAt.current = at;
+    setVideoKey((k) => k + 1);
+  };
+  useEffect(() => {
+    const at = restartAt.current;
+    if (at === null || !video.current) return;
+    restartAt.current = null;
+    void start(at);
+  }, [videoKey]);
+  useEffect(() => () => graph.current?.dispose(), []);
+
+  /** Mode choisi dans « Plus » : appliqué tout de suite au média en cours. */
+  const chooseAudioMode = (mode: AudioMode) => {
+    update({ audioMode: mode });
+    patchAudio({ failed: false });
+    failNoticed.current = false;
+    const el = video.current;
+    if (!el || !plan.current) return;
+    const g = graphOf(el) ?? (graph.current?.el === el ? graph.current : undefined);
+    if (g && (g.connected || mode !== 'off')) return g.setMode(mode, audioChannels());
+    dropPendingAudio();
+    if (mode === 'off') return;
+    if (audioSafe.current) attachAudio(mode);
+    // Fichier d'un autre serveur chargé sans CORS : rechargé (après vérification) au même endroit.
+    else if (audioSafe.current === null) void start(el.currentTime);
+  };
+
   // Chargement de l'élément, puis de l'épisode suivant.
   useEffect(() => {
     let alive = true;
+    audioBlocked.current = false;
     skipped.current.clear();
     recovered.current = false;
     setNext(null);
@@ -332,7 +439,7 @@ export function Player({ id }: { id: string }) {
       for (const ev of ['connect', 'connecting', 'disconnect']) r?.removeEventListener(ev, state);
       el.removeEventListener('webkitplaybacktargetavailabilitychanged', air);
     };
-  }, []);
+  }, [videoKey]);
   const castHere = () => {
     const el = v() as HTMLVideoElement & { remote?: { prompt(): Promise<void> }; webkitShowPlaybackTargetPicker?: () => void };
     // Application de bureau ou Chrome : notre envoi, depuis la position actuelle.
@@ -362,7 +469,7 @@ export function Player({ id }: { id: string }) {
       },
       item,
     );
-  }, [item?.ratingKey]);
+  }, [item?.ratingKey, videoKey]);
 
   const pip = () => {
     const el = v() as HTMLVideoElement & { requestPictureInPicture?: () => Promise<unknown> };
@@ -411,6 +518,7 @@ export function Player({ id }: { id: string }) {
     }
     if (kind === 'chapter') return void (v().currentTime = Number(value) / 1000);
     if (kind === 'more') return moreAction(String(value));
+    if (kind === 'audiomode') return chooseAudioMode(audioModeOf(value));
     if (kind === 'version') {
       // Autre fichier du même titre : ses propres pistes par défaut.
       c.media = Number(value);
@@ -535,6 +643,7 @@ export function Player({ id }: { id: string }) {
     (item?.Media?.length ?? 0) > 1 ? { id: 'version', label: t('player.version'), on: false } : null,
     { id: 'quality', label: `${t('player.quality')} · ${QUALITIES.find((q) => q.id === choice.current.quality)?.label ?? ''}`, on: false },
     { id: 'speed', label: `${t('player.speed')} · ${choice.current.speed === 1 ? 'Normale' : `×${choice.current.speed}`}`, on: false },
+    audioUi.shown ? { id: 'audiomode', label: `${t('player.audioMode')} · ${t(`audio.${audioModeOf(settings.value.audioMode)}`)}`, on: audioModeOf(settings.value.audioMode) !== 'off' } : null,
     { id: 'stats', label: t('player.stats'), on: !!stats },
     remote.ok || castEnabled.value ? { id: 'cast', label: t('cast.title'), on: remote.on } : null,
     document.pictureInPictureEnabled && !tvDevice ? { id: 'pip', label: t('player.pip'), on: false } : null,
@@ -552,9 +661,11 @@ export function Player({ id }: { id: string }) {
               ? chapters.map((c, i) => ({ id: c.startTimeOffset, label: `${formatClock(c.startTimeOffset / 1000)} — ${c.tag || `${t('player.chapters')} ${i + 1}`}`, on: ui.time * 1000 >= c.startTimeOffset && ui.time * 1000 < c.endTimeOffset }))
               : menu === 'version'
                 ? (item?.Media ?? []).map((m, i) => ({ id: i, label: versionLabel(m), on: i === choice.current.media }))
-                : menu === 'more'
-                  ? moreItems
-                  : [];
+                : menu === 'audiomode'
+                  ? AUDIO_MODES.map((m) => ({ id: m, label: t(`audio.${m}`), on: m === audioModeOf(settings.value.audioMode) }))
+                  : menu === 'more'
+                    ? moreItems
+                    : [];
   function moreAction(id: string) {
     if (id === 'restart') return void (v().currentTime = 0);
     if (id === 'stats') return setStats(stats ? null : readStats());
@@ -576,6 +687,7 @@ export function Player({ id }: { id: string }) {
   return (
     <div ref={root} class={`player${visible || menu || error ? ' show-ui' : ''}${menu ? ' menu-open' : ''}`} data-focus-scope onMouseMove={wake} onTouchStart={wake}>
       <video
+        key={videoKey}
         ref={video}
         playsInline
         autoPlay
@@ -596,6 +708,15 @@ export function Player({ id }: { id: string }) {
       </video>
 
       {ui.buffering && !error && <Spinner />}
+
+      {(audioUi.failed || audioUi.waiting) && (
+        <div class="player-notice" role="status">
+          <span>{t(audioUi.waiting ? 'audio.waiting' : 'audio.failed')}</span>
+          <button class="btn icon-btn" aria-label="Fermer" onClick={() => patchAudio({ failed: false, waiting: false })}>
+            ✕
+          </button>
+        </div>
+      )}
 
       {stats && (
         <div class="player-stats" role="status">
