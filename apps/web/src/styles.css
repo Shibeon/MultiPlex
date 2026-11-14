@@ -725,7 +725,9 @@ input.switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 3
 .seek-preview span { padding: 0.15em 0.6em; border-radius: 99px; font-size: 0.8rem; font-weight: 700; font-variant-numeric: tabular-nums; color: #fff; background: rgba(20, 20, 24, 0.9); }
 
 /* ---------- mode TV : lisible et pilotable depuis le canapé ---------- */
-.couch { scrollbar-width: none; }
+/* scrollbar-width ne s'hérite pas, et dès qu'un élément le fixe (.row : thin) Chromium ignore
+   ::-webkit-scrollbar : la barre de défilement des rangées restait visible sous Windows. */
+.couch, .couch * { scrollbar-width: none; }
 .couch ::-webkit-scrollbar { display: none; }
 .couch.idle, .couch.idle * { cursor: none !important; }
 /* L'élément sélectionné doit se voir de loin : contour épais, halo, léger agrandissement. */
