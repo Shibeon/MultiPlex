@@ -9,6 +9,7 @@ import {
   DemoServer,
   discoverId,
   discoverImage,
+  clearLogoPath,
   directPlayMime,
   hdrKind,
   luminance,
@@ -353,5 +354,22 @@ describe('serveur de démo', () => {
   });
   it('recherche', async () => {
     expect((await s.search('chroniques'))[0].type).toBe('show');
+  });
+});
+
+describe('clearLogoPath', () => {
+  const base = { ratingKey: '42' };
+  it('prend le logo de la liste d’images du serveur', () => {
+    const Image = [{ type: 'coverPoster', url: '/library/metadata/42/thumb/1' }, { type: 'clearLogo', url: '/library/metadata/42/clearLogo/7' }];
+    expect(clearLogoPath({ ...base, type: 'movie', Image })).toBe('/library/metadata/42/clearLogo/7');
+    expect(clearLogoPath({ ...base, type: 'show', Image })).toBe('/library/metadata/42/clearLogo/7');
+  });
+  it('rien quand la liste existe sans logo, ou pour un épisode ou une saison', () => {
+    expect(clearLogoPath({ ...base, type: 'movie', Image: [{ type: 'background', url: '/a' }] })).toBeUndefined();
+    expect(clearLogoPath({ ...base, type: 'episode', Image: [{ type: 'clearLogo', url: '/x' }] })).toBeUndefined();
+    expect(clearLogoPath({ ...base, type: 'season' })).toBeUndefined();
+  });
+  it('adresse générique quand le serveur ne donne pas de liste d’images', () => {
+    expect(clearLogoPath({ ...base, type: 'movie' })).toBe('/library/metadata/42/clearLogo');
   });
 });

@@ -1189,6 +1189,13 @@ body:has(.cast-bar) .tog-bar:not(.in-player) { bottom: 8.5rem; }
 .dx-kicker { font-size: 1.05rem; font-weight: 600; color: color-mix(in srgb, var(--text) 85%, transparent); text-decoration: none; }
 .dx-kicker:hover { text-decoration: underline; }
 .dx .dx-title { margin: 0.15rem 0 0; font-size: clamp(2rem, 4.2vw, 3.6rem); font-weight: 800; line-height: 1.05; letter-spacing: -0.025em; text-wrap: balance; }
+/* Logo officiel à la place du titre : proportions d'origine, jamais étiré ni recadré.
+   La boîte réserve sa hauteur pendant le chargement pour que rien ne saute. */
+.dx .dx-title-logo { display: flex; align-items: flex-end; height: clamp(5rem, 15vh, 9.5rem); margin-top: 0.4rem; }
+.dx .dx-logo { display: block; width: auto; height: auto; max-width: min(100%, 34rem); max-height: 100%; object-fit: contain; object-position: left bottom; opacity: 0; transition: opacity 0.25s ease; filter: drop-shadow(0 2px 10px rgba(0, 0, 0, 0.55)); }
+.dx .dx-title-logo.is-loaded .dx-logo { opacity: 1; }
+.tv-device .dx .dx-title-logo { height: clamp(6rem, 17vh, 11rem); }
+.tv-device .dx .dx-logo { max-width: min(100%, 38rem); transition: none; filter: none; }
 .dx .facts { margin: 0.5rem 0 0; gap: 0; font-size: clamp(1rem, 1.3vw, 1.25rem); }
 .dx .facts span + span::before { content: '·'; margin: 0 0.55em; opacity: 0.7; }
 .dx .tagline { margin: 0.4rem 0 0; }
@@ -1253,6 +1260,7 @@ a.cast-card:hover .cast-face, a.cast-card:focus-visible .cast-face { box-shadow:
   .dx .dx-art, .details.dx::after { height: 70vh; }
   .dx .dx-hero { padding-top: 38vh; }
   .dx .details-poster { display: none; }
+  .dx .dx-title-logo { height: clamp(4rem, 12vh, 7rem); }
   .details.dx::after { background: linear-gradient(to top, var(--bg) 8%, color-mix(in srgb, var(--bg) 60%, transparent) 50%, transparent 80%); }
   .dx .btn.dx-play { flex: 1 1 auto; min-width: 0; justify-content: center; }
   .dx-menu { left: auto; right: 0; transform: none; }

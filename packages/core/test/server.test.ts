@@ -172,6 +172,9 @@ describe('PlexServer contre un faux PMS', () => {
     const u = new URL(srv.image('/library/metadata/10/thumb/1', 320, 480));
     expect([u.pathname, u.searchParams.get('url'), u.searchParams.get('width'), u.searchParams.get('X-Plex-Token')]).toEqual(['/photo/:/transcode', '/library/metadata/10/thumb/1', '320', TOKEN]);
     expect(srv.image(undefined, 1, 1)).toBe('');
+    // Logo : PNG pour garder la transparence ; les autres images restent au format du serveur.
+    expect(new URL(srv.image('/library/metadata/10/clearLogo/2', 1000, 300, { png: true })).searchParams.get('format')).toBe('png');
+    expect(u.searchParams.get('format')).toBeNull();
     // Lecteur natif : le jeton part en en-tête, l'adresse n'en contient aucune trace.
     const file = srv.fileRequest('/library/parts/77/123/file.mkv');
     expect(file.url).toBe(`${base}/library/parts/77/123/file.mkv`);

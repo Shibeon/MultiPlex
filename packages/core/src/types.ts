@@ -301,7 +301,11 @@ export interface MediaServer {
   findByGuid(guid: string): Promise<Metadata | undefined>;
   children(ratingKey: string): Promise<Metadata[]>;
   search(query: string, limit?: number): Promise<Hub[]>;
-  image(path: string | undefined, width: number, height: number): string;
+  /**
+   * Adresse d'une image du serveur, redimensionnée. `png` garde la transparence
+   * (logos) ; sans lui, le serveur peut répondre en JPEG.
+   */
+  image(path: string | undefined, width: number, height: number, opts?: { png?: boolean }): string;
   /**
    * Accès à un fichier du serveur (clé d'une partie ou d'un sous-titre externe) pour
    * un lecteur natif. Le jeton voyage dans un en-tête, jamais dans l'adresse : celle-ci

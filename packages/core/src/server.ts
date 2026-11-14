@@ -105,10 +105,10 @@ export class PlexServer implements MediaServer {
     return hubs.filter((h) => h.Metadata?.length);
   }
 
-  image(path: string | undefined, width: number, height: number): string {
+  image(path: string | undefined, width: number, height: number, opts?: { png?: boolean }): string {
     if (!path) return '';
     if (/^(https?:|data:)/.test(path)) return path;
-    return this.url('/photo/:/transcode', { width, height, minSize: 1, upscale: 1, url: path });
+    return this.url('/photo/:/transcode', { width, height, minSize: 1, upscale: 1, url: path, ...(opts?.png ? { format: 'png' } : {}) });
   }
 
   previewThumbUrl(partId: number, ms: number): string {

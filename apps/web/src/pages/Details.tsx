@@ -1,4 +1,4 @@
-import { seasonCatalogId, techBadges, upcomingEpisodes, type Metadata } from '@multiplex/core';
+import { clearLogoPath, seasonCatalogId, techBadges, upcomingEpisodes, type Metadata } from '@multiplex/core';
 import { resolvePlayable } from '../queue';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
@@ -14,6 +14,50 @@ import { OfflineButton } from './Offline';
 import { CastButton } from '../castui';
 import { TogetherButton } from '../togetherui';
 import { CastRow, PeopleLinks } from './Person';
+
+/** Logos déjà en échec pendant la session : on n'en refait pas la demande. */
+const failedLogos = new Set<string>();
+
+/**
+ * Titre de la fiche : le logo officiel du film ou de la série quand le serveur en a un,
+ * sinon (absent, en cours d'échec, illisible) le titre en texte. Le texte reste dans le
+ * titre pour les lecteurs d'écran ; le logo garde ses proportions dans sa boîte.
+ */
+function DetailsTitle({ item }: { item: Metadata }) {
+  const srv = server.value!;
+  const path = clearLogoPath(item);
+  const src = path ? srv.image(path, 1000, 300, { png: true }) : '';
+  const [failed, setFailed] = useState(() => !src || failedLogos.has(src));
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => {
+    setFailed(!src || failedLogos.has(src));
+    setLoaded(false);
+  }, [src]);
+  if (failed) return <h1 class="dx-title">{item.title}</h1>;
+  return (
+    <h1 class={`dx-title dx-title-logo${loaded ? ' is-loaded' : ''}`}>
+      <img
+        class="dx-logo"
+        src={src}
+        alt=""
+        decoding="async"
+        onLoad={(e) => {
+          const img = e.currentTarget;
+          // Une image vide ou minuscule ne vaut pas un titre lisible.
+          if (img.naturalWidth < 40 || img.naturalHeight < 10) {
+            failedLogos.add(src);
+            setFailed(true);
+          } else setLoaded(true);
+        }}
+        onError={() => {
+          failedLogos.add(src);
+          setFailed(true);
+        }}
+      />
+      <span class="sr-only">{item.title}</span>
+    </h1>
+  );
+}
 
 function EpisodeRow({ ep }: { ep: Metadata }) {
   const srv = server.value!;
@@ -146,7 +190,7 @@ export function Details({ id }: { id: string }) {
               {kicker}
             </a>
           )}
-          <h1 class="dx-title">{item.title}</h1>
+          <DetailsTitle item={item} />
           {item.tagline && <p class="tagline">{item.tagline}</p>}
           {!!facts.length && (
             <p class="facts">
