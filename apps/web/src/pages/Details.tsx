@@ -19,11 +19,10 @@ import { CastRow, PeopleLinks } from './Person';
 const failedLogos = new Set<string>();
 
 /**
- * Titre de la fiche : le logo officiel du film ou de la série quand le serveur en a un,
- * sinon (absent, en cours d'échec, illisible) le titre en texte. Le texte reste dans le
- * titre pour les lecteurs d'écran ; le logo garde ses proportions dans sa boîte.
+ * Logo de la fiche quand le serveur en a un : `src` vide, en échec ou illisible → null,
+ * et l'appelant affiche le texte. Le logo garde ses proportions dans sa boîte.
  */
-function DetailsTitle({ item }: { item: Metadata }) {
+function useLogo(item: Metadata): { src: string; ok: boolean; loaded: boolean; img: ComponentChildren } {
   const srv = server.value!;
   const path = clearLogoPath(item);
   const src = path ? srv.image(path, 1000, 300, { png: true }) : '';
@@ -33,27 +32,54 @@ function DetailsTitle({ item }: { item: Metadata }) {
     setFailed(!src || failedLogos.has(src));
     setLoaded(false);
   }, [src]);
-  if (failed) return <h1 class="dx-title">{item.title}</h1>;
+  const fail = () => {
+    failedLogos.add(src);
+    setFailed(true);
+  };
+  const img = (
+    <img
+      class="dx-logo"
+      src={src}
+      alt=""
+      decoding="async"
+      // Une image vide ou minuscule ne vaut pas un titre lisible.
+      onLoad={(e) => (e.currentTarget.naturalWidth < 40 || e.currentTarget.naturalHeight < 10 ? fail() : setLoaded(true))}
+      onError={fail}
+    />
+  );
+  return { src, ok: !failed, loaded, img };
+}
+
+/**
+ * Titre de la fiche. Film ou série : le logo officiel à la place du titre. Saison ou
+ * épisode : le logo de la série à la place de son nom (lien vers la série), et le titre
+ * de l'épisode ou de la saison en dessous. Sans logo, le texte d'avant. Les lecteurs
+ * d'écran lisent toujours les noms.
+ */
+function DetailsTitle({ item, kicker, parentKey }: { item: Metadata; kicker?: string; parentKey?: string }) {
+  const logo = useLogo(item);
+  const box = `dx-title-logo${logo.loaded ? ' is-loaded' : ''}`;
+  if (kicker) {
+    return (
+      <>
+        {logo.ok ? (
+          <a class={`dx-kicker ${box}`} href={`#/item/${parentKey}`}>
+            {logo.img}
+            <span class="sr-only">{kicker}</span>
+          </a>
+        ) : (
+          <a class="dx-kicker" href={`#/item/${parentKey}`}>
+            {kicker}
+          </a>
+        )}
+        <h1 class={`dx-title${logo.ok ? ' dx-title-sub' : ''}`}>{item.title}</h1>
+      </>
+    );
+  }
+  if (!logo.ok) return <h1 class="dx-title">{item.title}</h1>;
   return (
-    <h1 class={`dx-title dx-title-logo${loaded ? ' is-loaded' : ''}`}>
-      <img
-        class="dx-logo"
-        src={src}
-        alt=""
-        decoding="async"
-        onLoad={(e) => {
-          const img = e.currentTarget;
-          // Une image vide ou minuscule ne vaut pas un titre lisible.
-          if (img.naturalWidth < 40 || img.naturalHeight < 10) {
-            failedLogos.add(src);
-            setFailed(true);
-          } else setLoaded(true);
-        }}
-        onError={() => {
-          failedLogos.add(src);
-          setFailed(true);
-        }}
-      />
+    <h1 class={`dx-title ${box}`}>
+      {logo.img}
       <span class="sr-only">{item.title}</span>
     </h1>
   );
@@ -185,12 +211,7 @@ export function Details({ id }: { id: string }) {
       <div class="details-main dx-hero">
         {poster && <img class="details-poster" src={srv.image(poster, 600, 900)} alt="" />}
         <div class="details-info">
-          {kicker && (
-            <a class="dx-kicker" href={`#/item/${parentKey}`}>
-              {kicker}
-            </a>
-          )}
-          <DetailsTitle item={item} />
+          <DetailsTitle item={item} kicker={kicker} parentKey={parentKey} />
           {item.tagline && <p class="tagline">{item.tagline}</p>}
           {!!facts.length && (
             <p class="facts">

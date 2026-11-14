@@ -1194,6 +1194,8 @@ body:has(.cast-bar) .tog-bar:not(.in-player) { bottom: 8.5rem; }
 .dx .dx-title-logo { display: flex; align-items: flex-end; height: clamp(5rem, 15vh, 9.5rem); margin-top: 0.4rem; }
 .dx .dx-logo { display: block; width: auto; height: auto; max-width: min(100%, 34rem); max-height: 100%; object-fit: contain; object-position: left bottom; opacity: 0; transition: opacity 0.25s ease; filter: drop-shadow(0 2px 10px rgba(0, 0, 0, 0.55)); }
 .dx .dx-title-logo.is-loaded .dx-logo { opacity: 1; }
+.dx .dx-title.dx-title-sub { font-size: clamp(1.4rem, 2.4vw, 2.1rem); margin-top: 0.5rem; }
+.dx a.dx-title-logo:hover { text-decoration: none; }
 .tv-device .dx .dx-title-logo { height: clamp(6rem, 17vh, 11rem); }
 .tv-device .dx .dx-logo { max-width: min(100%, 38rem); transition: none; filter: none; }
 .dx .facts { margin: 0.5rem 0 0; gap: 0; font-size: clamp(1rem, 1.3vw, 1.25rem); }
@@ -1260,7 +1262,10 @@ a.cast-card:hover .cast-face, a.cast-card:focus-visible .cast-face { box-shadow:
   .dx .dx-art, .details.dx::after { height: 70vh; }
   .dx .dx-hero { padding-top: 38vh; }
   .dx .details-poster { display: none; }
-  .dx .dx-title-logo { height: clamp(4rem, 12vh, 7rem); }
+  /* Téléphone : comme Plex, le logo est centré et prend presque toute la largeur. */
+  .dx .dx-title-logo { height: clamp(6rem, 22vw, 9rem); justify-content: center; justify-self: stretch; width: 100%; }
+  .dx .dx-logo { max-width: 100%; object-position: center bottom; }
+  .dx .dx-title.dx-title-sub { justify-self: center; text-align: center; }
   .details.dx::after { background: linear-gradient(to top, var(--bg) 8%, color-mix(in srgb, var(--bg) 60%, transparent) 50%, transparent 80%); }
   .dx .btn.dx-play { flex: 1 1 auto; min-width: 0; justify-content: center; }
   .dx-menu { left: auto; right: 0; transform: none; }

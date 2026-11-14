@@ -85,14 +85,20 @@ export function discoverImage(item: Metadata, kind: 'poster' | 'background'): st
 /**
  * Logo (« clear logo ») d'un film ou d'une série : image au fond transparent que le
  * serveur Plex récupère lui-même auprès de ses sources (TMDB, Fanart.tv) et choisit
- * selon la langue de la bibliothèque. Undefined pour les autres types, ou quand la
- * liste d'images du serveur n'en contient pas. Sans liste d'images (serveur ancien),
- * on demande l'adresse générique ; une réponse en erreur ramène au titre en texte.
+ * selon la langue de la bibliothèque. Une saison ou un épisode prend celui de sa série
+ * (la liste d'images d'un épisode nomme déjà la série). Undefined pour les autres types,
+ * ou quand la liste d'images du serveur n'en contient pas. Sans liste d'images (serveur
+ * ancien), on demande l'adresse générique ; une réponse en erreur ramène au texte.
  */
-export function clearLogoPath(item: Pick<Metadata, 'type' | 'ratingKey' | 'Image'>): string | undefined {
-  if (item.type !== 'movie' && item.type !== 'show') return undefined;
-  if (item.Image) return item.Image.find((i) => i.type === 'clearLogo' && i.url)?.url;
-  return item.ratingKey ? `/library/metadata/${item.ratingKey}/clearLogo` : undefined;
+export function clearLogoPath(item: Pick<Metadata, 'type' | 'ratingKey' | 'parentRatingKey' | 'grandparentRatingKey' | 'Image'>): string | undefined {
+  const owner =
+    item.type === 'movie' || item.type === 'show' ? item.ratingKey : item.type === 'season' ? item.parentRatingKey : item.type === 'episode' ? item.grandparentRatingKey : undefined;
+  if (!owner) return undefined;
+  const listed = item.Image?.find((i) => i.type === 'clearLogo' && i.url)?.url;
+  if (listed) return listed;
+  // La liste d'une saison ne porte pas toujours le logo de la série : on le demande à la série.
+  if (item.Image && owner === item.ratingKey) return undefined;
+  return `/library/metadata/${owner}/clearLogo`;
 }
 
 type SearchResponse = { MediaContainer: { SearchResults?: { SearchResult?: { Metadata?: Metadata; score?: number }[] }[] } };

@@ -364,10 +364,14 @@ describe('clearLogoPath', () => {
     expect(clearLogoPath({ ...base, type: 'movie', Image })).toBe('/library/metadata/42/clearLogo/7');
     expect(clearLogoPath({ ...base, type: 'show', Image })).toBe('/library/metadata/42/clearLogo/7');
   });
-  it('rien quand la liste existe sans logo, ou pour un épisode ou une saison', () => {
+  it('rien quand la liste existe sans logo, ni pour une personne ou une collection', () => {
     expect(clearLogoPath({ ...base, type: 'movie', Image: [{ type: 'background', url: '/a' }] })).toBeUndefined();
-    expect(clearLogoPath({ ...base, type: 'episode', Image: [{ type: 'clearLogo', url: '/x' }] })).toBeUndefined();
-    expect(clearLogoPath({ ...base, type: 'season' })).toBeUndefined();
+    expect(clearLogoPath({ ...base, type: 'collection' })).toBeUndefined();
+  });
+  it('épisode et saison : le logo de la série', () => {
+    expect(clearLogoPath({ ...base, type: 'episode', grandparentRatingKey: '7', Image: [{ type: 'clearLogo', url: '/library/metadata/7/clearLogo/3' }] })).toBe('/library/metadata/7/clearLogo/3');
+    expect(clearLogoPath({ ...base, type: 'season', parentRatingKey: '7', Image: [{ type: 'coverPoster', url: '/p' }] })).toBe('/library/metadata/7/clearLogo');
+    expect(clearLogoPath({ ...base, type: 'episode' })).toBeUndefined();
   });
   it('adresse générique quand le serveur ne donne pas de liste d’images', () => {
     expect(clearLogoPath({ ...base, type: 'movie' })).toBe('/library/metadata/42/clearLogo');
