@@ -6,6 +6,10 @@ name: prune-artifacts
 # d'un jour, chaque nuit et à la demande (onglet Actions → « Run workflow »).
 
 on:
+  # Aussi quand ce fichier change sur main : premier ménage dès son arrivée.
+  push:
+    branches: [main]
+    paths: [.github/workflows/prune-artifacts.yml]
   schedule:
     - cron: '17 3 * * *'
   workflow_dispatch:
