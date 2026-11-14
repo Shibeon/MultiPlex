@@ -1,6 +1,22 @@
 [
   {
     "versions": {
+      "desktop": "0.1.32",
+      "web": "0.1.32",
+      "android": "0.1.32",
+      "tv": "0.1.32"
+    },
+    "fr": [
+      "Fiches : le logo officiel du film ou de la série remplace le titre (celui de la série sur les épisodes et saisons), quand votre serveur Plex en a un ; sinon le titre reste en texte.",
+      "Fiches : la page prend les couleurs de son image, comme dans Plex."
+    ],
+    "en": [
+      "Details: the official movie or show logo replaces the title (the show's logo on episodes and seasons) when your Plex server has one; otherwise the title stays as text.",
+      "Details: the page takes on the colours of its artwork, as in Plex."
+    ]
+  },
+  {
+    "versions": {
       "desktop": "0.1.31",
       "web": "0.1.31",
       "android": "0.1.31",
