@@ -20,6 +20,8 @@ permissions:
 jobs:
   image:
     runs-on: ubuntu-latest
+    # D'ordinaire 4 minutes ; un build arm64 sous QEMU est déjà resté bloqué plus d'une heure.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - name: Version de l'application
