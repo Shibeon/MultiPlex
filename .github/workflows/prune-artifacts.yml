@@ -3,7 +3,7 @@ name: prune-artifacts
 # Les artefacts ne servent qu'à passer les fichiers d'un job à l'autre (les versions
 # publiées vivent dans le dépôt des versions). GitHub les gardait 90 jours, jusqu'à
 # remplir le quota de stockage et bloquer toute compilation : on supprime ceux de plus
-# d'un jour, chaque nuit et à la demande (onglet Actions → « Run workflow »).
+# de trois heures, chaque nuit et à la demande (onglet Actions → « Run workflow »).
 
 on:
   # Aussi quand ce fichier change sur main : premier ménage dès son arrivée.
@@ -21,12 +21,12 @@ jobs:
   prune:
     runs-on: ubuntu-latest
     steps:
-      - name: Supprimer les artefacts de plus d'un jour
+      - name: Supprimer les artefacts de plus de trois heures
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         run: |
-          cutoff=$(date -u -d '1 day ago' +%Y-%m-%dT%H:%M:%SZ)
+          cutoff=$(date -u -d '3 hours ago' +%Y-%m-%dT%H:%M:%SZ)
           gh api --paginate "repos/$REPO/actions/artifacts?per_page=100" \
             --jq ".artifacts[] | select(.expired == false and .created_at < \"$cutoff\") | .id" |
           while read -r id; do
