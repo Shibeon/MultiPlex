@@ -13,6 +13,7 @@ import {
   pickConnection,
   randomId,
   switchHomeUser,
+  describeClient,
   type ClientInfo,
   type Community,
   type Discover,
@@ -26,15 +27,8 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { go } from './router';
 import { load, save, settings } from './settings';
 import { refreshOffline, syncOffline } from './offline';
-
-function browserName(): string {
-  const ua = navigator.userAgent;
-  if (/Firefox\//.test(ua)) return 'Firefox';
-  if (/Edg\//.test(ua)) return 'Microsoft Edge';
-  if (/Chrome\//.test(ua)) return 'Chrome';
-  if (/Safari\//.test(ua)) return 'Safari';
-  return 'Chrome';
-}
+import { native } from './native';
+import { VERSION, platform, tvDevice } from './platform';
 
 let clientId = load<string>('mp.clientId');
 if (!clientId) {
@@ -42,13 +36,21 @@ if (!clientId) {
   save('mp.clientId', clientId);
 }
 
+/**
+ * Identité envoyée à Plex (serveurs et plex.tv) : le vrai numéro de version de cette application,
+ * le système réel et un nom lisible, que montrent le tableau de bord du serveur et la liste des
+ * appareils du compte.
+ */
 export const client: ClientInfo = {
   clientId,
-  product: 'MultiPlex',
-  version: '0.1.0',
-  platform: browserName(),
-  device: navigator.platform || 'Web',
-  deviceName: 'MultiPlex',
+  ...describeClient({
+    app: platform,
+    version: VERSION,
+    userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+    nativeOs: native?.platform,
+    nativeOsVersion: native?.osVersion,
+    androidTv: platform === 'android' && tvDevice,
+  }),
 };
 
 interface Auth {

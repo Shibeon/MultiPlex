@@ -6,7 +6,13 @@ export interface ClientInfo {
   product: string;
   version: string;
   platform: string;
+  /** Version du système ou du navigateur, si elle est connue. */
+  platformVersion?: string;
   device: string;
+  /** Modèle de l'appareil, si on le connaît. */
+  model?: string;
+  /** Fabricant de l'appareil (téléviseurs). */
+  vendor?: string;
   deviceName: string;
 }
 

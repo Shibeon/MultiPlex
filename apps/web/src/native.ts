@@ -87,6 +87,8 @@ export interface NativeApi {
   /** Sorties audio de la machine ; absent des versions de l'app qui ne le proposent pas. */
   audioDevices?(): Promise<{ id: string; label: string }[]>;
   platform?: string;
+  /** Version du système (`process.getSystemVersion()`) ; absente des anciennes versions de l'app. */
+  osVersion?: string;
   /** Application de bureau : télécharge le fichier d'un titre ; Windows demande où l'enregistrer. */
   /** Renvoie le numéro du téléchargement (0 = refusé). */
   download?(url: string, headers: Record<string, string>, name: string): Promise<number>;

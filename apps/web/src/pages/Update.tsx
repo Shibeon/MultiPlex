@@ -1,8 +1,7 @@
 import { effect, signal } from '@preact/signals';
 import { useState } from 'preact/hooks';
 import changelog from '../changelog.json';
-import versions from '../../../../versions.json';
-import { platform, tvDevice } from '../platform';
+import { VERSION, platform, tvDevice } from '../platform';
 import { load, save } from '../settings';
 import { t } from '../i18n';
 import { isOverlayWindow, native, type UpdateState } from '../native';
@@ -38,8 +37,6 @@ const LOG: Notes[] = (changelog as Entry[]).reduce<Notes[]>((out, e) => {
   else out.push({ version, fr: e.fr, en: e.en });
   return out;
 }, []);
-/** Version de cette plateforme (versions.json : bureau, web, Android et TV ont chacun la leur). */
-export const VERSION: string = (versions as Record<string, string>)[platform];
 const lines = (n: { fr: string[]; en: string[] }) => (settings.value.lang === 'fr' ? n.fr : n.en);
 
 const newer = (a: string, b: string) => {
