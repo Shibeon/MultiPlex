@@ -19,6 +19,8 @@ import type {
 } from './types';
 
 type Params = Record<string, string | number | undefined>;
+/** Taille des pages lues pour l'index des identifiants externes. */
+const GUID_PAGE = 500;
 
 /**
  * Client d'un Plex Media Server. Tous les paramètres X-Plex-* passent dans
@@ -96,6 +98,27 @@ export class PlexServer implements MediaServer {
 
   async findByGuid(guid: string): Promise<Metadata | undefined> {
     return (await this.mc<{ Metadata?: Metadata[] }>('/library/all', { guid })).Metadata?.[0];
+  }
+
+  async libraryGuids(): Promise<Metadata[]> {
+    // Le serveur ne filtre pas sur un identifiant externe : on lit les films et séries avec leurs
+    // `Guid` (includeGuids=1), par pages, et l'appelant en fait un index (python-plexapi fait de même).
+    const out: Metadata[] = [];
+    for (const lib of await this.libraries()) {
+      if (lib.type !== 'movie' && lib.type !== 'show') continue;
+      for (let start = 0; ; start += GUID_PAGE) {
+        const mc = await this.mc<{ Metadata?: Metadata[]; totalSize?: number; size?: number }>(`/library/sections/${lib.key}/all`, {
+          type: lib.type === 'movie' ? 1 : 2,
+          includeGuids: 1,
+          'X-Plex-Container-Start': start,
+          'X-Plex-Container-Size': GUID_PAGE,
+        });
+        const page = mc.Metadata ?? [];
+        for (const m of page) out.push({ ratingKey: m.ratingKey, type: m.type, title: m.title, year: m.year, guid: m.guid, Guid: m.Guid } as Metadata);
+        if (page.length < GUID_PAGE || start + page.length >= (mc.totalSize ?? Infinity)) break;
+      }
+    }
+    return out;
   }
 
   async children(ratingKey: string): Promise<Metadata[]> {

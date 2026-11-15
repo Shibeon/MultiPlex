@@ -8,7 +8,8 @@ import { go } from '../router';
 import { settings } from '../settings';
 import { discover, server, useData } from '../store';
 import { Card, ErrorBox, Icon, Spinner } from '../ui';
-import { DiscoverCard, useAvailability } from './Discover';
+import { localOf as localFrom, useAvailability } from '../availability';
+import { DiscoverCard } from './Discover';
 
 /** Ce qu'on sait déjà d'une personne en arrivant sur sa fiche (nom et photo vus sur une fiche de film). */
 const known = new Map<string, { name: string; thumb?: string }>();
@@ -262,7 +263,7 @@ export function PersonPage({ id }: { id: string }) {
           </h2>
           <Carousel>
             {g.credits.slice(0, ROW_LIMIT).map((c, i) => (
-              <DiscoverCard key={`${c.item.ratingKey}${i}`} item={c.item} local={localOf(c.item)} note={c.role ?? ''} />
+              <DiscoverCard key={`${c.item.ratingKey}${i}`} item={c.item} local={localFrom(localOf(c.item))} note={c.role ?? ''} />
             ))}
           </Carousel>
         </section>

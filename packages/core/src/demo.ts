@@ -10,6 +10,32 @@ const ADJ = ['Dernier', 'Grand', 'Petit', 'Étrange', 'Lointain', 'Sombre', 'Pre
 const NOUN = ['Voyage', 'Hiver', 'Rivage', 'Horizon', 'Jardin', 'Signal', 'Phare', 'Désert', 'Orage', 'Matin', 'Atlas', 'Secret'];
 const TEST_STREAM = 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8';
 
+/**
+ * Liste de suivi de démonstration : trois titres du catalogue renvoient au serveur de démonstration,
+ * pour montrer les trois états de disponibilité (voir availability.ts et DemoDiscover).
+ * - le premier a le même identifiant Plex qu'un film du serveur : disponible ;
+ * - le deuxième n'a pas le même identifiant Plex, mais le même identifiant TMDB : disponible ;
+ * - pour le troisième, la recherche échoue comme sur un serveur injoignable : à vérifier.
+ */
+export const DEMO_LINKED = {
+  /** Film du serveur (index de génération) et identifiant Plex partagé avec le catalogue. */
+  sameGuid: { movie: 4, guid: 'plex://movie/5d776b59ad5437001f79c6f8' },
+  /** Film du serveur retrouvé par son identifiant TMDB (identifiants fictifs). */
+  sameTmdb: { movie: 7, guid: 'plex://movie/5d776b59ad5437001f79c6f9', tmdb: 'tmdb://990001', imdb: 'imdb://tt9900001', catalogueGuid: 'plex://movie/5d776b59ad5437001f79c6fb' },
+  /** Titre dont la recherche échoue. */
+  unreachable: { guid: 'plex://movie/5d776b59ad5437001f79c6fa', title: 'La Maison des vagues', year: 2025 },
+};
+
+/** Titre d'un film du serveur de démonstration, d'après son index de génération. */
+export function demoMovieTitle(i: number): string {
+  return `Le ${ADJ[i % ADJ.length]} ${NOUN[Math.floor(i / ADJ.length) % NOUN.length]}${i >= 120 ? ` ${Math.floor(i / 120) + 1}` : ''}`;
+}
+
+/** Année d'un film du serveur de démonstration. */
+export function demoMovieYear(i: number): number {
+  return 1980 + ((i * 13) % 45);
+}
+
 function poster(title: string, hue: number, wide = false): string {
   const [w, h] = wide ? [640, 360] : [400, 600];
   const esc = title.replace(/&/g, '&amp;').replace(/</g, '&lt;');
@@ -38,7 +64,7 @@ function build(): Map<string, Metadata & { _section: string; _children?: string[
   const db = new Map<string, Metadata & { _section: string; _children?: string[] }>();
   let n = 0;
   for (let i = 0; i < 240; i++) {
-    const title = `Le ${ADJ[i % ADJ.length]} ${NOUN[Math.floor(i / ADJ.length) % NOUN.length]}${i >= 120 ? ` ${Math.floor(i / 120) + 1}` : ''}`;
+    const title = demoMovieTitle(i);
     const hue = (i * 47) % 360;
     const key = String(++n);
     db.set(key, {
@@ -46,7 +72,7 @@ function build(): Map<string, Metadata & { _section: string; _children?: string[
       ratingKey: key,
       type: 'movie',
       title,
-      year: 1980 + ((i * 13) % 45),
+      year: demoMovieYear(i),
       summary: `« ${title} » est un film de démonstration. Connectez votre compte Plex pour retrouver votre vraie bibliothèque.`,
       thumb: poster(title, hue),
       art: poster(title, hue, true),
@@ -66,6 +92,8 @@ function build(): Map<string, Metadata & { _section: string; _children?: string[
       contentRating: 'Tous publics',
       Genre: [{ tag: ['Aventure', 'Drame', 'Comédie', 'Science-fiction'][i % 4] }],
       Media: [{ id: n, container: 'mp4', videoCodec: 'h264', audioCodec: 'aac', videoResolution: '1080', Part: [{ id: n, key: TEST_STREAM, container: 'mp4' }] }],
+      ...(i === DEMO_LINKED.sameGuid.movie ? { guid: DEMO_LINKED.sameGuid.guid } : {}),
+      ...(i === DEMO_LINKED.sameTmdb.movie ? { guid: DEMO_LINKED.sameTmdb.guid, Guid: [{ id: DEMO_LINKED.sameTmdb.imdb }, { id: DEMO_LINKED.sameTmdb.tmdb }] } : {}),
     });
   }
   for (let s = 0; s < 12; s++) {
@@ -245,7 +273,12 @@ export class DemoServer implements MediaServer {
   }
 
   async findByGuid(guid: string): Promise<Metadata | undefined> {
+    if (guid === DEMO_LINKED.unreachable.guid) throw new Error('Serveur injoignable (démonstration)');
     return [...this.db.values()].find((m) => m.guid === guid);
+  }
+
+  async libraryGuids(): Promise<Metadata[]> {
+    return this.all((m) => m.type === 'movie' || m.type === 'show');
   }
 
   async children(ratingKey: string): Promise<Metadata[]> {
