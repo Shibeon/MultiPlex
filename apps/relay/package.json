@@ -7,8 +7,8 @@
   "main": "server.mjs",
   "scripts": {
     "start": "node server.mjs",
-    "test": "node --test server.test.mjs",
-    "typecheck": "node --check server.mjs && node --check server.test.mjs"
+    "test": "node --test server.test.mjs friends.test.mjs",
+    "typecheck": "node --check server.mjs && node --check server.test.mjs && node --check friends.test.mjs"
   },
   "dependencies": {
     "ws": "8.18.3"

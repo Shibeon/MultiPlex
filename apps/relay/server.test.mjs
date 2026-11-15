@@ -67,7 +67,8 @@ test('recherche : se présente comme relais MultiPlex et ne cite que les salles 
   const r = await lookup([ROOM, OTHER, 'trop-court'], { 'x-forwarded-for': '198.51.100.1' });
   assert.equal(r.status, 200);
   assert.equal(r.headers.get('access-control-allow-origin'), '*');
-  assert.deepEqual(await r.json(), { multiplex: 'relay', found: [ROOM] });
+  // `friends` : ajouté sans rien changer au reste (un ancien client l'ignore).
+  assert.deepEqual(await r.json(), { multiplex: 'relay', found: [ROOM], friends: false });
   ws.close();
 });
 

@@ -16,6 +16,7 @@ services:
       - MAX_PEERS=16   # personnes par séance
       - MAX_ROOMS=500  # séances en même temps
       - ROOM_TTL_HOURS=12  # durée de vie d'une séance
+      # - PLEX_URL=http://192.168.1.10:32400  # séances visibles par vos amis (voir README)
     read_only: true
     security_opt:
       - no-new-privileges:true
