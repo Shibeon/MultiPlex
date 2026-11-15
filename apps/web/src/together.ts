@@ -7,10 +7,28 @@
 //
 // La synchronisation ne dépend pas du lecteur : chaque lecteur (web, mpv) fournit un petit
 // adaptateur (position, pause, lecture, saut, vitesse) et ce module s'occupe du reste.
-import type { Metadata } from '@multiplex/core';
+import {
+  DemoServer,
+  MAX_ROOM_LOOKUP,
+  b64,
+  deriveLegacy,
+  deriveSession,
+  findRoom,
+  formatInvite,
+  getServers,
+  inviteText,
+  makeSecret,
+  parseInvite,
+  relayCandidates,
+  relayDiscoverable,
+  relayUrl as coreRelayUrl,
+  roomsUrl,
+  type Metadata,
+  type PlexResource,
+} from '@multiplex/core';
 import { signal } from '@preact/signals';
 import { settings } from './settings';
-import { auth, server } from './store';
+import { auth, client, resources, server } from './store';
 
 export interface Playback {
   time(): number;
@@ -74,7 +92,14 @@ interface Bye {
 type Message = Tick | Intent | Bye;
 
 export interface TogetherState {
+  /** Invitation à partager : « MPX-K7Q2-9XFD ». */
   code: string;
+  /**
+   * Hôte seulement, faux quand ses amis ne trouveront pas le relais grâce au serveur Plex : il
+   * faut alors leur donner `fullCode`, qui porte l'adresse du relais.
+   */
+  discoverable?: boolean;
+  fullCode?: string;
   host: boolean;
   status: 'connecting' | 'open' | 'closed';
   /** Titre de la séance (celui de l'hôte). */
@@ -88,67 +113,49 @@ export const peers = signal<Peer[]>([]);
 /** Titre que lit ce lecteur-ci dans la séance (pour suivre l'hôte d'un épisode à l'autre). */
 export const playingGuid = signal<string | undefined>(undefined);
 
-const b64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-const unb64 = (s: string) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
-
 /**
- * Invitation : « MPX-<secret>@<relais> », par exemple « MPX-q3Vb8xK2mT0wZr5L@relais.exemple.fr ».
- * Le secret (96 bits tirés au hasard) donne la clé de chiffrement et le numéro de salle : le relais
- * ne reçoit que ce numéro, dont on ne peut pas remonter au secret. L'adresse du relais s'écrit sans
- * « wss:// ».
+ * Invitation : « MPX-K7Q2-9XFD », 8 signes sans adresse (voir @multiplex/core, together.ts). Le
+ * secret, salé par l'identifiant du serveur Plex de l'hôte, donne la clé de chiffrement et le
+ * numéro de salle ; le relais ne reçoit que ce numéro. L'application de l'invité retrouve le relais
+ * grâce aux serveurs Plex qu'elle voit (voir joinTogether). Quand l'hôte sait que ses amis ne le
+ * trouveront pas, il peut donner la forme de secours « MPX-K7Q2-9XFD@relais.exemple.fr ».
  *
- * Les anciennes invitations (« MPX- » suivi de relais, salle et clé en JSON) restent acceptées.
+ * Les anciennes invitations (« MPX-<secret>@<relais> », et « MPX- » suivi de JSON) restent acceptées.
  */
-export type Invite = { relay: string; secret: string } | { relay: string; room: string; key: string };
-
-const SECRET_BYTES = 12;
-
-export function makeCode(relay: string, secret: string): string {
-  return `MPX-${secret}@${relay.replace(/^wss:\/\//, '')}`;
-}
-
-export function parseCode(code: string): Invite | null {
-  const text = code.trim();
-  const short = /MPX-([A-Za-z0-9_-]{16})@([^\s]+)/.exec(text);
-  if (short) {
-    const relay = relayUrl(short[2]);
-    return relay ? { relay, secret: short[1] } : null;
-  }
-  const m = /MPX-([A-Za-z0-9_-]{20,600})/.exec(text);
-  if (!m) return null;
-  try {
-    const j = JSON.parse(new TextDecoder().decode(unb64(m[1]))) as { r?: string; i?: string; k?: string };
-    if (!j.r || !/^wss?:\/\//.test(j.r) || !j.i || !/^[A-Za-z0-9_-]{16,64}$/.test(j.i) || !j.k || unb64(j.k).length !== 32) return null;
-    return { relay: j.r, room: j.i, key: j.k };
-  } catch {
-    return null;
-  }
-}
-
-/** Salle et clé AES-GCM tirées du secret de l'invitation (HKDF, avec un usage différent pour chacune). */
-async function derive(c: Invite): Promise<{ room: string; key: CryptoKey }> {
-  if (!('secret' in c)) {
-    return { room: c.room, key: await crypto.subtle.importKey('raw', unb64(c.key), 'AES-GCM', false, ['encrypt', 'decrypt']) };
-  }
-  const base = await crypto.subtle.importKey('raw', unb64(c.secret), 'HKDF', false, ['deriveBits', 'deriveKey']);
-  const params = (info: string) => ({ name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: new TextEncoder().encode(info) });
-  const roomBits = await crypto.subtle.deriveBits(params('multiplex-together-room'), base, 128);
-  const key = await crypto.subtle.deriveKey(params('multiplex-together-key'), base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
-  return { room: b64(new Uint8Array(roomBits)), key };
-}
+export const parseCode = parseInvite;
 
 /** Adresse du relais saisie dans les réglages : https://… ou wss://… (sans chemin). */
-export function relayUrl(input = settings.value.togetherRelay): string {
-  const s = input.trim().replace(/\/+$/, '');
-  if (!s) return '';
+export const relayUrl = (input = settings.value.togetherRelay): string => coreRelayUrl(input);
+
+/**
+ * Serveurs Plex que voit ce compte (avec leurs connexions publiées par plex.tv) : ceux de la liste
+ * des serveurs s'ils sont déjà chargés, sinon demandés une fois à plex.tv.
+ */
+let directory: Promise<PlexResource[]> | null = null;
+function servers(): Promise<PlexResource[]> {
+  if (resources.value.length) return Promise.resolve(resources.value);
+  const a = auth.value;
+  if (!a || server.value instanceof DemoServer) return Promise.resolve([]);
+  directory ??= getServers(client, a.token).catch(() => {
+    directory = null;
+    return [];
+  });
+  return directory;
+}
+
+/** Relais déjà reconnus (ou écartés : ce n'est pas un relais MultiPlex) pendant ce lancement. */
+const knownRelays = new Map<string, boolean>();
+
+/** Demande à un relais lesquelles de ces salles existent (4 secondes au plus). */
+async function askRelay(relay: string, rooms: string[]): Promise<unknown> {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 4000);
   try {
-    const u = new URL(/^[a-z]+:\/\//i.test(s) ? s : `https://${s}`);
-    if (u.protocol === 'https:') u.protocol = 'wss:';
-    else if (u.protocol === 'http:') u.protocol = 'ws:';
-    if (u.protocol !== 'wss:' && u.protocol !== 'ws:') return '';
-    return u.toString().replace(/\/+$/, '');
-  } catch {
-    return '';
+    const r = await fetch(roomsUrl(relay, rooms), { cache: 'no-store', signal: ctl.signal });
+    if (!r.ok) throw new Error(String(r.status));
+    return await r.json();
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -334,27 +341,56 @@ function connect() {
 export async function startTogether(item?: Metadata): Promise<string> {
   const relay = relayUrl();
   if (!relay) throw new Error('relay');
-  const secret = b64(crypto.getRandomValues(new Uint8Array(SECRET_BYTES)));
-  await open({ relay, secret }, true, item ? sharedOf(item) : undefined);
-  return together.value!.code;
+  const secret = makeSecret();
+  const srv = server.value;
+  const d = await deriveSession(secret, srv?.id ?? '');
+  const code = formatInvite(secret);
+  open({ relay, ...d }, { code, fullCode: formatInvite(secret, relay) }, true, item ? sharedOf(item) : undefined);
+  // Les amis trouveront-ils ce relais grâce au serveur ? (voir relayCandidates)
+  void servers().then((list) => {
+    const mine = list.filter((r) => r.clientIdentifier === srv?.id);
+    const t = together.value;
+    if (t?.code === code) together.value = { ...t, discoverable: relayDiscoverable(relay, mine) };
+  });
+  return code;
 }
 
-/** Rejoint une séance à partir d'un code d'invitation. */
+/**
+ * Rejoint une séance à partir d'un code d'invitation. Une invitation courte ne dit ni le relais ni
+ * le serveur : on calcule la salle pour chaque serveur Plex visible (le secret est salé par celui
+ * de l'hôte), puis on la demande, en même temps, à son propre relais et aux relais que l'on peut
+ * trouver aux adresses publiques de ces serveurs (voir relayCandidates). Le relais qui connaît
+ * l'une des salles est le bon.
+ */
 export async function joinTogether(code: string): Promise<void> {
   const c = parseCode(code);
   if (!c) throw new Error('code');
-  await open(c, false);
+  if (c.v !== 3) {
+    open({ relay: c.relay, ...(await deriveLegacy(c)) }, { code: inviteText(c) }, false);
+    return;
+  }
+  const list = await servers();
+  const ids = [...new Set([server.value?.id, ...list.map((r) => r.clientIdentifier)].filter((id): id is string => !!id))].slice(0, MAX_ROOM_LOOKUP);
+  const sessions = await Promise.all(ids.map((id) => deriveSession(c.secret, id)));
+  const relays = [c.relay, relayUrl(), ...relayCandidates(list)].filter((r): r is string => !!r);
+  if (!relays.length) throw new Error('relay');
+  const found = await findRoom(
+    relays,
+    sessions.map((s) => s.room),
+    askRelay,
+    knownRelays,
+  );
+  const session = found && sessions.find((s) => s.room === found.room);
+  if (!found || !session) throw new Error('notfound');
+  open({ relay: found.relay, ...session }, { code: inviteText(c) }, false);
 }
 
-async function open(c: Invite, host: boolean, item?: SharedItem) {
+function open(d: { relay: string; room: string; key: CryptoKey }, codes: { code: string; fullCode?: string }, host: boolean, item?: SharedItem) {
   leaveTogether();
   closing = false;
-  const d = await derive(c);
-  current = { relay: c.relay, room: d.room };
+  current = { relay: d.relay, room: d.room };
   key = d.key;
-  // Une ancienne invitation se repartage telle quelle ; sinon, la forme courte.
-  const code = 'secret' in c ? makeCode(c.relay, c.secret) : `MPX-${b64(new TextEncoder().encode(JSON.stringify({ r: c.relay, i: c.room, k: c.key })))}`;
-  together.value = { code, host, status: 'connecting', item };
+  together.value = { ...codes, host, status: 'connecting', item };
   peers.value = [];
   connect();
   // Présence : un signe de vie toutes les 3 secondes ; un participant muet depuis 12 s est parti.

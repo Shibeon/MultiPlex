@@ -6,7 +6,49 @@ n'existe que dans l'invitation. Le relais ne voit ni les titres, ni les pseudos,
 
 Aucune adresse de relais n'est écrite dans MultiPlex : chacun héberge le sien (ou utilise celui
 d'un ami) et le renseigne dans **Réglages → Relais « Regarder ensemble »**. Les invités n'ont rien
-à régler : l'invitation contient l'adresse du relais de l'hôte.
+à régler : l'invitation est un code court (`MPX-K7Q2-9XFD`), sans adresse, et leur application
+retrouve le relais grâce au serveur Plex que l'hôte partage avec eux (voir
+[Pour que vos amis trouvent le relais](#pour-que-vos-amis-trouvent-le-relais)).
+
+## Pour que vos amis trouvent le relais
+
+L'application d'un invité connaît les adresses publiques des serveurs Plex partagés avec lui :
+plex.tv les lui donne, dont les **URL d'accès personnalisées** du serveur (Plex → Réglages →
+Réseau → *URL d'accès personnalisées*, « publiées sur plex.tv pour la découverte du serveur »).
+Sur chacun de ces noms (en `https`, hors adresses IP et `*.plex.direct`), elle essaie, en même
+temps et quelques secondes au plus :
+
+1. `https://<nom>:<port>/multiplex-relay`, puis `https://<nom>:<port>` ;
+2. `https://<nom>/multiplex-relay`, puis `https://<nom>` (port 443).
+
+et demande à chacun s'il connaît la séance (`GET …/rooms`). Le relais qui la connaît est le bon.
+Il suffit donc que le relais soit joignable à l'une de ces adresses. Au choix :
+
+- **Plex est déjà servi par votre proxy sous un nom** (par exemple `https://plex.exemple.fr`,
+  inscrit dans les URL d'accès personnalisées) : ajoutez à cette règle un emplacement
+  `/multiplex-relay/` vers le relais (exemple Nginx [plus bas](#sous-un-chemin-dun-nom-existant)),
+  et indiquez `https://plex.exemple.fr/multiplex-relay` dans MultiPlex ;
+- **le relais a déjà son adresse** (par exemple `https://relais.exemple.fr:1744`) : inscrivez cette
+  adresse dans les URL d'accès personnalisées du serveur Plex (à la suite des autres, séparées par
+  des virgules). Plex l'essaiera sans succès pour lui-même, ce qui ne gêne rien, et vos amis
+  trouveront le relais. Pour revenir en arrière, il suffit de l'effacer.
+
+MultiPlex n'écrit jamais rien sur votre serveur Plex : ce réglage, c'est vous qui le faites. Le
+bouton **Tester** des réglages dit si le relais est assez récent, et à la création d'une séance
+MultiPlex prévient quand vos amis ne le trouveront pas ; il propose alors de copier l'invitation
+avec l'adresse (`MPX-K7Q2-9XFD@relais.exemple.fr`), qui marche dans tous les cas. Un invité peut
+aussi indiquer le relais de l'hôte dans ses propres réglages : il est toujours essayé en premier.
+
+## Sécurité des codes courts
+
+Le code (8 signes parmi 31, ≈ 8,5 × 10¹¹ possibilités, ≈ 39,6 bits) donne, avec l'identifiant
+du serveur Plex de l'hôte, la clé de chiffrement et le numéro de salle (PBKDF2-SHA256, 200 000
+tours, puis HKDF). Le relais ne reçoit que le numéro de salle. Pour borner les essais au hasard,
+il compte chaque salle demandée et chaque entrée dans une salle : 30 par minute et par adresse
+(60 d'avance), et 10 salles inexistantes par seconde pour tout le monde ; au-delà il répond 429.
+Une salle ferme d'elle-même au bout de `ROOM_TTL_HOURS` (12 h). Derrière un proxy inverse,
+l'adresse du client est la dernière de `X-Forwarded-For` quand la connexion vient d'une adresse
+privée (`TRUST_PROXY=0` pour ne jamais s'y fier, `TRUST_PROXY=1` pour toujours s'y fier).
 
 ## Installation dans une stack (le plus simple)
 
@@ -26,7 +68,11 @@ docker compose up -d --build
 Le relais écoute sur le port **8787**. Vérification : `http://<adresse-du-nas>:8787/health` répond `ok`.
 
 Réglages possibles (variables d'environnement) : `PORT` (8787), `MAX_PEERS` (16 personnes par
-séance), `MAX_ROOMS` (500 séances en même temps).
+séance), `MAX_ROOMS` (500 séances en même temps), `ROOM_TTL_HOURS` (12 : durée de vie d'une
+séance), `TRUST_PROXY` (voir [Sécurité](#sécurité-des-codes-courts)).
+
+Mise à jour : les invitations courtes demandent un relais récent (qui répond à `/rooms`) ;
+redéployez-le (« Pull and redeploy », ou `docker compose pull && docker compose up -d`).
 
 ## Le rendre joignable depuis Internet (en HTTPS)
 
@@ -84,4 +130,5 @@ Vérification : `https://mon-nom.myasustor.com/health` répond `ok` (le premier 
 une minute, le temps d'obtenir le certificat).
 
 Puis, dans MultiPlex : **Réglages → Relais « Regarder ensemble »**, saisir `https://relais.votre-nom…`
-et cliquer sur **Tester**.
+et cliquer sur **Tester**. Pour que vos amis le trouvent sans adresse dans l'invitation, voir
+[Pour que vos amis trouvent le relais](#pour-que-vos-amis-trouvent-le-relais).

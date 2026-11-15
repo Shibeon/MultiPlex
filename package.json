@@ -8,7 +8,7 @@
     "dev": "pnpm --filter @multiplex/web dev",
     "build": "pnpm --filter @multiplex/web build",
     "preview": "pnpm --filter @multiplex/web preview",
-    "test": "pnpm --filter @multiplex/core test",
+    "test": "pnpm --filter @multiplex/core test && pnpm --filter @multiplex/relay test",
     "typecheck": "pnpm -r typecheck",
     "desktop": "pnpm fetch:mpv && pnpm build && pnpm --filter @multiplex/desktop start",
     "package:tv": "pnpm build && node scripts/package-tv.mjs",

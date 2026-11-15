@@ -1035,7 +1035,7 @@ body:has(.cast-bar) .content { padding-bottom: 9rem; }
 .tog-join { display: flex; gap: 0.5rem; }
 .tog-join input, .tog-code input { flex: 1; min-width: 0; font: inherit; padding: 0.55rem 0.8rem; border-radius: var(--radius); border: 1px solid var(--surface-2); background: var(--surface-2); color: var(--text); }
 .tog-code { display: grid; gap: 0.3rem; }
-.tog-code input { font-family: ui-monospace, monospace; font-size: 0.8rem; }
+.tog-code input { font-family: ui-monospace, monospace; font-size: 1.15rem; letter-spacing: 0.1em; }
 .tog-warn { color: #ffb74d; }
 .tog-people { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; }
 .tog-person { display: flex; align-items: center; gap: 0.45rem; }
@@ -1056,6 +1056,8 @@ body:has(.cast-bar) .tog-bar:not(.in-player) { bottom: 8.5rem; }
 .relay-setting { min-width: 0; } .relay-setting input { min-width: min(16rem, 100%); max-width: 100%; font: inherit; padding: 0.4rem 0.7rem; border-radius: var(--radius); border: 1px solid var(--surface-2); background: var(--surface-2); color: var(--text); }
 .relay-ok { color: #4caf50; }
 .relay-ko { color: #ff8a80; }
+.relay-nows, .relay-old { color: #ffb74d; }
+.relay-hint { flex-basis: 100%; }
 .player-together { position: absolute; top: 1.2rem; right: 1.2rem; z-index: 5; display: grid; justify-items: end; gap: 0.4rem; pointer-events: none; }
 .player-together .pill { display: flex; align-items: center; gap: 0.4rem; padding: 0.35rem 0.75rem; border-radius: 99px; background: rgba(0, 0, 0, 0.65); color: #fff; font-size: 0.85rem; }
 .player-together .notice { animation: cast-found 0.3s ease both; }

@@ -12,5 +12,6 @@ export * from './audio';
 export * from './drag';
 export * from './availability';
 export * from './people';
+export * from './together';
 export { PlexServer } from './server';
 export { DemoServer } from './demo';
