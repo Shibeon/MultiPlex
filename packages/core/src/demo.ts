@@ -1,5 +1,6 @@
 import { randomId } from './http';
-import type { ActiveSession, Hub, ItemsQuery, Library, LibraryOptions, MediaServer, Metadata, Page, PlaybackPlan } from './types';
+import { nameWords, peopleFromHubs } from './people';
+import type { ActiveSession, Hub, ItemsQuery, Library, LibraryOptions, MediaServer, Metadata, Page, PlaybackPlan, SearchResults } from './types';
 
 /**
  * Serveur factice : permet d'essayer et de développer l'interface sans compte
@@ -122,7 +123,7 @@ function build(): Map<string, Metadata & { _section: string; _children?: string[
       _children: seasons,
       ratingKey: showKey,
       type: 'show',
-      Role: ['Inès Morel', 'Yanis Haddad', 'Camille Roy'].map((tag, k) => ({ tag, tagKey: `demo00000000000000c${k}`, role: ['La voyageuse', 'Le guide', 'La chroniqueuse'][k] })),
+      Role: ['Inès Morel', 'Yanis Haddad', 'Camille Roy'].map((tag, k) => ({ tag, tagKey: `demo00000000000000b${k}`, role: ['La voyageuse', 'Le guide', 'La chroniqueuse'][k] })),
       title,
       year: 2010 + s,
       summary: `« ${title} » est une série de démonstration.`,
@@ -251,13 +252,30 @@ export class DemoServer implements MediaServer {
     return (this.db.get(ratingKey)?._children ?? []).map((k) => this.db.get(k)!);
   }
 
-  async search(query: string, limit = 20): Promise<Hub[]> {
+  async search(query: string, limit = 20): Promise<SearchResults> {
     const q = query.toLowerCase();
     const hit = (type: string) => this.all((m) => m.type === type && m.title.toLowerCase().includes(q)).slice(0, limit);
-    return [
+    // Comme un vrai serveur : acteurs et réalisateurs dans leurs propres rangées, en `Directory`.
+    const words = nameWords(query).join(' ');
+    const tags = (type: 'actor' | 'director') => {
+      const found = new Map<string, { tag: string; tagKey?: string; type: string; count: number }>();
+      for (const m of this.db.values()) {
+        for (const p of (type === 'actor' ? m.Role : m.Director) ?? []) {
+          if (!p.tagKey || !words || !nameWords(p.tag).join(' ').includes(words)) continue;
+          const had = found.get(p.tagKey);
+          if (had) had.count++;
+          else found.set(p.tagKey, { tag: p.tag, tagKey: p.tagKey, type: 'tag', count: 1 });
+        }
+      }
+      return [...found.values()].slice(0, limit);
+    };
+    const raw = [
       { hubIdentifier: 'movie', title: 'Films', type: 'movie', Metadata: hit('movie') },
       { hubIdentifier: 'show', title: 'Séries', type: 'show', Metadata: hit('show') },
-    ].filter((h) => h.Metadata.length);
+      { hubIdentifier: 'actor', title: 'Acteurs', type: 'actor', Directory: tags('actor') },
+      { hubIdentifier: 'director', title: 'Réalisateurs', type: 'director', Directory: tags('director') },
+    ];
+    return { hubs: raw.filter((h): h is Hub & { Metadata: Metadata[] } => !!h.Metadata?.length), people: peopleFromHubs(raw) };
   }
 
   image(path: string | undefined): string {

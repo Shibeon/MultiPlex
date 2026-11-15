@@ -354,7 +354,15 @@ describe('serveur de démo', () => {
     expect(list[0].item.viewOffset).toBeGreaterThan(0);
   });
   it('recherche', async () => {
-    expect((await s.search('chroniques'))[0].type).toBe('show');
+    const { hubs, people } = await s.search('chroniques');
+    expect(hubs[0].type).toBe('show');
+    expect(people).toEqual([]);
+  });
+  it('trouve les personnes de la distribution, une seule fois chacune', async () => {
+    const { hubs, people } = await s.search('inès morel');
+    expect(hubs).toEqual([]);
+    expect(people.map((p) => [p.key, p.name, p.jobs[0].type])).toEqual([['demo00000000000000b0', 'Inès Morel', 'actor']]);
+    expect(people[0].libraryCount).toBeGreaterThan(1);
   });
 });
 

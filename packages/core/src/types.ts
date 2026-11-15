@@ -1,3 +1,5 @@
+import type { PersonHit } from './people';
+
 /** Identité du client envoyée à Plex (X-Plex-*). */
 export interface ClientInfo {
   clientId: string;
@@ -200,6 +202,12 @@ export interface Hub {
   Metadata?: Metadata[];
 }
 
+/** Résultats d'une recherche sur un serveur. */
+export interface SearchResults {
+  hubs: Hub[];
+  people: PersonHit[];
+}
+
 export interface Page<T> {
   items: T[];
   total: number;
@@ -302,7 +310,8 @@ export interface MediaServer {
   /** Élément du serveur correspondant à un identifiant Plex universel, s'il existe. */
   findByGuid(guid: string): Promise<Metadata | undefined>;
   children(ratingKey: string): Promise<Metadata[]>;
-  search(query: string, limit?: number): Promise<Hub[]>;
+  /** Rangées de résultats (films, séries…) et personnes trouvées (acteurs, réalisateurs…). */
+  search(query: string, limit?: number): Promise<SearchResults>;
   /**
    * Adresse d'une image du serveur, redimensionnée. `png` garde la transparence
    * (logos) ; sans lui, le serveur peut répondre en JPEG.

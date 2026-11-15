@@ -23,6 +23,7 @@ const ICONS: Record<string, string> = {
   live: 'M12 9a3 3 0 1 1 0 6 3 3 0 0 1 0-6zM5.6 5.6L7 7a7 7 0 0 0 0 10l-1.4 1.4a9 9 0 0 1 0-12.8zm12.8 0a9 9 0 0 1 0 12.8L17 17a7 7 0 0 0 0-10z',
   pause: 'M6 4h4v16H6zm8 0h4v16h-4z',
   back: 'M15.5 4l1.5 1.5L10.5 12l6.5 6.5-1.5 1.5-8-8z',
+  forward: 'M8.5 4L7 5.5l6.5 6.5L7 18.5 8.5 20l8-8z',
   check: 'M9 16.2l-3.5-3.6L4 14l5 5 11-11-1.5-1.4z',
   next: 'M5 4l10 8-10 8zm11 0h3v16h-3z',
   prev: 'M19 4L9 12l10 8zM5 4h3v16H5z',
