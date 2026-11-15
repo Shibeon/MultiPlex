@@ -113,7 +113,7 @@ export const Avatar = ({ name, thumb }: { name: string; thumb?: string }) => (
   </span>
 );
 
-/** Interrupteur « Visible par mes amis », avec ce qu'il implique. */
+/** Interrupteur « Visible par mes amis Plex », avec ce qu'il implique. */
 function VisibleSwitch({ on, onChange, note }: { on: boolean; onChange: (on: boolean) => void; note?: ComponentChildren }) {
   return (
     <div class="tog-visible">

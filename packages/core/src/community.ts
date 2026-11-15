@@ -1,5 +1,6 @@
 import { identityHeaders } from './auth';
 import { request } from './http';
+import { parsePlexFriends, type PlexFriend } from './together';
 import type { ClientInfo } from './types';
 
 /**
@@ -140,4 +141,15 @@ export class DemoCommunity implements Community {
   async setSharesWatching(on: boolean): Promise<void> {
     this.shares = on;
   }
+}
+
+/**
+ * Amis Plex du compte (`GET https://plex.tv/api/users/`, l'adresse que python-plexapi lit pour
+ * MyPlexAccount.users), avec le jeton du compte, depuis l'appareil : ni ce jeton ni la liste ne
+ * passent par un relais. Seuls leurs numéros de compte partent ensuite avec l'annonce d'une
+ * séance visible (friendAllowList).
+ */
+export async function plexFriends(client: ClientInfo, token: string): Promise<PlexFriend[]> {
+  const res = await request('https://plex.tv/api/users/', { headers: { ...identityHeaders(client, token), Accept: 'application/xml' }, timeout: 10_000 });
+  return parsePlexFriends(await res.text());
 }

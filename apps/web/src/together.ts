@@ -11,9 +11,11 @@
 // participants commandent la lecture de la même façon ; volume, sous-titres, pistes et qualité
 // restent propres à chacun.
 //
-// Séances visibles par les amis : un hôte peut rendre sa séance visible à ceux qui ont accès à son
-// serveur Plex (vérifié par le relais auprès de ce serveur). Un ami autorisé la voit dans la liste
-// et y entre sans code : l'hôte lui remet le secret de l'invitation, chiffré pour lui seul.
+// Séances visibles par les amis : un hôte peut rendre sa séance visible à ses amis Plex, et à eux
+// seuls. Il joint à son annonce les numéros de compte de ses amis (lus ici, sur plex.tv, avec son
+// propre jeton) ; le relais reconnaît chacun grâce aux partages du propriétaire du serveur et ne
+// la liste qu'à eux. Un ami la voit dans la liste et y entre sans code : l'hôte lui remet le
+// secret de l'invitation, chiffré pour lui seul.
 import {
   DemoServer,
   MAX_ROOM_LOOKUP,
@@ -27,6 +29,7 @@ import {
   findRelay,
   findRoom,
   formatInvite,
+  friendAllowList,
   friendsUrl,
   getServers,
   grantRequestKeys,
@@ -35,6 +38,7 @@ import {
   makeSecret,
   openGrant,
   parseInvite,
+  plexFriends,
   relayCandidates,
   relayDiscoverable,
   relayUrl as coreRelayUrl,
@@ -349,7 +353,7 @@ function onControl(m: { t?: string; error?: string; peer?: string; pub?: string 
   if (m.t === 'announced') {
     listRetry = { at: 0, delay: 0 };
     if (t.listed !== 'yes') together.value = { ...t, listed: 'yes' };
-  } else if (m.t === 'error' && ['ticket', 'unavailable', 'owner', 'private', 'proof', 'card'].includes(m.error ?? '')) {
+  } else if (m.t === 'error' && ['ticket', 'unavailable', 'owner', 'private', 'proof', 'card', 'friends'].includes(m.error ?? '')) {
     notListed();
   } else if (m.t === 'key-request' && typeof m.peer === 'string' && typeof m.pub === 'string') {
     void handOver(m.peer, m.pub);
@@ -439,6 +443,31 @@ async function credentialFor(res: PlexResource): Promise<string | null> {
   }
 }
 
+/** Amis Plex de ce compte (numéros de compte plex.tv), relus au plus toutes les 2 minutes. */
+let myFriends: { token: string; ids: string[]; at: number } | null = null;
+const FRIENDS_TTL_MS = 2 * 60_000;
+
+/**
+ * Liste d'amis à joindre à l'annonce : lue sur plex.tv avec le jeton du compte, ici (ni le jeton
+ * ni la liste ne passent par le relais ; seuls les numéros partent avec l'annonce). null quand
+ * plex.tv ne répond pas : sans liste, la séance n'est pas listée.
+ */
+async function friendIds(): Promise<string[] | null> {
+  const a = auth.value;
+  if (!a?.token) return null;
+  if (myFriends && myFriends.token === a.token && Date.now() - myFriends.at < FRIENDS_TTL_MS) return myFriends.ids;
+  try {
+    const ids = friendAllowList(await plexFriends(client, a.token), a.user.id);
+    myFriends = { token: a.token, ids, at: Date.now() };
+    return ids;
+  } catch {
+    return null;
+  }
+}
+
+/** Liste d'amis déjà remise au relais pendant cette annonce (renvoyée seulement si elle change). */
+let friendsSent = '';
+
 /** Liste du relais pour ce jeton (jeton dans le corps : ni dans l'adresse, ni en en-tête). */
 async function askFriends(relay: string, token: string): Promise<FriendsAnswer | null> {
   const ctl = new AbortController();
@@ -456,7 +485,10 @@ async function askFriends(relay: string, token: string): Promise<FriendsAnswer |
   }
 }
 
-/** Fiche annoncée : nom de l'hôte, titre, position. Rien sur l'appareil, l'adresse ou le flux. */
+/**
+ * Fiche annoncée : titre, position (et le nom de l'hôte, que le relais remplace par celui de son
+ * compte plex.tv). Rien sur l'appareil, l'adresse ou le flux.
+ */
 function card(): FriendCard | null {
   const t = together.value;
   const it = t?.item ?? playingItem;
@@ -475,11 +507,14 @@ function notListed(): void {
 }
 
 /**
- * Hôte d'une séance visible : l'annonce au relais. La première fois, il prouve l'accès au serveur
- * (ticket) et présente la preuve d'hôte tirée du secret ; ensuite, la fiche n'est renvoyée que
- * quand elle change (titre, lecture/pause), au plus toutes les 5 s, et toutes les 15 s pour la
- * position (`refresh`). Le jeton du serveur ne part que vers un relais trouvé sur les noms publics
- * de ce serveur ET dont le Plex est ce serveur (vérifié sur /rooms, avant tout jeton).
+ * Hôte d'une séance visible : l'annonce au relais. La première fois, il prouve qui il est (ticket
+ * obtenu avec le jeton du serveur), présente la preuve d'hôte tirée du secret et la liste de ses
+ * amis Plex ; ensuite, la fiche n'est renvoyée que quand elle change (titre, lecture/pause), au
+ * plus toutes les 5 s, et toutes les 15 s pour la position (`refresh`). La liste d'amis est relue à
+ * chaque annonce (au plus toutes les 2 minutes auprès de plex.tv) et renvoyée quand elle change :
+ * un ami retiré perd la séance. Le jeton du serveur ne part que vers un relais trouvé sur les noms
+ * publics de ce serveur, dont le Plex est ce serveur ET qui ne liste qu'aux amis de l'hôte
+ * (vérifié sur /rooms, avant tout jeton).
  */
 function announce(refresh = false): void {
   const t = together.value;
@@ -492,7 +527,16 @@ function announce(refresh = false): void {
     const sig = cardSig(c);
     if (!refresh && (sig === cardSent.sig || now - cardSent.at < 5000)) return;
     cardSent = { sig, at: now };
-    return sendControl({ t: 'announce', proof: current.owner, card: c });
+    const sock = ws;
+    const proof = current.owner;
+    void friendIds().then((ids) => {
+      if (ws !== sock || announcing !== 'on') return;
+      // plex.tv muet : la fiche suit, la dernière liste remise au relais reste en place.
+      const changed = !!ids && ids.join(',') !== friendsSent;
+      if (changed) friendsSent = ids.join(',');
+      sendControl({ t: 'announce', proof, card: card() ?? c, ...(changed ? { friends: ids } : {}) });
+    });
+    return;
   }
   if (now < listRetry.at) return;
   announcing = 'asking';
@@ -504,10 +548,12 @@ function announce(refresh = false): void {
   void (async () => {
     const res = (await servers()).find((r) => r.clientIdentifier === srvId);
     const found = res && relayDiscoverable(relay, [res]) ? await findRelay([relay], (r) => askRelay(r, []), { server: srvId }) : null;
-    const token = found && res ? await credentialFor(res) : null;
+    const token = found?.friends && res ? await credentialFor(res) : null;
     const answer = token ? await askFriends(relay, token) : null;
+    // Sans liste d'amis (plex.tv muet), pas d'annonce : jamais de séance visible par tous.
+    const ids = answer ? await friendIds() : null;
     if (ws !== sock || !together.value) return;
-    if (!answer || answer.server !== srvId) return notListed();
+    if (!answer || answer.server !== srvId || !answer.friendsOnly || !ids) return notListed();
     const c2 = card();
     if (!c2 || !together.value.visible || !together.value.host) {
       announcing = 'off';
@@ -515,7 +561,8 @@ function announce(refresh = false): void {
     }
     announcing = 'on';
     cardSent = { sig: cardSig(c2), at: Date.now() };
-    sendControl({ t: 'announce', ticket: answer.ticket, proof, card: c2 });
+    friendsSent = ids.join(',');
+    sendControl({ t: 'announce', ticket: answer.ticket, proof, card: c2, friends: ids });
   })();
 }
 
@@ -580,7 +627,7 @@ export async function refreshFriendSessions(): Promise<FriendSession[]> {
         if (!relay) return [];
         const token = await credentialFor(res);
         const answer = token ? await askFriends(relay.relay, token) : null;
-        if (!answer || answer.server !== res.clientIdentifier) return [];
+        if (!answer || answer.server !== res.clientIdentifier || !answer.friendsOnly) return [];
         const now = Date.now();
         return answer.sessions.map((s) => ({
           relay: relay.relay,

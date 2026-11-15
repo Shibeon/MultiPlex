@@ -16,7 +16,11 @@ services:
       - MAX_PEERS=16   # personnes par séance
       - MAX_ROOMS=500  # séances en même temps
       - ROOM_TTL_HOURS=12  # durée de vie d'une séance
-      # - PLEX_URL=http://192.168.1.10:32400  # séances visibles par vos amis (voir README)
+      # Séances visibles par les amis Plex de leur hôte (voir README) : les deux, ou rien.
+      # PLEX_TOKEN est le jeton plex.tv de VOTRE compte (propriétaire du serveur) : il ouvre tout le
+      # compte, protégez-le comme celui de Tautulli ou d'Overseerr (fichier .env lisible par vous seul).
+      # - PLEX_URL=http://192.168.1.10:32400
+      # - PLEX_TOKEN=${PLEX_TOKEN}
     read_only: true
     security_opt:
       - no-new-privileges:true

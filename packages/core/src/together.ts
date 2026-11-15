@@ -245,16 +245,21 @@ export function findRoom(
 // ---------------------------------------------------------------------------------------------
 // Séances visibles par les amis (voir apps/relay/README.md, « Séances visibles par vos amis »).
 //
-// Un relais configuré avec l'adresse de son serveur Plex (PLEX_URL) liste les séances que leurs
-// hôtes ont rendues visibles, mais seulement à qui prouve avoir accès à ce serveur : l'application
-// lui présente le jeton propre à ce serveur (celui que plex.tv donne pour lui dans les
-// ressources), que le relais essaie auprès de son propre Plex. Le jeton du compte plex.tv, lui,
-// ne part jamais : il ouvre tout le compte, pas seulement ce serveur. Et le jeton d'un serveur
-// n'est remis qu'à un relais trouvé sur les noms publics de ce même serveur (relayCandidates).
+// Un relais configuré avec l'adresse de son serveur Plex (PLEX_URL) et le compte plex.tv de son
+// propriétaire (PLEX_TOKEN) liste les séances que leurs hôtes ont rendues visibles, et chacune
+// seulement aux amis Plex de son hôte : l'hôte joint à son annonce les numéros de compte de ses
+// amis (friendAllowList), et chacun prouve qui il est en présentant le jeton propre à ce serveur
+// (celui que plex.tv donne pour lui dans les ressources), que le relais essaie auprès de son Plex
+// et retrouve parmi les partages du propriétaire. Le jeton du compte plex.tv, lui, ne part
+// jamais : il ouvre tout le compte, pas seulement ce serveur. Et le jeton d'un serveur n'est remis
+// qu'à un relais trouvé sur les noms publics de ce même serveur (relayCandidates).
 
 /** Une séance visible, telle que le relais la liste à un ami autorisé. */
 export interface FriendCard {
-  /** Nom de l'hôte, titre et sous-titre de ce qu'il regarde. */
+  /**
+   * Nom de l'hôte : celui de son compte plex.tv, vérifié par le relais (le nom que l'hôte annonce
+   * est ignoré). Puis titre et sous-titre de ce qu'il regarde.
+   */
   name: string;
   title: string;
   sub?: string;
@@ -271,6 +276,8 @@ export interface FriendsAnswer {
   multiplex: 'relay';
   /** Identifiant (machineIdentifier) du serveur Plex auprès duquel le relais a vérifié l'accès. */
   server: string;
+  /** Ce relais ne liste une séance qu'aux amis Plex de son hôte (les anciens la listaient à tous). */
+  friendsOnly?: boolean;
   /** Jeton d'entrée, court (quelques minutes) : annoncer une séance, entrer dans une séance listée. */
   ticket: string;
   ttl: number;
@@ -281,6 +288,67 @@ export const isFriendsAnswer = (x: unknown): x is FriendsAnswer => {
   const a = x as FriendsAnswer;
   return !!a && typeof a === 'object' && a.multiplex === 'relay' && typeof a.server === 'string' && typeof a.ticket === 'string' && Array.isArray(a.sessions);
 };
+
+/** Un ami Plex, tel que plex.tv le liste (`GET https://plex.tv/api/users/`, MyPlexUser). */
+export interface PlexFriend {
+  /** Numéro du compte plex.tv (attribut `id`) : celui que le relais retrouve dans les partages. */
+  id: string;
+  name: string;
+  username?: string;
+  thumb?: string;
+}
+
+/** Au plus autant d'amis dans une annonce (le relais refuse une liste plus longue). */
+export const MAX_FRIEND_ALLOW = 1000;
+
+const XML_ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
+const unxml = (v: string) =>
+  v.replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos);/gi, (_, e: string) =>
+    e[0] === '#' ? String.fromCodePoint(e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : Number(e.slice(1))) : XML_ENTITIES[e.toLowerCase()],
+  );
+
+/** Attributs de chaque élément `<tag …>` d'une réponse XML de plex.tv (les anciennes adresses /api/…). */
+export function xmlElements(xml: string, tag: string): Record<string, string>[] {
+  const out: Record<string, string>[] = [];
+  for (const m of xml.matchAll(new RegExp(`<${tag}(\\s[^>]*?)?/?>`, 'g'))) {
+    const attrs: Record<string, string> = {};
+    for (const a of (m[1] ?? '').matchAll(/([A-Za-z_][\w:.-]*)="([^"]*)"/g)) attrs[a[1]] = unxml(a[2]);
+    out.push(attrs);
+  }
+  return out;
+}
+
+/** Numéro de compte plex.tv (entier positif) sous forme de texte ; sinon null. */
+const accountId = (v: unknown): string | null => (/^\d{1,12}$/.test(String(v ?? '')) && Number(v) > 0 ? String(Number(v)) : null);
+
+/**
+ * Amis d'un compte d'après la réponse XML de `GET https://plex.tv/api/users/` (éléments `User` :
+ * `id`, `title`, `username`, `thumb`, comme MyPlexUser dans python-plexapi).
+ */
+export function parsePlexFriends(xml: string): PlexFriend[] {
+  return xmlElements(xml, 'User').flatMap((u) => {
+    const id = accountId(u.id);
+    if (!id) return [];
+    const name = (u.title || u.username || '').trim() || id;
+    return [{ id, name, username: u.username || undefined, thumb: u.thumb || undefined }];
+  });
+}
+
+/**
+ * Liste d'amis jointe à l'annonce d'une séance visible : les numéros de compte plex.tv des amis
+ * de l'hôte, sans doublon, sans lui-même, et pas plus que le relais n'en accepte. Rien d'autre
+ * (ni nom, ni adresse) ne part. Recalculée à chaque annonce : un ami retiré perd la séance.
+ */
+export function friendAllowList(friends: Pick<PlexFriend, 'id'>[], selfId?: string | number): string[] {
+  const self = accountId(selfId);
+  const out = new Set<string>();
+  for (const f of friends) {
+    const id = accountId(f.id);
+    if (id && id !== self) out.add(id);
+    if (out.size >= MAX_FRIEND_ALLOW) break;
+  }
+  return [...out];
+}
 
 /** Adresse HTTP de la liste des séances visibles d'un relais (POST, jeton dans le corps). */
 export const friendsUrl = (relay: string) => `${relay.replace(/^ws/, 'http')}/friends`;
@@ -337,7 +405,9 @@ export interface FindRelayOptions {
 /**
  * Premier relais MultiPlex (dans l'ordre de préférence) parmi des adresses candidates, sans
  * attendre les moins bien classées. `ask` rend la réponse à « GET …/rooms » (sans salle) ;
- * `friends` dit si ce relais sait lister les séances visibles, `server` de quel Plex.
+ * `friends` dit si ce relais sait lister les séances visibles aux seuls amis de leur hôte
+ * (`friendsOnly` ; un relais plus ancien, qui les listait à tout utilisateur du serveur, compte
+ * comme ne sachant pas lister), `server` de quel Plex.
  */
 export function findRelay(relays: string[], ask: (relay: string) => Promise<unknown>, opts: FindRelayOptions = {}): Promise<{ relay: string; friends: boolean; server?: string } | null> {
   const { known, backoff, server } = opts;
@@ -359,8 +429,8 @@ export function findRelay(relays: string[], ask: (relay: string) => Promise<unkn
           (a) => {
             const ok = isRoomsAnswer(a);
             known?.set(relay, ok);
-            const r = a as RoomsAnswer & { friends?: boolean; server?: unknown };
-            const hit: Hit | null = ok ? { friends: r.friends === true, server: typeof r.server === 'string' ? r.server : undefined } : null;
+            const r = a as RoomsAnswer & { friends?: boolean; friendsOnly?: boolean; server?: unknown };
+            const hit: Hit | null = ok ? { friends: r.friends === true && r.friendsOnly === true, server: typeof r.server === 'string' ? r.server : undefined } : null;
             const useful = !!hit && (server === undefined || (hit.friends && hit.server === server));
             if (useful) backoff?.ok(relay);
             else backoff?.fail(relay);

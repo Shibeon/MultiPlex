@@ -85,7 +85,11 @@ export interface Settings {
   searchHistory: boolean;
   /** Adresse du relais « Regarder ensemble » (hébergé soi-même, par exemple sur un NAS). */
   togetherRelay: string;
-  /** « Regarder ensemble » : mes séances sont visibles par mes amis (choix proposé à chaque séance). */
+  /**
+   * « Regarder ensemble » : mes séances sont visibles par mes amis Plex (choix proposé à chaque
+   * séance). Allumé par défaut parce que le relais ne les liste qu'aux amis Plex de l'hôte ; un
+   * relais qui ne sait pas le faire ne reçoit aucune annonce (« non listée »).
+   */
   togetherVisible: boolean;
   /** Prévenir quand un ami lance une séance visible. */
   togetherNotify: boolean;

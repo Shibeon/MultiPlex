@@ -18,6 +18,10 @@ services:
     environment:
       - PORT=8787
       - MAX_PEERS=16
+      # Séances visibles par les amis Plex de leur hôte (voir README) : les deux, ou rien.
+      # PLEX_TOKEN : jeton plex.tv de VOTRE compte, à protéger (dans .env, lisible par vous seul).
+      # - PLEX_URL=http://192.168.1.10:32400
+      # - PLEX_TOKEN=${PLEX_TOKEN}
     volumes:
       - ./server.mjs:/app/server.mjs:ro
       - ./package.json:/app/package.json:ro

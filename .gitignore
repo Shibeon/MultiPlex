@@ -12,3 +12,4 @@ apps/desktop/release-notes.txt
 /release-notes-*.txt
 apps/desktop/base.json
 apps/desktop/hot-out/
+.env
