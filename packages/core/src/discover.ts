@@ -1,4 +1,5 @@
 import { identityHeaders } from './auth';
+import { DEMO_LINKED, demoMovieTitle, demoMovieYear } from './demo';
 import { getJson, request } from './http';
 import { nameWords, peopleFromDiscover, type PersonHit } from './people';
 import type { ClientInfo, Metadata, Page } from './types';
@@ -138,6 +139,9 @@ export class PlexDiscover implements Discover {
     const { MediaContainer: mc } = await this.get<ListResponse>('/library/sections/watchlist/all', {
       includeCollections: 1,
       includeExternalMedia: 1,
+      // Identifiants externes (tableau `Guid`) quand le catalogue les fournit : ils servent à
+      // retrouver un titre sur le serveur quand son identifiant Plex n'y correspond pas.
+      includeGuids: 1,
       sort: 'watchlistedAt:desc',
       'X-Plex-Container-Start': offset,
       'X-Plex-Container-Size': limit,
@@ -227,6 +231,11 @@ export class PlexDiscover implements Discover {
 }
 
 /** Catalogue factice du mode démo : même contrat, tout en mémoire. */
+/** Remplace le titre incrusté dans une affiche SVG de démonstration. */
+function retitle(image: string | undefined, from: string, to: string): string | undefined {
+  return image?.replace(encodeURIComponent(from.replace(/&/g, '&amp;')), encodeURIComponent(to));
+}
+
 export class DemoDiscover implements Discover {
   private catalogue: Metadata[];
   private listed: string[];
@@ -271,7 +280,21 @@ export class DemoDiscover implements Discover {
         Genre: [{ tag: ['Drame', 'Aventure', 'Policier'][i % 3] }],
       };
     });
-    this.listed = [this.catalogue[2].ratingKey, this.catalogue[0].ratingKey, this.catalogue[6].ratingKey];
+    // Trois titres qui renvoient au serveur de démonstration (voir DEMO_LINKED) : un disponible
+    // par identifiant Plex, un par identifiant TMDB, un dont la vérification échoue.
+    const linked: [string, number, Partial<Metadata>][] = [
+      [demoMovieTitle(DEMO_LINKED.sameGuid.movie), 1, { guid: DEMO_LINKED.sameGuid.guid, year: demoMovieYear(DEMO_LINKED.sameGuid.movie) }],
+      [demoMovieTitle(DEMO_LINKED.sameTmdb.movie), 4, { guid: DEMO_LINKED.sameTmdb.catalogueGuid, year: demoMovieYear(DEMO_LINKED.sameTmdb.movie), Guid: [{ id: DEMO_LINKED.sameTmdb.tmdb }] }],
+      [DEMO_LINKED.unreachable.title, 5, { guid: DEMO_LINKED.unreachable.guid, year: DEMO_LINKED.unreachable.year }],
+    ];
+    const extra = linked.map(([title, k, ids]) => {
+      const summary = `« ${title} », titre de démonstration du catalogue.`;
+      const base = { ...this.catalogue[k], type: 'movie', title, summary, Genre: [{ tag: 'Aventure' }], ...ids };
+      const id = base.guid!.slice(base.guid!.lastIndexOf('/') + 1);
+      return { ...base, ratingKey: id, thumb: retitle(base.thumb, this.catalogue[k].title, title), art: retitle(base.art, this.catalogue[k].title, title) };
+    });
+    this.catalogue.push(...extra);
+    this.listed = [this.catalogue[2].ratingKey, extra[0].ratingKey, this.catalogue[0].ratingKey, extra[2].ratingKey, extra[1].ratingKey, this.catalogue[6].ratingKey];
   }
 
   async watchlist(offset: number, limit: number): Promise<Page<Metadata>> {

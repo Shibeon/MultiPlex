@@ -1,5 +1,6 @@
-import { discoverId, discoverImage, type Metadata } from '@multiplex/core';
-import { useEffect, useState } from 'preact/hooks';
+import { arrangeByAvailability, discoverId, discoverImage, type Availability, type Metadata } from '@multiplex/core';
+import { useEffect, useRef, useState } from 'preact/hooks';
+import { localOf, noteLibraries, useAvailability } from '../availability';
 import { formatDuration, t } from '../i18n';
 import { settings } from '../settings';
 import { discover, invalidate, managedProfile, server, useData } from '../store';
@@ -9,53 +10,38 @@ import { CastRow, PeopleLinks } from './Person';
 
 const PAGE = 60;
 
-/** Disponibilité déjà vérifiée, par bibliothèque et identifiant Plex : null = pas encore disponible. */
-const availability = new Map<string, Metadata | null>();
-
-/**
- * Pour une liste de titres du catalogue, cherche lesquels sont déjà disponibles.
- * Les vérifications partent par petits lots et sont mémorisées pour la session.
- */
-export function useAvailability(items: Metadata[] | undefined): (item: Metadata) => Metadata | null | undefined {
-  const srv = server.value!;
-  const [, refresh] = useState(0);
-  useEffect(() => {
-    let alive = true;
-    const todo = (items ?? []).filter((m) => m.guid && !availability.has(`${srv.id}:${m.guid}`));
-    const worker = async () => {
-      for (let m = todo.shift(); m && alive; m = todo.shift()) {
-        const key = `${srv.id}:${m.guid}`;
-        try {
-          availability.set(key, (await srv.findByGuid(m.guid!)) ?? null);
-        } catch {
-          /* vérification manquée : le titre reste « inconnu » et sera revérifié */
-        }
-        if (alive) refresh((n) => n + 1);
-      }
-    };
-    for (let i = 0; i < 6; i++) void worker();
-    return () => {
-      alive = false;
-    };
-  }, [items, srv.id]);
-  return (item) => (item.guid ? availability.get(`${srv.id}:${item.guid}`) : undefined);
-}
+/** Pastille de disponibilité d'un titre de la liste de suivi (icône, intitulé pour les lecteurs d'écran). */
+const AVAIL_ICON: Record<Availability, string> = { available: 'play', missing: 'minus', unknown: 'help' };
 
 /**
  * Carte d'un titre du catalogue Plex. `local` : l'élément correspondant s'il est
  * déjà disponible (la carte y mène alors directement), null s'il ne l'est pas
- * encore, absent tant qu'on ne sait pas.
+ * encore, absent tant qu'on ne sait pas. `state` (liste de suivi) : la disponibilité
+ * en trois états, montrée par une pastille discrète.
  */
-export function DiscoverCard({ item, local, note }: { item: Metadata; local?: Metadata | null; note?: string }) {
+export function DiscoverCard({ item, local, note, state }: { item: Metadata; local?: Metadata | null; note?: string; state?: Availability }) {
   // Dans une filmographie (`note` = le rôle), on signale ce qui est disponible plutôt que ce qui manque.
   const filmography = note !== undefined;
   const poster = discoverImage(item, 'poster');
+  const label = state ? t(`avail.${state}`) : '';
   return (
-    <a class={`card${local === null && !filmography ? ' pending' : ''}`} href={local ? `#/item/${local.ratingKey}` : `#/discover/${item.ratingKey}`} title={item.title}>
+    <a
+      class={`card${local === null && !filmography ? ' pending' : ''}`}
+      href={local ? `#/item/${local.ratingKey}` : `#/discover/${item.ratingKey}`}
+      title={label ? `${item.title} · ${label}` : item.title}
+      aria-label={label ? `${item.title}, ${label}` : undefined}
+      data-avail={state}
+    >
       <div class="poster">
         <span class="poster-fallback">{item.title}</span>
         {poster && <img loading="lazy" decoding="async" referrerpolicy="no-referrer" src={poster} alt="" />}
-        {local === null && !filmography && <span class="soon">{t('disc.notOnServer')}</span>}
+        {state ? (
+          <span class={`badge avail ${state}`} aria-hidden="true">
+            <Icon name={AVAIL_ICON[state]} size={14} />
+          </span>
+        ) : (
+          local === null && !filmography && <span class="soon">{t('disc.notOnServer')}</span>
+        )}
         {local && filmography && <span class="soon here">{t('disc.onServer')}</span>}
       </div>
       <div class="card-text">
@@ -97,13 +83,38 @@ export function WatchlistButton({ id, initial }: { id: string; initial?: boolean
   );
 }
 
+type WatchSort = 'list' | 'availability';
+
 export function WatchlistPage() {
   const d = discover.value;
+  const srv = server.value!;
   const [count, setCount] = useState(PAGE);
+  const [onlyAvailable, setOnlyAvailable] = useState(false);
+  const [sort, setSort] = useState<WatchSort>('list');
   const { data, error, reload } = useData(d ? `disc:watchlist:${count}` : null, () => d!.watchlist(0, count));
-  const localOf = useAvailability(data?.items);
+  // Les bibliothèques sont relues quand l'app invalide les données du serveur (lecture, analyse…)
+  // et au retour sur la fenêtre : si elles ont changé, les disponibilités sont revues.
+  const libs = useData(d ? `${srv.id}:libraries` : null, () => srv.libraries());
+  useEffect(() => {
+    if (libs.data) noteLibraries(srv, libs.data);
+    else if (libs.error) noteLibraries(srv, null);
+  }, [libs.data, libs.error, srv]);
+  const reloadLibs = useRef(libs.reload);
+  reloadLibs.current = libs.reload;
+  useEffect(() => {
+    const again = () => document.visibilityState === 'visible' && reloadLibs.current();
+    document.addEventListener('visibilitychange', again);
+    addEventListener('focus', again);
+    return () => {
+      document.removeEventListener('visibilitychange', again);
+      removeEventListener('focus', again);
+    };
+  }, []);
+  const availability = useAvailability(data?.items);
+  const stateOf = (m: Metadata) => availability(m)?.state;
+  const shown = data ? arrangeByAvailability(data.items, stateOf, { onlyAvailable, byAvailability: sort === 'availability' }) : [];
   if (!d) return <p class="page muted">{t('disc.needAccount')}</p>;
-  const waiting = data?.items.filter((m) => localOf(m) === null).length ?? 0;
+  const waiting = data?.items.filter((m) => stateOf(m) === 'missing').length ?? 0;
   return (
     <div class="page">
       <header class="page-head">
@@ -116,13 +127,31 @@ export function WatchlistPage() {
         )}
       </header>
       <p class="muted">{t('disc.lead')}</p>
+      {!!data?.items.length && (
+        <div class="lib-tools watch-tools">
+          <div class="lib-filters">
+            <button class={`btn toggle-pill${onlyAvailable ? ' on' : ''}`} aria-pressed={onlyAvailable} onClick={() => setOnlyAvailable(!onlyAvailable)}>
+              {onlyAvailable && <Icon name="check" size={16} />}
+              {t('avail.only')}
+            </button>
+          </div>
+          <div class="lib-sort">
+            <select class={sort !== 'list' ? 'on' : ''} aria-label={t('lib.sort')} value={sort} onChange={(e) => setSort(e.currentTarget.value as WatchSort)}>
+              <option value="list">{t('avail.sort.list')}</option>
+              <option value="availability">{t('avail.sort.availability')}</option>
+            </select>
+          </div>
+        </div>
+      )}
       {error && <ErrorBox error={error} retry={reload} />}
       {!data && !error && <Spinner />}
       {data?.total === 0 && <p class="muted">{t('disc.empty')}</p>}
+      {onlyAvailable && !!data?.items.length && !shown.length && <p class="muted">{t('avail.none')}</p>}
       <div class="card-grid">
-        {data?.items.map((m) => (
-          <DiscoverCard key={m.ratingKey} item={m} local={localOf(m)} />
-        ))}
+        {shown.map((m) => {
+          const r = availability(m);
+          return <DiscoverCard key={m.ratingKey} item={m} local={localOf(r)} state={r?.state} />;
+        })}
       </div>
       {data && data.items.length < data.total && (
         <p>
@@ -174,7 +203,7 @@ export function DiscoverDetails({ id }: { id: string }) {
       <div class="details-main">
         {poster && <img class="details-poster" referrerpolicy="no-referrer" src={poster} alt="" />}
         <div class="details-info">
-          <span class="crumb">{local.data ? t('disc.onServer') : t('disc.notOnServer')}</span>
+          <span class="crumb">{local.data ? t('disc.onServer') : local.error ? t('avail.unknown') : t('disc.notOnServer')}</span>
           <h1>{item.title}</h1>
           {item.tagline && <p class="tagline">{item.tagline}</p>}
           <p class="facts">
@@ -190,7 +219,7 @@ export function DiscoverDetails({ id }: { id: string }) {
             )}
             <WatchlistButton key={id} id={id} initial={item.watchlisted} />
           </div>
-          {!local.data && !local.loading && <p class="muted">{t('disc.hint')}</p>}
+          {!local.data && !local.loading && !local.error && <p class="muted">{t('disc.hint')}</p>}
           {item.summary && <p class="summary">{item.summary}</p>}
           <dl class="credits">
             {!!item.Genre?.length && <div>{item.Genre.map((g) => g.tag).join(' · ')}</div>}

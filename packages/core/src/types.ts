@@ -51,6 +51,10 @@ export interface Library {
   key: string;
   title: string;
   type: string;
+  /** Horodatages (secondes) que le serveur met à jour quand la bibliothèque change ou est analysée. */
+  updatedAt?: number;
+  scannedAt?: number;
+  contentChangedAt?: number;
 }
 
 /** streamType : 1 = vidéo, 2 = audio, 3 = sous-titres. */
@@ -315,6 +319,11 @@ export interface MediaServer {
   metadata(ratingKey: string): Promise<Metadata>;
   /** Élément du serveur correspondant à un identifiant Plex universel, s'il existe. */
   findByGuid(guid: string): Promise<Metadata | undefined>;
+  /**
+   * Films et séries de la bibliothèque avec leurs identifiants externes (`Guid`), pour retrouver
+   * un titre par son identifiant IMDb, TMDB ou TVDB (voir availability.ts).
+   */
+  libraryGuids?(): Promise<Metadata[]>;
   children(ratingKey: string): Promise<Metadata[]>;
   /** Rangées de résultats (films, séries…) et personnes trouvées (acteurs, réalisateurs…). */
   search(query: string, limit?: number): Promise<SearchResults>;
