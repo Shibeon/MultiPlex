@@ -328,7 +328,7 @@ export class DemoServer implements MediaServer {
 
   async timeline(r: { ratingKey: string; timeMs: number; state: string }): Promise<void> {
     const m = this.db.get(r.ratingKey);
-    if (m && r.state !== 'buffering') m.viewOffset = r.timeMs;
+    if (m && r.state !== 'buffering' && Number.isFinite(r.timeMs) && r.timeMs >= 0) m.viewOffset = r.timeMs;
   }
 
   private started = Date.now();
