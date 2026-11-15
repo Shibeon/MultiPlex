@@ -8,5 +8,6 @@ export * from './community';
 export * from './markers';
 export * from './ratings';
 export * from './audio';
+export * from './wheel';
 export { PlexServer } from './server';
 export { DemoServer } from './demo';

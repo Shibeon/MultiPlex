@@ -234,6 +234,11 @@ export class DemoDiscover implements Discover {
       ['La Ligne claire', 'movie', 2026],
       ['Contre-jour', 'movie', 2022],
     ];
+    // Assez de titres pour une vraie filmographie (plus d'une centaine de rôles) : des noms
+    // composés, toujours les mêmes d'un lancement à l'autre.
+    const heads = ['L’Ombre', 'Le Chant', 'La Nuit', 'Le Silence', 'La Route', 'Le Secret', 'La Saison', 'Le Rivage', 'La Mémoire', 'Le Voyage', 'La Lumière'];
+    const tails = ['des glaces', 'du phare', 'de l’aube', 'des marées', 'du désert', 'des collines', 'du fleuve', 'de minuit', 'des forges', 'du large', 'des orages'];
+    for (let i = 0; i < 121; i++) titles.push([`${heads[i % 11]} ${tails[(i * 4 + Math.floor(i / 11)) % 11]}`, i % 5 === 3 ? 'show' : 'movie', 2026 - Math.floor(i / 3)]);
     this.catalogue = titles.map(([title, type, year], i) => {
       const hue = (i * 53 + 15) % 360;
       const svg = (w: number, h: number) =>
@@ -286,7 +291,16 @@ export class DemoDiscover implements Discover {
   }
 
   async credits(): Promise<CreditGroup[]> {
-    return [{ type: 'actor', title: 'Actor', credits: this.catalogue.slice(0, 7).map((item, i) => ({ role: ['La capitaine', 'Le témoin', 'Elle-même'][i % 3], item })) }];
+    // Une carrière fournie : 117 rôles, quelques apparitions, de la production, de la réalisation.
+    const c = this.catalogue;
+    const group = (type: string, title: string, items: Metadata[], roles: string[]): CreditGroup => ({ type, title, credits: items.map((item, i) => ({ role: roles[i % roles.length], item })) });
+    return [
+      group('actor', 'Actor', c.slice(0, 117), ['La capitaine', 'Le témoin', 'Elle-même']),
+      group('appeared', 'Appearances', c.slice(40, 49), ['Elle-même']),
+      group('producer', 'Producer', c.slice(60, 66), ['Productrice', 'Productrice déléguée']),
+      group('director', 'Director', c.slice(100, 103), ['Réalisatrice']),
+      group('other', 'Other', c.slice(120, 124), ['Consultante', 'Remerciements']),
+    ];
   }
 
   async setWatchlisted(id: string, on: boolean): Promise<void> {

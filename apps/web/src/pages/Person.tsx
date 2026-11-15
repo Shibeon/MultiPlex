@@ -1,7 +1,8 @@
 import type { Metadata, Tag } from '@multiplex/core';
 import { tvDevice } from '../platform';
 import { signal } from '@preact/signals';
-import { useState } from 'preact/hooks';
+import { useMemo, useState } from 'preact/hooks';
+import { Carousel } from '../carousel';
 import { t } from '../i18n';
 import { go } from '../router';
 import { settings } from '../settings';
@@ -53,24 +54,22 @@ export function ResumePill() {
   );
 }
 
-const CAST_SHOWN = 24;
+/** Au-delà, une rangée devient lourde à afficher pour peu d'intérêt (une distribution compte rarement plus de 100 noms). */
+const ROW_LIMIT = 400;
 
-/** Distribution d'un film ou d'une série : photos, noms, rôles, chacun menant à sa fiche. */
+/**
+ * Distribution d'un film ou d'une série : photos, noms, rôles, chacun menant à sa fiche.
+ * Toute la distribution est dans la rangée, à faire défiler : pas de bouton « Voir tout ».
+ */
 export function CastRow({ people, title }: { people: Tag[] | undefined; title: string }) {
-  const [all, setAll] = useState(false);
   if (!people?.length) return null;
   return (
     <section class="hub cast">
-      <div class="hub-head">
-        <h2>{title}</h2>
-        {people.length > 6 && (
-          <button class="btn see-all" aria-expanded={all} onClick={() => setAll(!all)}>
-            {all ? t('item.seeLess') : t('item.seeAll')} <span class="muted">{people.length}</span> <Icon name={all ? 'up' : 'next'} size={16} />
-          </button>
-        )}
-      </div>
-      <div class={`row cast-row${all ? ' wrap' : ''}`}>
-        {people.slice(0, all ? 400 : CAST_SHOWN).map((p, i) => {
+      <h2>
+        {title} {people.length > 6 && <span class="muted">{people.length}</span>}
+      </h2>
+      <Carousel class="cast-row">
+        {people.slice(0, ROW_LIMIT).map((p, i) => {
           const body = (
             <>
               <span class="cast-face">{p.thumb ? <img loading="lazy" decoding="async" referrerpolicy="no-referrer" src={p.thumb} alt="" /> : <b>{p.tag.slice(0, 1)}</b>}</span>
@@ -89,7 +88,7 @@ export function CastRow({ people, title }: { people: Tag[] | undefined; title: s
             </div>
           );
         })}
-      </div>
+      </Carousel>
     </section>
   );
 }
@@ -111,9 +110,9 @@ export function PeopleLinks({ people }: { people: Tag[] }) {
   );
 }
 
-const GROUPS = ['actor', 'director', 'writer', 'producer', 'music', 'editor', 'appeared', 'other'];
+// Ordre des rangées : jeu, apparitions, production, réalisation, puis le reste ; « autres crédits » en dernier.
+const GROUPS = ['actor', 'appeared', 'producer', 'director', 'writer', 'music', 'editor', 'other'];
 const rank = (type: string) => (GROUPS.includes(type) ? GROUPS.indexOf(type) : GROUPS.length);
-const MAX_PER_GROUP = 48;
 
 /** Fiche d'une personne : qui elle est, ce qu'on peut regarder d'elle ici, et sa filmographie complète. */
 export function PersonPage({ id }: { id: string }) {
@@ -124,12 +123,12 @@ export function PersonPage({ id }: { id: string }) {
   const person = useData(d ? `disc:person:${id}` : null, () => d!.person(id));
   const credits = useData(d ? `disc:credits:${id}` : null, () => d!.credits(id));
   const [more, setMore] = useState(false);
-  const [open, setOpen] = useState<Record<string, boolean>>({});
 
   const groups = (credits.data ?? []).filter((g) => g.credits.length).sort((a, b) => rank(a.type) - rank(b.type));
   const groupTitle = (g: { type: string; title: string }) => (t(`person.as.${g.type}`) === `person.as.${g.type}` ? g.title : t(`person.as.${g.type}`));
   // Une œuvre déjà sur MultiPlex mène directement à sa fiche ; les autres à celle du catalogue.
-  const shown: Metadata[] = groups.flatMap((g) => g.credits.slice(0, open[g.type] ? 400 : MAX_PER_GROUP).map((c) => c.item));
+  // Chaque catégorie tient sur une seule rangée, toute sa filmographie comprise : on fait défiler.
+  const shown: Metadata[] = useMemo(() => groups.flatMap((g) => g.credits.slice(0, ROW_LIMIT).map((c) => c.item)), [credits.data]);
   const localOf = useAvailability(shown);
   // Ce que la personne fait dans chaque œuvre, pour légender celles de la bibliothèque.
   const jobs = new Map<string, string>();
@@ -181,7 +180,7 @@ export function PersonPage({ id }: { id: string }) {
         {here.error && <ErrorBox error={here.error} retry={here.reload} />}
         {!here.data && !here.error && <Spinner />}
         {here.data?.length === 0 && <p class="muted">{t('person.none')}</p>}
-        <div class="row wrap grid-gap">
+        <Carousel>
           {here.data?.map((m) => {
             const note = m.audienceRating ?? m.rating;
             return (
@@ -191,7 +190,7 @@ export function PersonPage({ id }: { id: string }) {
               </div>
             );
           })}
-        </div>
+        </Carousel>
       </section>
 
       {d && !credits.data && !credits.error && <Spinner />}
@@ -200,18 +199,11 @@ export function PersonPage({ id }: { id: string }) {
           <h2>
             {groupTitle(g)} <span class="muted">{g.credits.length}</span>
           </h2>
-          <div class="row wrap grid-gap">
-            {g.credits.slice(0, open[g.type] ? 400 : MAX_PER_GROUP).map((c, i) => (
+          <Carousel>
+            {g.credits.slice(0, ROW_LIMIT).map((c, i) => (
               <DiscoverCard key={`${c.item.ratingKey}${i}`} item={c.item} local={localOf(c.item)} note={c.role ?? ''} />
             ))}
-          </div>
-          {g.credits.length > MAX_PER_GROUP && !open[g.type] && (
-            <p>
-              <button class="btn" onClick={() => setOpen({ ...open, [g.type]: true })}>
-                {t('disc.more')}
-              </button>
-            </p>
-          )}
+          </Carousel>
         </section>
       ))}
     </div>
