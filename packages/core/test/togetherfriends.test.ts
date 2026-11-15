@@ -1,7 +1,7 @@
 // Séances visibles par les amis, côté application : quel jeton part (jamais celui du compte),
 // recherche du relais, et remise de la clé par l'hôte (ECDH éphémère).
 import { describe, expect, it } from 'vitest';
-import { deriveSession, findRelay, grantRequestKeys, isFriendsAnswer, openGrant, sealGrant, serverCredential } from '../src';
+import { deriveSession, findRelay, grantRequestKeys, hostYields, isFriendsAnswer, openGrant, RelayBackoff, sealGrant, serverCredential } from '../src';
 
 describe('jeton présenté au relais', () => {
   it('le jeton propre au serveur, jamais celui du compte', () => {
@@ -20,9 +20,9 @@ describe('recherche du relais d’un serveur', () => {
     };
     const known = new Map<string, boolean>();
     const ask = (r: string) => Promise.resolve(answers[r]);
-    expect(await findRelay(Object.keys(answers), ask, known)).toEqual({ relay: 'wss://a.exemple.fr', friends: true });
+    expect(await findRelay(Object.keys(answers), ask, { known })).toEqual({ relay: 'wss://a.exemple.fr', friends: true, server: undefined });
     expect(known.get('wss://a.exemple.fr/multiplex-relay')).toBeUndefined();
-    expect(await findRelay(['wss://b.exemple.fr'], ask)).toEqual({ relay: 'wss://b.exemple.fr', friends: false });
+    expect(await findRelay(['wss://b.exemple.fr'], ask)).toEqual({ relay: 'wss://b.exemple.fr', friends: false, server: undefined });
     expect(await findRelay(['wss://nope.exemple.fr'], () => Promise.resolve({ hello: 1 }))).toBeNull();
   });
 
@@ -47,5 +47,65 @@ describe('remise de la clé à un ami autorisé', () => {
     // Une remise abîmée est refusée.
     const bad = sealed.box.slice(0, -4) + (sealed.box.endsWith('AAAA') ? 'BBBB' : 'AAAA');
     await expect(openGrant(req.priv, req.pub, sealed.pub, bad)).rejects.toThrow();
+  });
+});
+
+describe('relais d’un serveur : identifiant comparé avant tout jeton, échecs mis de côté', () => {
+  it('écarte un relais qui ne sait pas lister ou dont le Plex n’est pas ce serveur', async () => {
+    const answers: Record<string, unknown> = {
+      'wss://a.exemple.fr': { multiplex: 'relay', found: [], friends: true, server: 'autre-serveur' },
+      'wss://b.exemple.fr': { multiplex: 'relay', found: [], friends: false },
+      'wss://c.exemple.fr': { multiplex: 'relay', found: [], friends: true, server: 'srv-1' },
+    };
+    const ask = (r: string) => Promise.resolve(answers[r]);
+    expect(await findRelay(Object.keys(answers), ask, { server: 'srv-1' })).toEqual({ relay: 'wss://c.exemple.fr', friends: true, server: 'srv-1' });
+    expect(await findRelay(['wss://a.exemple.fr', 'wss://b.exemple.fr'], ask, { server: 'srv-1' })).toBeNull();
+  });
+
+  it('un relais injoignable ou inutile n’est pas redemandé avant la fin de son délai, qui s’allonge', async () => {
+    let t = 0;
+    const backoff = new RelayBackoff(() => t, 60_000, 3_600_000);
+    let asked = 0;
+    const ask = () => {
+      asked++;
+      return Promise.reject(new Error('injoignable'));
+    };
+    expect(await findRelay(['wss://x.exemple.fr'], ask, { backoff })).toBeNull();
+    expect(await findRelay(['wss://x.exemple.fr'], ask, { backoff })).toBeNull();
+    expect(asked).toBe(1);
+    t += 60_001;
+    expect(await findRelay(['wss://x.exemple.fr'], ask, { backoff })).toBeNull();
+    expect(asked).toBe(2);
+    t += 60_001; // le délai a doublé : pas encore
+    expect(await findRelay(['wss://x.exemple.fr'], ask, { backoff })).toBeNull();
+    expect(asked).toBe(2);
+    t += 60_001;
+    const ok = () => Promise.resolve({ multiplex: 'relay', found: [], friends: true, server: 's' });
+    expect(await findRelay(['wss://x.exemple.fr'], ok, { backoff, server: 's' })).toEqual({ relay: 'wss://x.exemple.fr', friends: true, server: 's' });
+    expect(backoff.blocked('wss://x.exemple.fr')).toBe(false);
+  });
+});
+
+describe('preuve d’hôte présentée au relais', () => {
+  it('tirée du secret et du serveur, stable, distincte de la salle', async () => {
+    const a = await deriveSession('K7Q29XFD', 'server-1', 1000);
+    const b = await deriveSession('k7q2-9xfd', 'server-1', 1000);
+    const c = await deriveSession('K7Q29XFD', 'server-2', 1000);
+    expect(a.owner).toMatch(/^[A-Za-z0-9_-]{16,64}$/);
+    expect(b.owner).toBe(a.owner);
+    expect(c.owner).not.toBe(a.owner);
+    expect(a.owner).not.toBe(a.room);
+  });
+});
+
+describe('deux hôtes après une coupure', () => {
+  it('un seul reste hôte : la prise de main la plus récente (puis l’identifiant) l’emporte', () => {
+    const back = { hc: 0, id: 'a-original' };
+    const took = { hc: 7, id: 'b-relayed' };
+    expect(hostYields(back, took)).toBe(true);
+    expect(hostYields(took, back)).toBe(false);
+    const x = { hc: 3, id: 'x' };
+    const y = { hc: 3, id: 'y' };
+    expect(hostYields(x, y) !== hostYields(y, x)).toBe(true);
   });
 });

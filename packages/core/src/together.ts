@@ -114,10 +114,23 @@ export const unb64 = (s: string) => Uint8Array.from(atob(s.replace(/-/g, '+').re
 
 const hkdf = (info: string) => ({ name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: new TextEncoder().encode(info) });
 
-async function split(base: CryptoKey): Promise<{ room: string; key: CryptoKey }> {
+/**
+ * Salle, clé, et preuve d'hôte : une troisième valeur indépendante, que seuls les membres de la
+ * séance (qui ont le secret) savent calculer. L'hôte la présente au relais en annonçant la séance
+ * (en clair : elle ne donne ni la clé ni le secret), et le relais n'en garde que l'empreinte ; un
+ * utilisateur qui ne connaît que le numéro de salle (listé) ne peut donc pas l'annoncer à sa place.
+ */
+export interface SessionKeys {
+  room: string;
+  key: CryptoKey;
+  owner?: string;
+}
+
+async function split(base: CryptoKey): Promise<SessionKeys> {
   const roomBits = await crypto.subtle.deriveBits(hkdf('multiplex-together-room'), base, 128);
+  const ownerBits = await crypto.subtle.deriveBits(hkdf('multiplex-together-owner'), base, 128);
   const key = await crypto.subtle.deriveKey(hkdf('multiplex-together-key'), base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
-  return { room: b64(new Uint8Array(roomBits)), key };
+  return { room: b64(new Uint8Array(roomBits)), key, owner: b64(new Uint8Array(ownerBits)) };
 }
 
 /**
@@ -128,7 +141,7 @@ async function split(base: CryptoKey): Promise<{ room: string; key: CryptoKey }>
  * sinon en essayant tous les secrets (≈ 8,5 × 10¹¹), chacun à 200 000 tours de PBKDF2, et en
  * connaissant l'identifiant du serveur.
  */
-export async function deriveSession(secret: string, serverId: string, iterations = INVITE_ITERATIONS): Promise<{ room: string; key: CryptoKey }> {
+export async function deriveSession(secret: string, serverId: string, iterations = INVITE_ITERATIONS): Promise<SessionKeys> {
   const pw = await crypto.subtle.importKey('raw', new TextEncoder().encode(clean(secret)), 'PBKDF2', false, ['deriveBits']);
   const salt = new TextEncoder().encode(`multiplex-together-v3|${serverId}`);
   const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations }, pw, 256);
@@ -136,7 +149,7 @@ export async function deriveSession(secret: string, serverId: string, iterations
 }
 
 /** Salle et clé des anciennes invitations (v2 : HKDF du secret de 96 bits ; v1 : données telles quelles). */
-export async function deriveLegacy(c: Exclude<Invite, { v: 3 }>): Promise<{ room: string; key: CryptoKey }> {
+export async function deriveLegacy(c: Exclude<Invite, { v: 3 }>): Promise<SessionKeys> {
   if (c.v === 1) return { room: c.room, key: await crypto.subtle.importKey('raw', unb64(c.key), 'AES-GCM', false, ['encrypt', 'decrypt']) };
   return split(await crypto.subtle.importKey('raw', unb64(c.secret), 'HKDF', false, ['deriveBits', 'deriveKey']));
 }
@@ -284,19 +297,59 @@ export function serverCredential(res: Pick<PlexResource, 'accessToken'>, account
 }
 
 /**
+ * Relais injoignables ou inutiles (pas de liste, autre serveur) : mis de côté un moment, puis
+ * redemandés de plus en plus rarement (`base`, doublé à chaque échec, jusqu'à `max`), pour que la
+ * relève régulière des séances des amis ne refrappe pas sans fin les mêmes adresses.
+ */
+export class RelayBackoff {
+  private misses = new Map<string, { until: number; delay: number }>();
+  constructor(
+    private now: () => number = Date.now,
+    private base = 60_000,
+    private max = 3_600_000,
+  ) {}
+  blocked(relay: string): boolean {
+    return (this.misses.get(relay)?.until ?? 0) > this.now();
+  }
+  fail(relay: string): void {
+    const prev = this.misses.get(relay);
+    const delay = prev ? Math.min(this.max, prev.delay * 2) : this.base;
+    this.misses.set(relay, { until: this.now() + delay, delay });
+  }
+  ok(relay: string): void {
+    this.misses.delete(relay);
+  }
+}
+
+export interface FindRelayOptions {
+  /** Adresses déjà reconnues comme relais (true) ou non (false, plus jamais redemandées). */
+  known?: Map<string, boolean>;
+  /** Échecs mis de côté (voir RelayBackoff). */
+  backoff?: RelayBackoff;
+  /**
+   * Identifiant du serveur Plex attendu : seul compte alors un relais qui sait lister ET dont le
+   * Plex est ce serveur-là (`server` de sa réponse à /rooms, public comme le /identity de Plex).
+   * C'est vérifié AVANT qu'aucun jeton ne parte.
+   */
+  server?: string;
+}
+
+/**
  * Premier relais MultiPlex (dans l'ordre de préférence) parmi des adresses candidates, sans
  * attendre les moins bien classées. `ask` rend la réponse à « GET …/rooms » (sans salle) ;
- * `friends` dit si ce relais sait lister les séances visibles.
+ * `friends` dit si ce relais sait lister les séances visibles, `server` de quel Plex.
  */
-export function findRelay(relays: string[], ask: (relay: string) => Promise<unknown>, known?: Map<string, boolean>): Promise<{ relay: string; friends: boolean } | null> {
-  const list = [...new Set(relays)].filter((r) => known?.get(r) !== false).slice(0, MAX_RELAY_CANDIDATES);
+export function findRelay(relays: string[], ask: (relay: string) => Promise<unknown>, opts: FindRelayOptions = {}): Promise<{ relay: string; friends: boolean; server?: string } | null> {
+  const { known, backoff, server } = opts;
+  const list = [...new Set(relays)].filter((r) => known?.get(r) !== false && !backoff?.blocked(r)).slice(0, MAX_RELAY_CANDIDATES);
   if (!list.length) return Promise.resolve(null);
+  type Hit = { friends: boolean; server?: string };
   return new Promise((resolve) => {
-    const state: (boolean | null | undefined)[] = list.map(() => undefined);
+    const state: (Hit | null | undefined)[] = list.map(() => undefined);
     const settle = () => {
       for (let i = 0; i < list.length; i++) {
         if (state[i] === undefined) return;
-        if (state[i] !== null) return resolve({ relay: list[i], friends: !!state[i] });
+        if (state[i]) return resolve({ relay: list[i], ...state[i]! });
       }
       resolve(null);
     };
@@ -306,9 +359,17 @@ export function findRelay(relays: string[], ask: (relay: string) => Promise<unkn
           (a) => {
             const ok = isRoomsAnswer(a);
             known?.set(relay, ok);
-            state[i] = ok ? (a as RoomsAnswer & { friends?: boolean }).friends === true : null;
+            const r = a as RoomsAnswer & { friends?: boolean; server?: unknown };
+            const hit: Hit | null = ok ? { friends: r.friends === true, server: typeof r.server === 'string' ? r.server : undefined } : null;
+            const useful = !!hit && (server === undefined || (hit.friends && hit.server === server));
+            if (useful) backoff?.ok(relay);
+            else backoff?.fail(relay);
+            state[i] = useful ? hit : null;
           },
-          () => (state[i] = null),
+          () => {
+            backoff?.fail(relay);
+            state[i] = null;
+          },
         )
         .then(settle);
     });

@@ -18,8 +18,10 @@ import {
   DemoServer,
   MAX_ROOM_LOOKUP,
   PlexServer,
+  RelayBackoff,
   TogetherSync,
   b64,
+  hostYields,
   deriveLegacy,
   deriveSession,
   findRelay,
@@ -82,6 +84,8 @@ export interface Peer {
  * Présence, toutes les 3 s. `c`/`by` : tampon de la commande que suit son auteur (togethersync.ts).
  * `want` : son auteur arrive ou revient, et demande une présence tout de suite à chacun.
  * `vis` (hôte) : séance visible par les amis, repris par qui deviendrait hôte.
+ * `hc` (hôte) : quand il a pris la main (horloge de Lamport ; 0 pour l'hôte d'origine). Deux hôtes
+ * après une coupure : celui qui l'a prise le plus récemment reste (voir hostYields).
  */
 interface Tick {
   t: 'tick';
@@ -96,6 +100,7 @@ interface Tick {
   c: number;
   by: string;
   vis?: boolean;
+  hc?: number;
   want?: boolean;
 }
 /** Commande : lecture, pause ou saut, tamponnée (`c` = horloge de Lamport de son auteur `id`). */
@@ -173,6 +178,8 @@ function servers(): Promise<PlexResource[]> {
 
 /** Relais déjà reconnus (ou écartés : ce n'est pas un relais MultiPlex) pendant ce lancement. */
 const knownRelays = new Map<string, boolean>();
+/** Relais injoignables, sans liste ou d'un autre serveur : redemandés de plus en plus rarement. */
+const relayBackoff = new RelayBackoff();
 
 /** Demande à un relais lesquelles de ces salles existent (4 secondes au plus). */
 async function askRelay(relay: string, rooms: string[]): Promise<unknown> {
@@ -200,11 +207,24 @@ let ticker = 0;
 let ticks = 0;
 let retry = 0;
 let closing = false;
-let current: { relay: string; room: string } | null = null;
+let current: { relay: string; room: string; owner?: string } | null = null;
 /** Secret de l'invitation et serveur qui la sale (invitations courtes) : de quoi faire entrer un ami. */
 let grant: { secret: string; server: string } | null = null;
-/** Ce relais nous a laissé annoncer la séance (ticket accepté) depuis la dernière connexion. */
-let announcing = false;
+/**
+ * Annonce de la séance au relais depuis la dernière connexion : « asking » pendant qu'on prouve
+ * l'accès au serveur, « on » une fois annoncée avec un ticket (les rafraîchissements suivent alors
+ * sans ticket).
+ */
+let announcing: 'off' | 'asking' | 'on' = 'off';
+/** Dernière fiche envoyée : on ne réannonce que sur un changement utile, pas à chaque geste. */
+let cardSent = { sig: '', at: 0 };
+/** Relais qui ne peut pas lister la séance : on réessaie de plus en plus rarement (état « no » stable). */
+let listRetry = { at: 0, delay: 0 };
+/** Hôte : quand il a pris la main (0 : il a ouvert la séance). */
+let hostClaim = 0;
+/** Amis à qui la clé a déjà été remise (une fois chacun) et quand (quelques-unes par 10 s). */
+let granted = new Set<string>();
+let grantTimes: number[] = [];
 let lastWantReply = 0;
 
 // Lecture en cours, synchronisée.
@@ -268,6 +288,7 @@ function tick(want = false): Tick {
     live: !!player,
     ...sync.stamp(),
     vis: t?.host ? t.visible : undefined,
+    hc: t?.host ? hostClaim : undefined,
     want: want || undefined,
   };
 }
@@ -298,6 +319,11 @@ function onMessage(m: Message) {
   const t = together.value;
   if (!t) return;
   if (m.t === 'tick') {
+    // Deux hôtes (retour après une coupure) : un seul reste, l'autre redevient participant.
+    if (m.host && t.host && hostYields({ hc: hostClaim, id: me.id }, { hc: Number(m.hc) || 0, id: m.id })) {
+      stepDown();
+      return onMessage(m);
+    }
     if (m.host && m.item && (!t.item || itemId(t.item) !== itemId(m.item))) together.value = { ...together.value!, item: m.item };
     if (m.host && !t.host && typeof m.vis === 'boolean' && m.vis !== t.visible) together.value = { ...together.value!, visible: m.vis };
     sync.onTick(m, t.host);
@@ -311,6 +337,7 @@ function onMessage(m: Message) {
   // Commande : appliquée seulement si elle est la plus récente (voir togethersync.ts).
   if (sync.onIntent(m)) {
     together.value = { ...together.value!, notice: { name: String(m.name).slice(0, 60), action: m.action, at: Date.now() } };
+    // La fiche ne change que pour lecture/pause (la position suit au rafraîchissement suivant).
     if (isHost()) announce();
   }
 }
@@ -320,10 +347,10 @@ function onControl(m: { t?: string; error?: string; peer?: string; pub?: string 
   const t = together.value;
   if (!t) return;
   if (m.t === 'announced') {
+    listRetry = { at: 0, delay: 0 };
     if (t.listed !== 'yes') together.value = { ...t, listed: 'yes' };
-  } else if (m.t === 'error' && (m.error === 'ticket' || m.error === 'unavailable')) {
-    announcing = false;
-    together.value = { ...t, listed: 'no' };
+  } else if (m.t === 'error' && ['ticket', 'unavailable', 'owner', 'private', 'proof', 'card'].includes(m.error ?? '')) {
+    notListed();
   } else if (m.t === 'key-request' && typeof m.peer === 'string' && typeof m.pub === 'string') {
     void handOver(m.peer, m.pub);
   }
@@ -335,7 +362,14 @@ function onControl(m: { t?: string; error?: string; peer?: string; pub?: string 
  */
 async function handOver(peer: string, pub: string): Promise<void> {
   const t = together.value;
-  if (!t?.host || !t.visible || !grant) return;
+  if (!t?.host || !t.visible || !grant || announcing !== 'on') return;
+  // Une seule réponse par demandeur, et quelques-unes par 10 s : une rafale de demandes ne prend
+  // pas le budget de messages de l'hôte (le relais borne aussi ce qu'il fait suivre).
+  const now = Date.now();
+  grantTimes = grantTimes.filter((at) => now - at < 10_000);
+  if (granted.has(peer) || grantTimes.length >= 5) return;
+  granted.add(peer);
+  grantTimes.push(now);
   try {
     const sealed = await sealGrant(pub, { secret: grant.secret, server: grant.server, state: { ...here(), ...sync.stamp() } });
     sendControl({ t: 'key-grant', peer, pub: sealed.pub, box: sealed.box });
@@ -351,7 +385,8 @@ function connect() {
   const sock = new WebSocket(`${current.relay}/r/${current.room}`);
   sock.binaryType = 'arraybuffer';
   ws = sock;
-  announcing = false;
+  announcing = 'off';
+  granted = new Set();
   sock.onopen = () => {
     retry = 0;
     if (together.value) together.value = { ...together.value, status: 'open' };
@@ -429,36 +464,68 @@ function card(): FriendCard | null {
   return { name: myName(), title: it.title, sub: it.sub, type: it.type, guid: it.guid || undefined, key: it.key, ...here() };
 }
 
+const cardSig = (c: FriendCard) => [c.title, c.sub, c.key, c.guid, c.playing].join('|');
+
+/** Le relais ne liste pas la séance : état « no » stable, nouvel essai de plus en plus tard. */
+function notListed(): void {
+  announcing = 'off';
+  const delay = listRetry.delay ? Math.min(30 * 60_000, listRetry.delay * 2) : 60_000;
+  listRetry = { at: Date.now() + delay, delay };
+  if (together.value && together.value.listed !== 'no') together.value = { ...together.value, listed: 'no' };
+}
+
 /**
- * Hôte d'une séance visible : l'annonce au relais (la première fois avec un ticket, obtenu en
- * prouvant l'accès au serveur ; ensuite, pour mettre la position à jour). Le jeton du serveur n'est
- * remis qu'à un relais trouvé sur les noms publics de ce même serveur.
+ * Hôte d'une séance visible : l'annonce au relais. La première fois, il prouve l'accès au serveur
+ * (ticket) et présente la preuve d'hôte tirée du secret ; ensuite, la fiche n'est renvoyée que
+ * quand elle change (titre, lecture/pause), au plus toutes les 5 s, et toutes les 15 s pour la
+ * position (`refresh`). Le jeton du serveur ne part que vers un relais trouvé sur les noms publics
+ * de ce serveur ET dont le Plex est ce serveur (vérifié sur /rooms, avant tout jeton).
  */
-function announce(): void {
+function announce(refresh = false): void {
   const t = together.value;
-  if (!t?.host || !t.visible || !grant || !current || !online()) return;
+  if (!t?.host || !t.visible || !grant || !current?.owner || !online()) return;
   const c = card();
   if (!c) return;
-  if (announcing) return sendControl({ t: 'announce', card: c });
-  announcing = true;
+  const now = Date.now();
+  if (announcing === 'asking') return;
+  if (announcing === 'on') {
+    const sig = cardSig(c);
+    if (!refresh && (sig === cardSent.sig || now - cardSent.at < 5000)) return;
+    cardSent = { sig, at: now };
+    return sendControl({ t: 'announce', proof: current.owner, card: c });
+  }
+  if (now < listRetry.at) return;
+  announcing = 'asking';
   const sock = ws;
   const relay = current.relay;
+  const proof = current.owner;
   const srvId = grant.server;
-  if (t.listed !== 'yes') together.value = { ...t, listed: 'pending' };
+  if (t.listed !== 'yes' && t.listed !== 'no') together.value = { ...t, listed: 'pending' };
   void (async () => {
     const res = (await servers()).find((r) => r.clientIdentifier === srvId);
-    const token = res && relayDiscoverable(relay, [res]) ? await credentialFor(res) : null;
+    const found = res && relayDiscoverable(relay, [res]) ? await findRelay([relay], (r) => askRelay(r, []), { server: srvId }) : null;
+    const token = found && res ? await credentialFor(res) : null;
     const answer = token ? await askFriends(relay, token) : null;
     if (ws !== sock || !together.value) return;
-    if (!answer || answer.server !== srvId) {
-      announcing = false;
-      together.value = { ...together.value, listed: 'no' };
+    if (!answer || answer.server !== srvId) return notListed();
+    const c2 = card();
+    if (!c2 || !together.value.visible || !together.value.host) {
+      announcing = 'off';
       return;
     }
-    const now = card();
-    if (now && together.value.visible) sendControl({ t: 'announce', ticket: answer.ticket, card: now });
-    else announcing = false;
+    announcing = 'on';
+    cardSent = { sig: cardSig(c2), at: Date.now() };
+    sendControl({ t: 'announce', ticket: answer.ticket, proof, card: c2 });
   })();
+}
+
+/** Hôte qui cède la main (un autre hôte l'a prise plus récemment) : il libère l'annonce. */
+function stepDown(): void {
+  const t = together.value;
+  if (!t?.host) return;
+  if (announcing === 'on') sendControl({ t: 'release' });
+  announcing = 'off';
+  together.value = { ...t, host: false, listed: undefined };
 }
 
 /** Hôte : rend la séance visible par ses amis, ou la retire de leur liste. */
@@ -467,10 +534,12 @@ export function setVisible(on: boolean): void {
   if (!t) return;
   together.value = { ...t, visible: on, listed: on ? t.listed : undefined };
   if (!t.host) return;
-  if (on) announce();
-  else {
+  if (on) {
+    listRetry = { ...listRetry, at: 0 };
+    announce();
+  } else {
     sendControl({ t: 'unlist' });
-    announcing = false;
+    announcing = 'off';
   }
   void send(tick());
 }
@@ -505,8 +574,10 @@ export async function refreshFriendSessions(): Promise<FriendSession[]> {
   const found = await Promise.all(
     list.map(async (res): Promise<FriendSession[]> => {
       try {
-        const relay = await findRelay(relayCandidates([res]), (r) => askRelay(r, []), knownRelays);
-        if (!relay?.friends) return [];
+        // Seulement un relais qui sait lister et dont le Plex est ce serveur : vérifié avant que
+        // le jeton ne parte ; les échecs sont mis de côté (voir RelayBackoff).
+        const relay = await findRelay(relayCandidates([res]), (r) => askRelay(r, []), { known: knownRelays, backoff: relayBackoff, server: res.clientIdentifier });
+        if (!relay) return [];
         const token = await credentialFor(res);
         const answer = token ? await askFriends(relay.relay, token) : null;
         if (!answer || answer.server !== res.clientIdentifier) return [];
@@ -564,7 +635,8 @@ export async function joinFriend(s: FriendSession): Promise<void> {
   const req = await grantRequestKeys();
   const payload = await new Promise<GrantPayload>((resolve, reject) => {
     let done = false;
-    const sock = new WebSocket(`${session.relay}/r/${session.room}?ticket=${encodeURIComponent(session.ticket)}`);
+    // Le ticket voyage dans le premier message, jamais dans l'adresse (que les proxys journalisent).
+    const sock = new WebSocket(`${session.relay}/r/${session.room}`);
     const finish = (err: Error | null, p?: GrantPayload) => {
       if (done) return;
       done = true;
@@ -574,7 +646,7 @@ export async function joinFriend(s: FriendSession): Promise<void> {
       else resolve(p!);
     };
     const timer = setTimeout(() => finish(new Error('nohost')), 10_000);
-    sock.onopen = () => sock.send(JSON.stringify({ t: 'key-request', pub: req.pub }));
+    sock.onopen = () => sock.send(JSON.stringify({ t: 'key-request', ticket: session.ticket, pub: req.pub }));
     sock.onmessage = (e) => {
       if (typeof e.data !== 'string') return;
       let m: { t?: string; pub?: string; box?: string; error?: string };
@@ -597,6 +669,11 @@ export async function joinFriend(s: FriendSession): Promise<void> {
   if (d.room !== session.room) throw new Error('failed');
   open({ relay: session.relay, ...d }, { code: formatInvite(payload.secret) }, false, friendItem(session), { secret: payload.secret, server: payload.server }, true);
   if (payload.state) sync.adopt(payload.state);
+}
+
+/** Ressource plex.tv d'un serveur que voit ce compte (pour y lire le titre d'une séance d'ami). */
+export async function serverResource(id: string): Promise<PlexResource | undefined> {
+  return (await servers()).find((r) => r.clientIdentifier === id);
 }
 
 // ----- Ouvrir, rejoindre, quitter ----------------------------------------------------------------
@@ -650,12 +727,14 @@ export async function joinTogether(code: string): Promise<void> {
   open({ relay: found.relay, ...sessions[i] }, { code: inviteText(c) }, false, undefined, { secret: c.secret, server: ids[i] }, false);
 }
 
-function open(d: { relay: string; room: string; key: CryptoKey }, codes: { code: string; fullCode?: string }, host: boolean, item: SharedItem | undefined, g: typeof grant, visible: boolean) {
+function open(d: { relay: string; room: string; key: CryptoKey; owner?: string }, codes: { code: string; fullCode?: string }, host: boolean, item: SharedItem | undefined, g: typeof grant, visible: boolean) {
   leaveTogether();
   closing = false;
-  current = { relay: d.relay, room: d.room };
+  current = { relay: d.relay, room: d.room, owner: d.owner };
   key = d.key;
   grant = g;
+  hostClaim = 0;
+  listRetry = { at: 0, delay: 0 };
   together.value = { ...codes, host, status: 'connecting', item, visible };
   peers.value = [];
   friendSessions.value = friendSessions.value.filter((s) => s.room !== d.room);
@@ -669,11 +748,12 @@ function open(d: { relay: string; room: string; key: CryptoKey }, codes: { code:
     const t = together.value;
     // L'hôte est parti : le premier participant (par identifiant) prend la main, et l'annonce.
     if (t && !t.host && !peers.value.some((p) => p.host) && peers.value.every((p) => p.id > me.id) && t.status === 'open' && peers.value.length) {
+      hostClaim = sync.clock + 1;
       together.value = { ...t, host: true };
       announce();
     }
     // Hôte d'une séance visible : la position annoncée est rafraîchie toutes les 15 s.
-    if (++ticks % 5 === 0 && isHost()) announce();
+    if (++ticks % 5 === 0 && isHost()) announce(true);
   }, 3000);
 }
 
@@ -681,7 +761,8 @@ export function leaveTogether(): void {
   if (!together.value) return;
   closing = true;
   void send({ t: 'bye', id: me.id });
-  if (isHost()) sendControl({ t: 'unlist' });
+  // L'hôte part : l'annonce est libérée (pas rendue privée), le suivant la reprendra si elle est visible.
+  if (isHost() && announcing === 'on') sendControl({ t: 'release' });
   clearInterval(ticker);
   const sock = ws;
   ws = null;
@@ -690,7 +771,7 @@ export function leaveTogether(): void {
   peers.value = [];
   current = null;
   grant = null;
-  announcing = false;
+  announcing = 'off';
   sync.reset();
 }
 

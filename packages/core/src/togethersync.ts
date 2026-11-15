@@ -97,6 +97,15 @@ export const newer = (a: Stamp, b: Stamp): boolean => a.c > b.c || (a.c === b.c 
 const num = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) ? x : 0);
 const stampOf = (c: unknown, by: unknown): Stamp | null => (typeof c === 'number' && Number.isFinite(c) && c >= 0 ? { c: Math.floor(c), by: typeof by === 'string' ? by : '' } : null);
 
+/**
+ * Deux hôtes à la fois : après une coupure de plus de 12 s, un participant a pris la main pendant
+ * que l'hôte d'origine revenait. Chaque hôte dit dans ses ticks quand il a pris la main (`hc`,
+ * l'horloge de Lamport à ce moment ; 0 pour l'hôte d'origine). La prise de main la plus récente
+ * l'emporte (puis le plus grand identifiant) : c'est celui qui a mené la séance pendant l'absence,
+ * et celui qui en tient l'annonce au relais. `a` cède la main à `b` quand `hostYields(a, b)`.
+ */
+export const hostYields = (a: { hc: number; id: string }, b: { hc: number; id: string }): boolean => b.hc > a.hc || (b.hc === a.hc && b.id > a.id);
+
 export class TogetherSync {
   ref: SyncRef | null = null;
   /** Plus grand `c` vu ou émis. */

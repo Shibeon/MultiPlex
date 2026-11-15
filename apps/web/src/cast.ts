@@ -8,6 +8,7 @@ import { signal } from '@preact/signals';
 import { t } from './i18n';
 import { native, type CastStatus } from './native';
 import { server } from './store';
+import { leaveTogether, together } from './together';
 import { labels } from './ui';
 import { androidCastApi, webCastApi, webCastPossible } from './webcast';
 
@@ -74,6 +75,25 @@ if (castApi) {
  * s'ouvre directement.
  */
 export function openCast(item: Metadata, start: number): void {
+  // Une seule lecture pendant « Regarder ensemble » : le téléviseur n'est pas synchronisé avec la
+  // séance, donc lancer quoi que ce soit dessus (même le titre de la séance) la quitte. Même règle
+  // et même choix que dans le lecteur (TogetherGate), proposés dans le message d'action habituel.
+  const session = together.value;
+  if (session) {
+    const text = t('tog.conflictLeave')
+      .replace('{title}', labels(item).title)
+      .replace('{session}', session.item?.title ?? t('tog.title'));
+    void import('./menu').then(({ say }) =>
+      say(text, {
+        label: t('tog.leaveAndPlay'),
+        run: () => {
+          leaveTogether();
+          openCast(item, start);
+        },
+      }),
+    );
+    return;
+  }
   const srv = server.value;
   if (!castApi?.browserPicker) {
     castPick.value = { item, start };

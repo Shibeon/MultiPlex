@@ -9,7 +9,7 @@ import { formatClock, t } from './i18n';
 import { say } from './menu';
 import { back, go, route } from './router';
 import { settings, update } from './settings';
-import { auth, server } from './store';
+import { auth, bootError, connect, server, status } from './store';
 import {
   friendItem,
   friendSessions,
@@ -24,6 +24,7 @@ import {
   playingGuid,
   refreshFriendSessions,
   relayUrl,
+  serverResource,
   sessionTime,
   setVisible,
   shareTitle,
@@ -50,11 +51,24 @@ const inPlayer = () => {
 
 /** Lance chez soi un titre de la séance, à la position de la séance. */
 export async function joinPlayback(item: SharedItem | undefined = together.value?.item, at = sessionTime()): Promise<void> {
+  if (!item || !server.value) return;
+  // Le titre est sur le serveur de la séance (celui dont le relais a vérifié l'accès) : on s'y
+  // place d'abord quand on y a accès, plutôt que de le chercher sur le serveur affiché.
+  if (item.server && item.server !== server.value.id) {
+    const prev = server.value;
+    const res = await serverResource(item.server);
+    if (res) await connect(res);
+    // Injoignable : on reste où l'on était (sans tomber sur le choix du serveur).
+    if (server.value === prev && status.value !== 'ready') {
+      status.value = 'ready';
+      bootError.value = '';
+    }
+  }
   const srv = server.value;
-  if (!item || !srv) return;
+  if (!srv) return;
   const local =
-    (item.guid ? await srv.findByGuid(item.guid).catch(() => undefined) : undefined) ??
-    (item.server === srv.id && item.key ? await srv.metadata(item.key).catch(() => undefined) : undefined);
+    (item.server === srv.id && item.key ? await srv.metadata(item.key).catch(() => undefined) : undefined) ??
+    (item.guid ? await srv.findByGuid(item.guid).catch(() => undefined) : undefined);
   if (!local) {
     say(t('tog.missing').replace('{title}', item.title));
     return;
@@ -536,12 +550,14 @@ export function TogetherGate({ id, offline, children }: { id: string; offline?: 
     if (state.verdict !== 'checking') return;
     if (offline) return setState({ verdict: 'leave' });
     let alive = true;
-    server.value
-      ?.metadata(id)
-      .then(
-        (m) => alive && setState({ verdict: playConflict(m), item: m }),
-        () => alive && setState({ verdict: 'none' }),
-      );
+    // Titre introuvable (ou serveur muet) pendant une séance : on ne lance rien en douce, on
+    // propose de quitter la séance pour le lire.
+    const srv = server.value;
+    if (!srv) return setState({ verdict: 'leave' });
+    srv.metadata(id).then(
+      (m) => alive && setState({ verdict: playConflict(m), item: m }),
+      () => alive && setState({ verdict: 'leave' }),
+    );
     return () => {
       alive = false;
     };
