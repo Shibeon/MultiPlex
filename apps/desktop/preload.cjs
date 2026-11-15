@@ -18,6 +18,8 @@ contextBridge.exposeInMainWorld('multiplexNative', {
   /** Sorties audio de la machine : [{ id, label }]. */
   audioDevices: () => ipcRenderer.invoke('audio:devices'),
   platform: process.platform,
+  /** Version du système, envoyée à Plex avec l'identité du client (X-Plex-Platform-Version). */
+  osVersion: typeof process.getSystemVersion === 'function' ? process.getSystemVersion() : undefined,
   /** « Qui est à l'écran ? » : modèle embarqué, image en pause, photo d'une personne. */
   xray: {
     model: (name) => ipcRenderer.invoke('xray:model', String(name)),

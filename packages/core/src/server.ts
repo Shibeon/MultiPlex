@@ -1,4 +1,5 @@
 import { HttpError, getJson, randomId, request } from './http';
+import { identityParams } from './identity';
 import { peopleFromHubs } from './people';
 import { planPlayback, transcodeParams } from './playback';
 import type {
@@ -18,7 +19,16 @@ import type {
   TimelineReport,
 } from './types';
 
-type Params = Record<string, string | number | undefined>;
+/** `undefined` : rien n'est envoyé ; `null` : retire aussi le champ d'identité de même nom. */
+type Params = Record<string, string | number | undefined | null>;
+
+/**
+ * Conversion : le serveur choisit son profil d'après la plateforme et l'appareil que
+ * `transcodeParams` déclare (voir playback.ts, et le repli sur l'ancien profil en cas de 400).
+ * La version du système, le modèle et le fabricant réels n'y sont jamais allés : on ne les
+ * ajoute pas à ce choix, dont l'effet n'a pas été mesuré. Le nom lisible, lui, part.
+ */
+const NO_PROFILE_HINTS: Params = { 'X-Plex-Platform-Version': null, 'X-Plex-Model': null, 'X-Plex-Device-Vendor': null };
 /** Taille des pages lues pour l'index des identifiants externes. */
 const GUID_PAGE = 500;
 
@@ -36,9 +46,23 @@ export class PlexServer implements MediaServer {
     private client: ClientInfo,
   ) {}
 
-  private url(path: string, params: Params = {}): string {
-    const q = new URLSearchParams();
-    for (const [k, v] of Object.entries(params)) if (v !== undefined) q.set(k, String(v));
+  /**
+   * Adresse d'une requête au serveur. Elle porte l'identité complète du client (produit, version,
+   * plateforme, appareil, nom) : le serveur en tire la fiche « Lecteur » de la session qu'il
+   * montre dans son tableau de bord. Un paramètre donné par l'appelant l'emporte (la conversion
+   * choisit son profil par sa propre plateforme / son propre appareil) ; le jeton et
+   * l'identifiant du client, eux, sont toujours les nôtres.
+   *
+   * `identity: false` : seulement le jeton et l'identifiant, pour les images. Elles ne créent
+   * aucune session, et leur adresse sert de clé au cache HTTP du navigateur : y mettre la
+   * version ferait tout retélécharger (et reconvertir par le serveur) à chaque mise à jour.
+   */
+  private url(path: string, params: Params = {}, identity = true): string {
+    const q = new URLSearchParams(identity ? identityParams(this.client) : {});
+    for (const [k, v] of Object.entries(params)) {
+      if (v === null) q.delete(k);
+      else if (v !== undefined) q.set(k, String(v));
+    }
     q.set('X-Plex-Token', this.token);
     q.set('X-Plex-Client-Identifier', this.client.clientId);
     return `${this.uri}${path}${path.includes('?') ? '&' : '?'}${q}`;
@@ -134,16 +158,18 @@ export class PlexServer implements MediaServer {
   image(path: string | undefined, width: number, height: number, opts?: { png?: boolean }): string {
     if (!path) return '';
     if (/^(https?:|data:)/.test(path)) return path;
-    return this.url('/photo/:/transcode', { width, height, minSize: 1, upscale: 1, url: path, ...(opts?.png ? { format: 'png' } : {}) });
+    return this.url('/photo/:/transcode', { width, height, minSize: 1, upscale: 1, url: path, ...(opts?.png ? { format: 'png' } : {}) }, false);
   }
 
   previewThumbUrl(partId: number, ms: number): string {
-    return this.url(`/library/parts/${partId}/indexes/sd/${ms}`);
+    return this.url(`/library/parts/${partId}/indexes/sd/${ms}`, {}, false);
   }
 
   fileRequest(path: string): { url: string; headers: Record<string, string> } {
     if (/^https?:/.test(path)) return { url: path, headers: {} };
-    return { url: this.uri + path, headers: { 'X-Plex-Token': this.token, 'X-Plex-Client-Identifier': this.client.clientId } };
+    // Lecteur natif, téléchargements : en-têtes, et non paramètres, pour garder le jeton hors de
+    // l'adresse ; l'identité complète, pour que la lecture apparaisse sous notre nom.
+    return { url: this.uri + path, headers: { ...identityParams(this.client), 'X-Plex-Token': this.token } };
   }
 
   async playback(item: Metadata, opts: PlaybackOptions): Promise<PlaybackPlan> {
@@ -163,7 +189,7 @@ export class PlexServer implements MediaServer {
       const params = transcodeParams(item, asked, session, this.client, hevc, legacy);
       // Sur un gros fichier (sous-titres intégrés à extraire, session précédente encore en
       // cours d'arrêt), le serveur peut mettre bien plus de 15 s à décider : on l'attend.
-      const res = await this.mc<Raw>('/video/:/transcode/universal/decision', params, 60_000);
+      const res = await this.mc<Raw>('/video/:/transcode/universal/decision', { ...params, ...NO_PROFILE_HINTS }, 60_000);
       if ((res.generalDecisionCode ?? 1000) >= 2000) {
         throw new Error(res.generalDecisionText || 'Le serveur ne peut pas convertir cet élément');
       }
@@ -195,7 +221,7 @@ export class PlexServer implements MediaServer {
       subtitleUrl,
       video,
       audio,
-      url: this.url('/video/:/transcode/universal/start.m3u8', r.params),
+      url: this.url('/video/:/transcode/universal/start.m3u8', { ...r.params, ...NO_PROFILE_HINTS }),
     };
   }
 
