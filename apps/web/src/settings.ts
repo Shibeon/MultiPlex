@@ -205,22 +205,6 @@ const viewport = signal({ tv: typeof window !== 'undefined' && isTv(), wide: typ
  */
 export const couchOn = computed(() => viewport.value.wide);
 
-/** Épaisseur des barres de défilement fines (celles des rangées) quand le système les dessine en
- *  prenant de la place (Windows, Linux) ; 0 quand elles se superposent au contenu (macOS, Android).
- *  Les rangées s'en servent pour que leur barre ne touche jamais le titre suivant (--sb, styles.css). */
-let scrollbar: number | undefined;
-function scrollbarSize(): number {
-  if (scrollbar === undefined) {
-    if (!document.body) return 0;
-    const probe = document.createElement('div');
-    probe.style.cssText = 'position:absolute;top:-999px;width:100px;height:100px;overflow:scroll;scrollbar-width:thin';
-    document.body.appendChild(probe);
-    scrollbar = probe.offsetHeight - probe.clientHeight;
-    probe.remove();
-  }
-  return scrollbar;
-}
-
 /** Largeur d'affiche effective, réduite sur téléviseur. */
 export function cardWidth(): number {
   return Math.round(settings.value.cardSize * (viewport.value.tv ? 0.72 : 1) * (couchOn.value ? COUCH_SCALE : 1));
@@ -283,7 +267,6 @@ export function initSettings(): void {
         : `${s.uiScale * (viewport.value.tv ? 0.72 : 1) * (couchOn.value ? COUCH_SCALE : 1)}%`;
     root.classList.toggle('tv', viewport.value.tv);
     root.classList.toggle('couch', couchOn.value);
-    root.style.setProperty('--sb', `${scrollbarSize()}px`);
     // Illustration du thème : uniquement une image embarquée, jamais une adresse à charger
   // (des réglages importés pourraient en contenir une).
     const art = isThemeImage(s.themeImage) ? s.themeImage : '';

@@ -19,9 +19,19 @@
   --section-gap: 4.5rem; /* d'une section à la suivante : du bas du texte des cartes au titre suivant (72 px) */
   --title-gap: 0.9rem; /* titre de section → cartes */
   --row-pad: 14px; /* place autour des cartes d'une rangée pour l'agrandissement au survol */
-  --row-pad-b: 14px; /* idem sous les cartes ; la barre de défilement se dessine au bas de cette place */
-  --bar-clear: 24px; /* écart minimal entre la barre d'une rangée et le titre de la section suivante */
-  --sb: 0px; /* épaisseur d'une barre de défilement fine du système, 0 si superposée (settings.ts) */
+  --row-pad-b: 14px; /* idem sous les cartes */
+  /* Bouton Lecture du lecteur : fond ivoire, et un halo chaud court qui reste dans l'écart avec
+     −30 s / +30 s (même resserré, sélectionné et agrandi). Plus court encore sur petit écran. */
+  --play-bg: #f5f1ea;
+  --play-fg: #111;
+  --play-glow: 0 0 0.75rem rgba(255, 228, 190, 0.22);
+  --play-glow-focus: 0 0 0 0.2rem rgba(245, 241, 234, 0.6), 0 0 0.8rem rgba(255, 228, 190, 0.3);
+}
+@media (max-width: 700px), (orientation: landscape) and (max-height: 500px) {
+  :root {
+    --play-glow: 0 0 0.4rem rgba(255, 228, 190, 0.2);
+    --play-glow-focus: 0 0 0 0.12rem rgba(245, 241, 234, 0.6), 0 0 0.25rem rgba(255, 228, 190, 0.3);
+  }
 }
 .reduce-motion { --speed: 0s; }
 @media (prefers-reduced-motion: reduce) { :root { --speed: 0s; } }
@@ -118,25 +128,50 @@ input[type='color'] { padding: 0; width: 3em; height: 2em; }
  * retour à la ligne. Elle déborde jusqu'au bord de l'écran (--bleed, la marge de la page) : la
  * carte suivante y apparaît coupée, signe qu'il y a de quoi faire défiler.
  * Verticalement, ses marges négatives rendent la place réservée autour des cartes : la section
- * se termine au bas du texte des cartes, et le titre suivant vient --section-gap plus bas. La barre
- * de défilement, quand le système en dessine une (Windows, Linux), se loge dans cette place, et
- * garde au moins --bar-clear avant le titre suivant : elle ne le touche jamais.
+ * se termine au bas du texte des cartes, et le titre suivant vient --section-gap plus bas.
+ * Pas de barre de défilement visible : la rangée défile toujours (doigt, pavé tactile, glisser à
+ * la souris, clavier, télécommande), et les flèches de .carousel-wrap la signalent à la souris.
  */
 .carousel {
   --bleed: var(--page-pad);
   display: flex; gap: var(--gap); align-items: flex-start;
-  /* « scroll » plutôt que « auto » : la place de la barre est toujours réservée (piste transparente,
-     pas de curseur sans débordement), donc l'espacement ne change pas selon que la rangée déborde. */
-  overflow-x: scroll; overflow-y: hidden; overscroll-behavior-x: contain;
+  overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain;
   padding: var(--row-pad) var(--bleed) var(--row-pad-b);
-  margin: calc(-1 * var(--row-pad)) calc(-1 * var(--bleed)) max(calc(-1 * (var(--row-pad-b) + var(--sb))), calc(var(--bar-clear) - var(--section-gap)));
+  margin: calc(-1 * var(--row-pad)) calc(-1 * var(--bleed)) calc(-1 * var(--row-pad-b));
   scroll-padding-inline: var(--bleed);
-  scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--text) 16%, transparent) transparent;
+  scrollbar-width: none;
 }
-.carousel:hover, .carousel:focus-within { scrollbar-color: color-mix(in srgb, var(--text) 38%, transparent) transparent; }
-/* Navigateurs sans scrollbar-width (anciens Chromium de téléviseurs) : même barre fine. */
-:root .carousel::-webkit-scrollbar { display: block; height: 6px; background: transparent; }
-:root .carousel::-webkit-scrollbar-thumb { border-radius: 99px; background: color-mix(in srgb, var(--text) 22%, transparent); }
+/* Navigateurs sans scrollbar-width (anciens Chromium de téléviseurs). */
+:root .carousel::-webkit-scrollbar { display: none; }
+/*
+ * Conteneur de la rangée (sans marge ni bordure : les marges négatives de la rangée le traversent,
+ * la mise en page est la même qu'avant lui) et ses deux flèches. Elles n'existent qu'avec une
+ * souris ou un pointeur précis, au survol ou au focus de la rangée, du côté où elle peut encore
+ * défiler (classes can-prev / can-next, carousel.tsx). Posées dans la marge de la page où la
+ * rangée déborde, sur le bord de la carte coupée : elles ne recouvrent pas les cartes entières.
+ */
+.carousel-wrap { position: relative; }
+.row-arrow { display: none; }
+@media (hover: hover) and (pointer: fine) {
+  .row-arrow {
+    position: absolute; top: 50%; z-index: 4; display: grid; place-items: center;
+    width: 2.6rem; height: 2.6rem; margin-top: -1.3rem; padding: 0; border: 0; border-radius: 50%;
+    color: var(--text); cursor: pointer; pointer-events: auto;
+    background: color-mix(in srgb, var(--bg) 72%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 16%, transparent), 0 4px 14px rgb(0 0 0 / 0.35);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    opacity: 0; visibility: hidden; transition: opacity var(--speed), visibility var(--speed), background var(--speed);
+  }
+  .row-arrow.prev { left: calc(-1 * var(--page-pad) + max(0.3rem, (var(--page-pad) - 2.6rem) / 2)); }
+  .row-arrow.next { right: calc(-1 * var(--page-pad) + max(0.3rem, (var(--page-pad) - 2.6rem) / 2)); }
+  .row-arrow:hover { background: color-mix(in srgb, var(--bg) 88%, var(--text)); }
+  .carousel-wrap.can-prev:is(:hover, :focus-within) > .row-arrow.prev,
+  .carousel-wrap.can-next:is(:hover, :focus-within) > .row-arrow.next { opacity: 1; visibility: visible; }
+  .carousel-wrap:has(> .carousel.dragging) > .row-arrow { opacity: 0; visibility: hidden; }
+  /* Rangées sans marge de débordement (amis du fil, distribution à la pause) : flèches au bord. */
+  .carousel-wrap:has(> .feed-friends, > .pause-cast-row) > .row-arrow.prev { left: 0.2rem; }
+  .carousel-wrap:has(> .feed-friends, > .pause-cast-row) > .row-arrow.next { right: 0.2rem; }
+}
 .carousel > * { flex: 0 0 auto; }
 .carousel > .card { flex-basis: var(--card-w); }
 /* À la souris, la rangée se fait glisser (carousel.tsx, useRowDrag) : la main s'affiche quand elle
@@ -1096,11 +1131,10 @@ body:has(.cast-bar) .tog-bar:not(.in-player) { bottom: 8.5rem; }
 .transport .tr-right { justify-content: flex-start; }
 .player .transport .btn { width: 4.2rem; height: 4.2rem; padding: 0; display: grid; place-items: center; border-radius: 50%; background: rgba(38, 40, 46, 0.6); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
 .player .transport .btn .icon { width: 2rem; height: 2rem; }
-.player .transport .btn.play { width: 5.4rem; height: 5.4rem; background: #fff; color: #000; box-shadow: 0 0 34px rgba(255, 255, 255, 0.35); }
+.player .transport .btn.play { width: 5.4rem; height: 5.4rem; }
 .player .transport .btn.play .icon { width: 2.4rem; height: 2.4rem; }
 .player .transport .btn:hover { transform: scale(1.06); }
 .player .transport .btn:focus-visible { transform: scale(1.1); }
-.player .transport .btn.play:focus-visible { background: #fff; box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.6), 0 0 44px rgba(255, 255, 255, 0.55); }
 
 .seek { display: flex; align-items: center; gap: 1.4rem; font-size: 1.35rem; font-weight: 600; font-variant-numeric: tabular-nums; }
 .seek > span { min-width: 3.5em; }
@@ -1362,7 +1396,7 @@ a.person-spot:hover .person-spot-go, a.person-spot:focus-visible .person-spot-go
 .hero .actions .btn.primary { background: #fff; color: #000; font-weight: 700; padding-inline: 1.9em; box-shadow: 0 0 26px rgba(255, 255, 255, 0.25); }
 
 /* Lecteur : boutons « lumineux » de la maquette — verre fumé avec un liseré clair en haut,
-   halo chaud autour de la lecture et du bouton sélectionné. */
+   halo chaud autour du bouton sélectionné ; la lecture, ivoire, garde un halo court (--play-glow). */
 .player .btn, .player .transport .btn {
   background: linear-gradient(180deg, rgba(78, 78, 84, 0.62), rgba(24, 24, 28, 0.62));
   backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
@@ -1375,15 +1409,13 @@ a.person-spot:hover .person-spot-go, a.person-spot:focus-visible .person-spot-go
   background: linear-gradient(180deg, rgba(98, 96, 92, 0.75), rgba(36, 34, 32, 0.75));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 0 0 0.2rem #f8ecd9, 0 0 1.8rem rgba(255, 224, 178, 0.75), 0 0 4.5rem rgba(255, 210, 150, 0.4);
 }
-.player .transport .btn.play, .player .transport .btn.play:hover {
-  background: radial-gradient(circle at 50% 35%, #fffdf8, #f3e9db);
-  color: #111;
-  box-shadow: 0 0 0 0.35rem rgba(255, 238, 212, 0.18), 0 0 2.6rem rgba(255, 226, 182, 0.7), 0 0 6.5rem rgba(255, 212, 150, 0.38);
+.player .transport .btn.play, .player .transport .btn.play:hover, .player .transport .btn.play:focus-visible {
+  background: var(--play-bg);
+  background: radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--play-bg), #fff 55%), var(--play-bg));
+  color: var(--play-fg);
+  box-shadow: var(--play-glow);
 }
-.player .transport .btn.play:focus-visible {
-  background: radial-gradient(circle at 50% 35%, #fffdf8, #f3e9db);
-  box-shadow: 0 0 0 0.25rem rgba(255, 238, 212, 0.55), 0 0 2.8rem rgba(255, 226, 182, 0.75), 0 0 6rem rgba(255, 212, 150, 0.35);
-}
+.player .transport .btn.play:focus-visible { box-shadow: var(--play-glow-focus); }
 .player input[type='range']::-webkit-slider-thumb { box-shadow: 0 0 0.9rem rgba(255, 232, 196, 0.75); }
 
 /* Lecteur : la liste d'un réglage sort de son bouton (Audio, Sous-titres, Plus), vers le haut,
@@ -1642,7 +1674,8 @@ input.search-input:focus-visible { background-color: var(--glass-2); }
 /* Sans flou, les fonds translucides deviennent illisibles : on les rend opaques. */
 .tv-device .shell.top .sidebar { background: var(--surface); box-shadow: 0 6px 20px rgb(0 0 0 / 0.4); }
 .tv-device .settings section, .tv-device .dx-menu, .tv-device .update-banner { background: var(--surface); }
-.tv-device .player .transport .btn { background: rgba(38, 40, 46, 0.92); }
+/* La lecture garde son fond ivoire (sans :not, ce sélecteur, aussi précis et plus bas, l'assombrissait). */
+.tv-device .player .transport .btn:not(.play) { background: rgba(38, 40, 46, 0.92); }
 /* Affiche sélectionnée : contour net, ombre courte (le halo flou coûtait cher à chaque appui).
    Elle passe au-dessus de ses voisines, qu'elle déborde en grossissant. */
 .couch .card:focus-visible { position: relative; z-index: 3; }

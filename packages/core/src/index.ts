@@ -10,6 +10,7 @@ export * from './markers';
 export * from './ratings';
 export * from './audio';
 export * from './drag';
+export * from './rowscroll';
 export * from './availability';
 export * from './people';
 export * from './together';

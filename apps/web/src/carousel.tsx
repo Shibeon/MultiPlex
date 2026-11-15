@@ -1,6 +1,7 @@
-import { dragEnd, dragMove, dragStart, glideStep, type DragTrack } from '@multiplex/core';
+import { dragEnd, dragMove, dragStart, glideStep, rowEdges, rowPageTarget, type DragTrack } from '@multiplex/core';
 import type { ComponentChildren, JSX, RefObject } from 'preact';
 import { useEffect, useRef } from 'preact/hooks';
+import { t } from './i18n';
 
 /** Animation coupée : réglage de l'app ou préférence du système. */
 function reducedMotion(): boolean {
@@ -142,21 +143,109 @@ export function useRowDrag(ref: RefObject<HTMLElement>): void {
   }, []);
 }
 
+/**
+ * Flèches de la rangée : la classe `can-prev` / `can-next` du conteneur dit de quel côté il reste
+ * de quoi défiler (règles dans `rowscroll.ts`, @multiplex/core). Recalculée au défilement, quand
+ * la rangée change de taille et quand ses cartes arrivent.
+ */
+function useRowEdges(ref: RefObject<HTMLElement>, wrap: RefObject<HTMLElement>): void {
+  useEffect(() => {
+    const el = ref.current;
+    const box = wrap.current;
+    if (!el || !box) return;
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const { prev, next } = rowEdges(el);
+      box.classList.toggle('can-prev', prev);
+      box.classList.toggle('can-next', next);
+    };
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(update);
+    };
+    update();
+    el.addEventListener('scroll', schedule, { passive: true });
+    const mo = new MutationObserver(schedule);
+    mo.observe(el, { childList: true });
+    // Anciens navigateurs de téléviseurs sans ResizeObserver : la taille de la fenêtre suffit.
+    const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(schedule) : null;
+    ro?.observe(el);
+    if (!ro) addEventListener('resize', schedule);
+    return () => {
+      cancelAnimationFrame(frame);
+      el.removeEventListener('scroll', schedule);
+      mo.disconnect();
+      ro?.disconnect();
+      if (!ro) removeEventListener('resize', schedule);
+    };
+  }, []);
+}
+
+/** Clic sur une flèche : une page de cartes dans sa direction, alignée sur une carte. */
+function pageRow(el: HTMLElement, dir: -1 | 1): void {
+  const box = el.getBoundingClientRect();
+  const cs = getComputedStyle(el);
+  const inset = parseFloat(cs.scrollPaddingLeft) || parseFloat(cs.paddingLeft) || 0;
+  const items = [...el.children].map((c) => {
+    const r = c.getBoundingClientRect();
+    return { left: r.left - box.left - el.clientLeft + el.scrollLeft, width: r.width };
+  });
+  const left = rowPageTarget({ scrollLeft: el.scrollLeft, scrollWidth: el.scrollWidth, clientWidth: el.clientWidth, inset, items }, dir);
+  el.scrollTo({ left, behavior: reducedMotion() ? 'auto' : 'smooth' });
+}
+
+function RowArrow({ dir, row }: { dir: -1 | 1; row: RefObject<HTMLElement> }) {
+  const label = t(dir < 0 ? 'row.prev' : 'row.next');
+  return (
+    <button
+      type="button"
+      class={`row-arrow ${dir < 0 ? 'prev' : 'next'}`}
+      // Hors du parcours au clavier et à la télécommande (ils font déjà défiler la rangée, voir
+      // nav.ts) ; un clic ne prend pas le focus à la carte sélectionnée.
+      tabIndex={-1}
+      data-nav-skip=""
+      aria-label={label}
+      title={label}
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={() => row.current && pageRow(row.current, dir)}
+      // Geste horizontal du pavé tactile au-dessus d'une flèche : la rangée défile quand même.
+      onWheel={(e) => {
+        if (row.current && Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+          e.preventDefault();
+          row.current.scrollLeft += e.deltaX;
+        }
+      }}
+    >
+      <svg class="icon" width={22} height={22} viewBox="0 0 24 24" aria-hidden="true">
+        <path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d={dir < 0 ? 'M15 5l-7 7 7 7' : 'M9 5l7 7-7 7'} />
+      </svg>
+    </button>
+  );
+}
+
 type CarouselProps = Omit<JSX.HTMLAttributes<HTMLDivElement>, 'ref' | 'class' | 'className'> & { class?: string; children?: ComponentChildren };
 
 /**
  * Rangée horizontale (carrousel), la même partout : une seule ligne de cartes, jamais de retour
  * à la ligne, défilement au doigt, au pavé tactile, à la souris en la faisant glisser (voir
  * `useRowDrag`), au clavier et à la télécommande (le focus fait défiler, voir nav.ts). La molette
- * fait défiler la page, comme partout. Mise en page : `.carousel` dans styles.css (espacements
- * partagés, carte suivante qui dépasse au bord de l'écran, barre fine).
+ * fait défiler la page, comme partout. Pas de barre de défilement visible : la carte suivante qui
+ * dépasse au bord de l'écran dit qu'il y a une suite et, à la souris, deux flèches discrètes
+ * apparaissent au survol du côté où l'on peut aller. Mise en page : `.carousel` et
+ * `.carousel-wrap` dans styles.css.
  */
 export function Carousel({ class: cls, children, ...rest }: CarouselProps) {
   const ref = useRef<HTMLDivElement>(null);
+  const wrap = useRef<HTMLDivElement>(null);
   useRowDrag(ref);
+  useRowEdges(ref, wrap);
   return (
-    <div {...rest} ref={ref} class={cls ? `carousel ${cls}` : 'carousel'}>
-      {children}
+    <div ref={wrap} class="carousel-wrap">
+      <div {...rest} ref={ref} class={cls ? `carousel ${cls}` : 'carousel'}>
+        {children}
+      </div>
+      <RowArrow dir={-1} row={ref} />
+      <RowArrow dir={1} row={ref} />
     </div>
   );
 }

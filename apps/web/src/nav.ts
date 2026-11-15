@@ -8,7 +8,8 @@ const SCROLL: ScrollBehavior = tvDevice ? 'auto' : 'smooth';
  * Navigation spatiale : les flèches (clavier, télécommande TV, manette)
  * déplacent le focus vers l'élément le plus proche dans la direction voulue.
  */
-const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),select,textarea,summary,[tabindex="0"]';
+/** `data-nav-skip` : bouton réservé au pointeur (flèches des rangées, carousel.tsx). */
+const FOCUSABLE = 'a[href],button:not([disabled]):not([data-nav-skip]),input:not([disabled]),select,textarea,summary,[tabindex="0"]';
 const DIRS: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
 /** Touche Retour des télécommandes Tizen (10009) et webOS (461). */
 const BACK_KEYCODES = [10009, 461];
