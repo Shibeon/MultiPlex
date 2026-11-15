@@ -10,7 +10,7 @@ import { formatDuration, t } from './i18n';
 import { native } from './native';
 import { enqueue, resolvePlayable, upNext, clearQueue } from './queue';
 import { go } from './router';
-import { discover, invalidate, server, useData } from './store';
+import { discover, invalidate, managedProfile, server, useData } from './store';
 import { Icon, isWatched, labels } from './ui';
 import { canDownload as downloadable, startDownload } from './downloads';
 import { canKeepOffline, keepOffline, offlineEntry } from './offline';
@@ -78,6 +78,8 @@ function Entry({ icon, label, onClick, disabled, children }: { icon?: string; la
 function Menu({ at }: { at: MenuTarget }) {
   const srv = server.value!;
   const d = discover.value;
+  // Un profil géré n'a pas de liste de suivi : l'entrée « Ajouter à ma liste » disparaît.
+  const list = managedProfile.value ? null : d;
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ x: at.x, y: at.y });
 
@@ -87,7 +89,7 @@ function Menu({ at }: { at: MenuTarget }) {
   const full = at.kind === 'item' ? !!local.data : !!online.data;
   // Pour un épisode, la liste de suivi et le partage visent la série.
   const did = at.kind === 'discover' ? at.id : (discoverId(m?.guid) ?? discoverId(m?.grandparentGuid));
-  const listed = useData(at.kind === 'item' && d && did ? `disc:state:${did}` : null, () => d!.isWatchlisted(did!));
+  const listed = useData(at.kind === 'item' && list && did ? `disc:state:${did}` : null, () => list!.isWatchlisted(did!));
   const onList = at.kind === 'discover' ? online.data?.watchlisted : listed.data;
   const canTrailer = at.kind === 'item' && !!m && ['movie', 'show'].includes(m.type);
   const trailer = useData(canTrailer ? `${srv.id}:trailer:${at.id}` : null, () => srv.trailer(at.id).catch(() => undefined));
@@ -181,14 +183,14 @@ function Menu({ at }: { at: MenuTarget }) {
           }}
         />
       )}
-      {d && did && (
+      {list && did && (
         <Entry
           icon={onList ? 'check' : 'bookmark'}
           label={onList ? t('menu.unlist') : t('menu.list')}
           disabled={onList === undefined}
           onClick={() =>
             run(async () => {
-              await d.setWatchlisted(did, !onList);
+              await list.setWatchlisted(did, !onList);
               invalidate('disc:');
             }, t(onList ? 'menu.unlisted' : 'menu.listed'))
           }

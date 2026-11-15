@@ -3,7 +3,7 @@ import { HttpError, type ActiveSession, type FriendActivity } from '@multiplex/c
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import { formatClock, t } from '../i18n';
 import { settings } from '../settings';
-import { auth, community, server, useData } from '../store';
+import { auth, community, managedProfile, server, useData } from '../store';
 import { Carousel } from '../carousel';
 import { ErrorBox, Icon, Spinner, labels } from '../ui';
 
@@ -188,7 +188,8 @@ function PostCard({ p }: { p: Post }) {
  * confidentialité du compte Plex : il vaut dans toutes les applications Plex.
  */
 export function ShareToggle() {
-  const c = community.value;
+  // Un profil géré n'a pas d'amis Plex : rien à partager (le réglage disparaît aussi des réglages).
+  const c = managedProfile.value ? null : community.value;
   const [shares, setShares] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);

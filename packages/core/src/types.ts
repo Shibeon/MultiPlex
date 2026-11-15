@@ -16,6 +16,12 @@ export interface PlexUser {
   username: string;
   title: string;
   thumb?: string;
+  /**
+   * Profil géré du foyer Plex Home (sans compte Plex à lui). Renvoyé par plex.tv dans
+   * /api/v2/user (attribut `restricted` de MyPlexAccount dans python-plexapi) ; absent
+   * des réponses anciennes, d'où le repli sur la liste des profils du foyer.
+   */
+  restricted?: boolean;
 }
 
 export interface PlexPin {

@@ -1,4 +1,4 @@
-import { signal } from '@preact/signals';
+import { computed, signal } from '@preact/signals';
 import {
   DemoCommunity,
   DemoDiscover,
@@ -9,6 +9,7 @@ import {
   getHomeUsers,
   getServers,
   getUser,
+  isManagedProfile,
   pickConnection,
   randomId,
   switchHomeUser,
@@ -77,6 +78,12 @@ export const community = signal<Community | null>(null);
 
 /** Profils du foyer Plex Home ; vide sans foyer ou sans compte Plex. */
 export const home = signal<HomeUser[]>([]);
+/**
+ * Vrai pour un profil géré du foyer (souvent un enfant) : ni « Ma liste » ni « Amis ».
+ * Au démarrage, l'identité enregistrée avec la connexion le dit déjà (pas d'onglets qui
+ * apparaissent puis disparaissent) ; la liste du foyer, une fois chargée, fait foi.
+ */
+export const managedProfile = computed(() => isManagedProfile(auth.value?.user, home.value));
 /** « Qui regarde ? » n'est demandé qu'une fois par lancement. */
 let askedProfile = false;
 
@@ -89,6 +96,13 @@ const DEMO_HOME: HomeUser[] = [
 function loadHome(srv: MediaServer): void {
   const done = (users: HomeUser[]) => {
     home.value = users;
+    // On retient avec la connexion si le profil est géré : le prochain démarrage le sait d'emblée.
+    const a = auth.value;
+    const me = users.find((u) => u.uuid === a?.user.uuid);
+    if (a && me && me.restricted !== !!a.user.restricted) {
+      auth.value = { ...a, user: { ...a.user, restricted: me.restricted } };
+      if (!(srv instanceof DemoServer)) save('mp.auth', auth.value);
+    }
     if (users.length > 1 && settings.value.askProfile && !askedProfile) go('/profiles');
     askedProfile = true;
   };
@@ -101,7 +115,8 @@ function loadHome(srv: MediaServer): void {
 export async function switchProfile(uuid: string, pin?: string): Promise<void> {
   if (server.value instanceof DemoServer) {
     if (DEMO_HOME.find((u) => u.uuid === uuid)?.protected && pin !== '1234') throw new Error('pin');
-    auth.value = { token: '', user: { id: 0, uuid, username: '', title: DEMO_HOME.find((u) => u.uuid === uuid)?.title ?? '' } };
+    const u = DEMO_HOME.find((x) => x.uuid === uuid);
+    auth.value = { token: '', user: { id: 0, uuid, username: '', title: u?.title ?? '', restricted: u?.restricted } };
     return;
   }
   const a = auth.value;
