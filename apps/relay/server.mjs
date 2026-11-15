@@ -13,20 +13,23 @@
 //   POST /friends           → séances visibles par les amis (seulement avec PLEX_URL) : le corps
 //                             {"token":"…"} porte le jeton propre au serveur Plex du relais ; le
 //                             relais l'essaie auprès de ce Plex et ne liste qu'à qui y a accès
-//   WS   /r/<salle>?ticket=… → entrée d'un ami autorisé dans une séance listée, sans la clé : il
-//                             la demande à l'hôte (voir README, « Séances visibles par vos amis »)
+//                             Un ami autorisé entre dans une séance listée par WS /r/<salle>, puis
+//                             demande la clé à l'hôte avec son ticket dans le message (jamais dans
+//                             l'adresse ; voir README, « Séances visibles par vos amis »)
 //
 // Les messages binaires d'une salle sont chiffrés par les applications et suivent tels quels. Les
 // messages texte (JSON) s'adressent au relais lui-même et ne sont jamais renvoyés tels quels :
-// annonce d'une séance visible (« announce », « unlist ») et remise de la clé d'un hôte à un ami
-// autorisé (« key-request », « key-grant », dont le contenu est chiffré pour l'ami seul).
+// annonce d'une séance visible (« announce », « unlist », « release ») et remise de la clé d'un
+// hôte à un ami autorisé (« key-request », « key-grant », dont le contenu est chiffré pour l'ami
+// seul). Ils ont leur propre budget (20 par 10 s), à part de celui des messages de la séance.
 //
 // Les invitations sont courtes (8 signes) : chaque salle demandée, et chaque entrée dans une
 // salle, coûte un jeton à l'adresse IP (30 par minute, 60 d'avance), et les salles demandées qui
 // n'existent pas coûtent aussi un jeton à un compteur commun (10 par seconde), pour borner les
 // essais au hasard même depuis beaucoup d'adresses. Une demande de liste coûte aussi un jeton à
-// l'adresse, et les vérifications demandées à Plex sont bornées pour tout le monde (2 par seconde,
-// 30 d'avance). Une salle ferme au bout de ROOM_TTL_HOURS.
+// l'adresse, et les vérifications demandées à Plex sont bornées par adresse (5 d'avance, puis une
+// toutes les 30 s ; IPv6 : par /64) puis pour tout le monde (2 par seconde, 30 d'avance). Une
+// salle ferme au bout de ROOM_TTL_HOURS.
 import { createHash, randomBytes } from 'node:crypto';
 import { createServer } from 'node:http';
 import { pathToFileURL } from 'node:url';
@@ -38,6 +41,11 @@ const MAX_LOOKUP = 16;
 const RATE = { count: 40, windowMs: 10_000 };
 // Séances visibles par les amis.
 const MAX_CONTROL = 4 * 1024;
+// Messages au relais (annonce, demande et remise de clé) : budget à part de celui de la séance,
+// pour qu'un flot de demandes ne fasse jamais taire les messages chiffrés de l'hôte.
+const CONTROL_RATE = { count: 20, windowMs: 10_000 };
+// Demandes de clé transmises à l'hôte d'une salle : 3 d'avance, puis une toutes les 5 secondes.
+const KEY_REQUESTS = { burst: 3, perSecond: 0.2 };
 const TICKET_TTL_MS = 120_000;
 const VERDICT_OK_MS = 5 * 60_000;
 const VERDICT_KO_MS = 60_000;
@@ -64,13 +72,34 @@ export function bucket(burst, perSecond, now = Date.now) {
   };
 }
 
-/** Seaux par adresse IP, oubliés une fois pleins (pour ne pas grossir sans fin). */
+/**
+ * Clé de limite d'une adresse : une adresse IPv4 telle quelle (y compris écrite « ::ffff:a.b.c.d »),
+ * une adresse IPv6 par son préfixe /64, que n'importe quel abonné reçoit en entier et peut faire
+ * tourner à volonté.
+ */
+export function limitKey(ip) {
+  const a = String(ip ?? '').trim().toLowerCase();
+  const v4 = /^(?:::ffff:)?(\d{1,3}(?:\.\d{1,3}){3})$/.exec(a);
+  if (v4) return v4[1];
+  if (!a.includes(':')) return a;
+  const [head, tail = ''] = a.split('::');
+  const left = head ? head.split(':') : [];
+  const right = a.includes('::') ? (tail ? tail.split(':') : []) : [];
+  const groups = a.includes('::') ? [...left, ...Array(Math.max(0, 8 - left.length - right.length)).fill('0'), ...right] : left;
+  return `${groups
+    .slice(0, 4)
+    .map((g) => (parseInt(g, 16) || 0).toString(16))
+    .join(':')}::/64`;
+}
+
+/** Seaux par adresse IP (IPv6 : par /64), oubliés une fois pleins (pour ne pas grossir sans fin). */
 export function perIp(burst, perSecond, now = Date.now) {
   const map = new Map();
   return {
     take(ip, n = 1) {
-      let b = map.get(ip);
-      if (!b) map.set(ip, (b = bucket(burst, perSecond, now)));
+      const k = limitKey(ip);
+      let b = map.get(k);
+      if (!b) map.set(k, (b = bucket(burst, perSecond, now)));
       return b.take(n);
     },
     sweep() {
@@ -104,6 +133,9 @@ export function clientIp(req, trust = process.env.TRUST_PROXY) {
 const ROOM = /^[A-Za-z0-9_-]{16,64}$/;
 const KEY = /^[A-Za-z0-9_-]{40,200}$/;
 const BOX = /^[A-Za-z0-9_-]{20,3000}$/;
+// Preuve d'hôte : valeur tirée du secret de la séance (connue de ses seuls membres), indépendante
+// de la clé et du numéro de salle. Le relais n'en garde que l'empreinte.
+const PROOF = /^[A-Za-z0-9_-]{16,64}$/;
 
 /**
  * Accès au serveur Plex du relais (PLEX_URL, par exemple http://192.168.1.10:32400).
@@ -180,7 +212,7 @@ export function createRelay(opts = {}) {
   const ipLimit = perIp(opts.ipBurst ?? 60, opts.ipPerSecond ?? 0.5, now);
   const missLimit = bucket(opts.missBurst ?? 600, opts.missPerSecond ?? 10, now);
 
-  const rooms = new Map(); // salle → { peers: Set<WebSocket>, created, card, cardAt, announcer }
+  const rooms = new Map(); // salle → { peers, created, card, cardAt, owner, proof, private, keyRequests }
 
   // Séances visibles par les amis : seulement si le relais connaît son serveur Plex.
   const plexUrl = opts.plexUrl ?? env.PLEX_URL ?? '';
@@ -188,8 +220,10 @@ export function createRelay(opts = {}) {
   const friends = { ready: false, server: '', reason: verifier ? 'pending' : 'off', probedAt: -Infinity };
   // Vérifications demandées à Plex (jetons pas encore connus) : bornées pour tout le monde.
   const plexLimit = bucket(opts.plexBurst ?? 30, opts.plexPerSecond ?? 2, now);
+  // … et d'abord par adresse (IPv6 : par /64), pour qu'aucune ne vide la réserve commune.
+  const plexIp = perIp(opts.plexIpBurst ?? 5, opts.plexIpPerSecond ?? 1 / 30, now);
   const verdicts = new Map(); // empreinte du jeton → { ok, until }
-  const tickets = new Map(); // ticket → expiration
+  const tickets = new Map(); // ticket → { until, used: salles où il a déjà servi }
 
   async function probe() {
     if (!verifier) return;
@@ -209,11 +243,13 @@ export function createRelay(opts = {}) {
   const probing = probe();
 
   /** true : accès au serveur ; false : refusé ; null : vérification impossible ; 'limited'. */
-  async function authorize(token) {
+  async function authorize(token, ip) {
     if (typeof token !== 'string' || !token || token.length > 512) return false;
     const h = sha(token);
     const v = verdicts.get(h);
     if (v && v.until > now()) return v.ok;
+    // La part de l'adresse d'abord : la réserve commune n'est entamée que si elle passe.
+    if (!plexIp.take(ip)) return 'limited';
     if (!plexLimit.take()) return 'limited';
     let ok;
     try {
@@ -229,11 +265,15 @@ export function createRelay(opts = {}) {
 
   function newTicket() {
     const t = randomBytes(18).toString('base64url');
-    tickets.set(t, now() + TICKET_TTL_MS);
+    tickets.set(t, { until: now() + TICKET_TTL_MS, used: new Set() });
     if (tickets.size > MAX_TICKETS) tickets.delete(tickets.keys().next().value);
     return t;
   }
-  const validTicket = (t) => typeof t === 'string' && (tickets.get(t) ?? 0) > now();
+  /** Ticket valable (et pas encore servi pour cette salle, quand `room` est donnée). */
+  const validTicket = (t, room) => {
+    const e = typeof t === 'string' ? tickets.get(t) : undefined;
+    return !!e && e.until > now() && (room === undefined || !e.used.has(room));
+  };
 
   /** Séances listées : seulement celles qu'un hôte autorisé a annoncées (jamais une salle privée). */
   const listed = () =>
@@ -270,7 +310,8 @@ export function createRelay(opts = {}) {
     }
     if (!verifier) return json(res, 404, { multiplex: 'relay', friends: false });
     if (req.method !== 'POST') return json(res, 405, { multiplex: 'relay', error: 'method' });
-    if (!ipLimit.take(clientIp(req))) return json(res, 429, { multiplex: 'relay', error: 'slow down' }, { 'retry-after': '60' });
+    const ip = clientIp(req);
+    if (!ipLimit.take(ip)) return json(res, 429, { multiplex: 'relay', error: 'slow down' }, { 'retry-after': '60' });
     const body = await readBody(req, MAX_CONTROL);
     let token;
     try {
@@ -280,7 +321,7 @@ export function createRelay(opts = {}) {
     }
     if (!friends.ready && now() - friends.probedAt > 30_000) await probe();
     if (!friends.ready) return json(res, 503, { multiplex: 'relay', error: 'unavailable' });
-    const ok = await authorize(token);
+    const ok = await authorize(token, ip);
     if (ok === 'limited') return json(res, 429, { multiplex: 'relay', error: 'slow down' }, { 'retry-after': '10' });
     if (ok === null) return json(res, 503, { multiplex: 'relay', error: 'unavailable' });
     if (!ok) return json(res, 403, { multiplex: 'relay', error: 'forbidden' });
@@ -317,7 +358,9 @@ export function createRelay(opts = {}) {
         res.end('slow down');
         return;
       }
-      json(res, 200, { multiplex: 'relay', found, friends: friends.ready });
+      // `server` (identifiant du Plex du relais, public comme son /identity) : l'application le
+      // compare à celui du serveur AVANT de présenter le moindre jeton.
+      json(res, 200, friends.ready ? { multiplex: 'relay', found, friends: true, server: friends.server } : { multiplex: 'relay', found, friends: false });
       return;
     }
     res.writeHead(404, { 'content-type': 'text/plain' });
@@ -333,11 +376,8 @@ export function createRelay(opts = {}) {
 
   http.on('upgrade', (req, socket, head) => {
     let id;
-    let ticket = null;
     try {
-      const u = new URL(req.url ?? '', 'http://relay');
-      id = /\/r\/([A-Za-z0-9_-]{16,64})$/.exec(u.pathname)?.[1];
-      ticket = u.searchParams.get('ticket');
+      id = /\/r\/([A-Za-z0-9_-]{16,64})$/.exec(new URL(req.url ?? '', 'http://relay').pathname)?.[1];
     } catch {
       id = undefined;
     }
@@ -345,20 +385,20 @@ export function createRelay(opts = {}) {
     if (!ipLimit.take(clientIp(req))) return refuse(socket, '429 Too Many Requests');
     const room = rooms.get(id);
     if ((room && room.peers.size >= maxPeers) || (!room && rooms.size >= maxRooms)) return refuse(socket, '403 Forbidden');
-    // Entrée d'un ami sans invitation : seulement dans une séance listée, avec un ticket valable.
-    if (ticket !== null && (!validTicket(ticket) || !room?.card)) return refuse(socket, '403 Forbidden');
-    wss.handleUpgrade(req, socket, head, (ws) => join(id, ws, ticket !== null));
+    wss.handleUpgrade(req, socket, head, (ws) => join(id, ws));
   });
 
   const reply = (ws, msg) => ws.readyState === ws.OPEN && ws.send(JSON.stringify(msg));
-  const unlist = (room) => {
-    room.card = null;
-    room.cardAt = 0;
-    room.announcer = null;
-  };
+  const live = (ws) => !!ws && ws.readyState === ws.OPEN;
 
-  /** Message texte : adressé au relais (annonce, remise de clé), jamais renvoyé tel quel. */
-  function control(room, ws, data) {
+  /**
+   * Une salle listée a UN hôte : le premier qui l'annonce (`owner`, avec l'empreinte de sa preuve).
+   * Lui seul la rafraîchit, la retire (« unlist » : elle devient privée, et personne d'autre ne
+   * peut la relancer) ou la cède (« release » : passage de main, elle reste annonçable). S'il se
+   * déconnecte, la fiche disparaît ; un membre qui a la même preuve (tirée du secret de la séance)
+   * peut alors la reprendre, sauf si elle était devenue privée.
+   */
+  function control(room, id, ws, data) {
     if (data.length > MAX_CONTROL) return;
     let m;
     try {
@@ -367,58 +407,86 @@ export function createRelay(opts = {}) {
       return;
     }
     if (!m || typeof m !== 'object') return;
+    const owner = live(room.owner) ? room.owner : null;
     if (m.t === 'announce') {
       if (!friends.ready) return reply(ws, { t: 'error', error: 'unavailable' });
       if (!ws.authorized) {
         if (!validTicket(m.ticket)) return reply(ws, { t: 'error', error: 'ticket' });
+        tickets.get(m.ticket).used.add(id);
         ws.authorized = true;
       }
+      if (typeof m.proof !== 'string' || !PROOF.test(m.proof)) return reply(ws, { t: 'error', error: 'proof' });
+      if (room.private && owner !== ws) return reply(ws, { t: 'error', error: 'private' });
+      if ((room.proof && room.proof !== sha(m.proof)) || (owner && owner !== ws)) return reply(ws, { t: 'error', error: 'owner' });
       const card = sanitizeCard(m.card);
       if (!card) return reply(ws, { t: 'error', error: 'card' });
+      room.proof ??= sha(m.proof);
+      room.owner = ws;
+      room.private = false;
       room.card = card;
       room.cardAt = now();
-      room.announcer = ws;
       return reply(ws, { t: 'announced' });
     }
-    if (m.t === 'unlist') {
-      if (room.announcer === ws) unlist(room);
+    if (m.t === 'unlist' || m.t === 'release') {
+      if (owner !== ws) return;
+      room.card = null;
+      room.cardAt = 0;
+      if (m.t === 'unlist') room.private = true;
+      else room.owner = null;
       return;
     }
     if (m.t === 'key-request') {
-      // Seulement d'un ami entré avec un ticket, vers l'hôte qui a annoncé la séance.
-      if (!ws.friend || !room.card || typeof m.pub !== 'string' || !KEY.test(m.pub)) return;
-      const host = room.announcer;
-      if (!host || host.readyState !== host.OPEN) return reply(ws, { t: 'error', error: 'nohost' });
-      return reply(host, { t: 'key-request', peer: ws.sid, pub: m.pub });
+      // Un ami entré sans invitation : ticket dans ce message (jamais dans l'adresse), valable pour
+      // une seule entrée dans cette salle, et seulement vers l'hôte d'une séance listée.
+      if (!room.card || ws.asked || typeof m.pub !== 'string' || !KEY.test(m.pub)) return;
+      if (!validTicket(m.ticket, id)) return reply(ws, { t: 'error', error: 'ticket' });
+      if (!owner) return reply(ws, { t: 'error', error: 'nohost' });
+      if (!room.keyRequests.take()) return reply(ws, { t: 'error', error: 'busy' });
+      tickets.get(m.ticket).used.add(id);
+      ws.asked = true;
+      ws.friend = true;
+      return reply(owner, { t: 'key-request', peer: ws.sid, pub: m.pub });
     }
     if (m.t === 'key-grant') {
-      if (room.announcer !== ws || typeof m.peer !== 'string' || typeof m.pub !== 'string' || !KEY.test(m.pub) || typeof m.box !== 'string' || !BOX.test(m.box)) return;
+      if (owner !== ws || typeof m.peer !== 'string' || typeof m.pub !== 'string' || !KEY.test(m.pub) || typeof m.box !== 'string' || !BOX.test(m.box)) return;
       for (const peer of room.peers) if (peer.sid === m.peer && peer.friend) reply(peer, { t: 'key-grant', pub: m.pub, box: m.box });
     }
   }
 
-  function join(id, ws, friend) {
+  function join(id, ws) {
     let room = rooms.get(id);
-    if (!room) rooms.set(id, (room = { peers: new Set(), created: now(), card: null, cardAt: 0, announcer: null }));
+    if (!room) {
+      const keyRequests = bucket(KEY_REQUESTS.burst, KEY_REQUESTS.perSecond, now);
+      rooms.set(id, (room = { peers: new Set(), created: now(), card: null, cardAt: 0, owner: null, proof: null, private: false, keyRequests }));
+    }
     const peers = room.peers;
     peers.add(ws);
     ws.alive = true;
     ws.sent = [];
+    ws.ctl = [];
     ws.sid = randomBytes(9).toString('base64url');
-    ws.friend = friend;
+    ws.friend = false;
+    ws.asked = false;
     ws.authorized = false;
     ws.on('pong', () => (ws.alive = true));
     ws.on('message', (data, binary) => {
       const t = Date.now();
-      ws.sent = ws.sent.filter((s) => t - s < RATE.windowMs);
-      if (ws.sent.length >= RATE.count) return;
-      ws.sent.push(t);
-      if (!binary) return control(room, ws, data);
+      // Deux budgets : les messages de la séance (chiffrés) et ceux adressés au relais.
+      const [list, rate] = binary ? ['sent', RATE] : ['ctl', CONTROL_RATE];
+      ws[list] = ws[list].filter((s) => t - s < rate.windowMs);
+      if (ws[list].length >= rate.count) return;
+      ws[list].push(t);
+      if (!binary) return control(room, id, ws, data);
       for (const peer of peers) if (peer !== ws && peer.readyState === peer.OPEN) peer.send(data, { binary });
     });
     ws.on('close', () => {
       peers.delete(ws);
-      if (room.announcer === ws) unlist(room);
+      if (room.owner === ws) {
+        // L'hôte est parti : la fiche disparaît ; une séance devenue privée le reste.
+        room.owner = null;
+        room.card = null;
+        room.cardAt = 0;
+      }
       if (!peers.size && rooms.get(id) === room) rooms.delete(id);
     });
     ws.on('error', () => ws.terminate());
@@ -433,7 +501,8 @@ export function createRelay(opts = {}) {
       for (const ws of room.peers) ws.close(4000, 'expired');
     }
     ipLimit.sweep();
-    for (const [k, until] of tickets) if (until <= t) tickets.delete(k);
+    plexIp.sweep();
+    for (const [k, e] of tickets) if (e.until <= t) tickets.delete(k);
     for (const [k, v] of verdicts) if (v.until <= t) verdicts.delete(k);
     if (verifier && t - friends.probedAt >= PROBE_EVERY_MS) void probe();
   }

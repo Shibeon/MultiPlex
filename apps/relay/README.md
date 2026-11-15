@@ -66,6 +66,20 @@ publie une fiche, et rien d'autre : le **pseudo de l'hôte**, le **titre** (et l
 Ni appareil, ni adresse, ni flux, ni qualité, ni sous-titres. Le relais retire la fiche quand
 l'hôte ferme la séance, la rend privée ou se déconnecte.
 
+**Une séance, un hôte.** Le premier qui annonce une séance en devient l'hôte auprès du relais :
+il présente une *preuve d'hôte* tirée du secret de la séance (connue de ses seuls membres, et qui
+ne donne ni la clé ni le secret), dont le relais garde l'empreinte. Tant qu'il est là, personne
+d'autre ne peut annoncer la séance, la modifier, la retirer, ni recevoir les demandes d'entrée. S'il
+la rend privée, elle le reste : personne d'autre ne peut la relancer. S'il part ou passe la main,
+la fiche disparaît, et un membre de la séance (qui a la même preuve) peut la reprendre ; un
+utilisateur qui ne connaît que le numéro de salle listé, lui, ne le peut pas.
+
+**Le pseudo n'est pas vérifié.** Le relais vérifie l'*accès* au serveur, pas l'identité (voir
+ci-dessous) : le pseudo affiché sur une fiche est celui que l'hôte déclare. Un utilisateur de
+votre serveur pourrait donc ouvrir une séance sous le pseudo d'un autre. Il n'en tire rien de plus
+que ce qu'il a déjà (il ne voit que les séances listées de ce serveur, et n'entre dans aucune
+séance sans que son hôte lui remette la clé), mais n'utilisez pas le pseudo comme une preuve.
+
 **Comment le relais vérifie l'accès.** L'application d'un ami envoie `POST …/friends` avec, dans
 le corps (jamais dans l'adresse), le jeton que *ce serveur Plex-là* lui a attribué : le
 `accessToken` du partage que plex.tv donne pour ce serveur. Le relais demande à votre Plex
@@ -81,24 +95,42 @@ point d'accès qui nomme l'utilisateur derrière un jeton de serveur, et l'accè
   appareils tiers) et envoie celui-là.
 - **Seulement au relais de ce serveur.** L'application n'envoie le jeton d'un serveur qu'à un relais
   trouvé aux adresses publiques de ce même serveur (voir
-  [plus haut](#pour-que-vos-amis-trouvent-le-relais)), et ignore un relais dont le Plex n'a pas le
-  même identifiant (`GET /identity`).
+  [plus haut](#pour-que-vos-amis-trouvent-le-relais)), et seulement après avoir lu, sans jeton,
+  l'identifiant du Plex de ce relais (`server` dans la réponse à `GET …/rooms`, le même que le
+  `/identity` public de Plex) : s'il n'est pas celui du serveur, aucun jeton ne part. Un relais
+  injoignable, sans liste ou d'un autre serveur est redemandé de plus en plus rarement (1 minute,
+  puis le double à chaque fois, jusqu'à 1 heure).
 - **Contre-épreuve.** Au démarrage, puis toutes les 10 minutes, le relais essaie un jeton tiré au
   hasard. Si votre Plex l'accepte (réglage « Adresses autorisées sans authentification » qui
   couvre le relais), la liste est désactivée (`503`) plutôt que d'ouvrir vos séances à tous :
   donnez au relais une adresse que Plex ne dispense pas d'authentification.
 - **Ce que le relais garde.** Aucun jeton : seulement leur empreinte SHA-256 avec le verdict
-  (5 minutes si l'accès est accordé, 1 minute sinon, 2 000 au plus). Les vérifications nouvelles
-  sont bornées pour tout le monde (2 par seconde, 30 d'avance) et chaque demande de liste coûte un
-  jeton à l'adresse IP, comme les autres requêtes.
+  (5 minutes si l'accès est accordé, 1 minute sinon, 2 000 au plus). Une vérification nouvelle
+  coûte d'abord à l'adresse (5 d'avance, puis une toutes les 30 secondes), puis à la réserve
+  commune (2 par seconde, 30 d'avance) : quelques adresses ne peuvent pas priver les autres de
+  vérification. Les adresses IPv6 sont comptées par préfixe /64 (qu'un abonné peut faire tourner
+  à volonté), pour toutes les limites du relais. Chaque demande de liste coûte aussi un jeton à
+  l'adresse, comme les autres requêtes. Beaucoup d'adresses IPv4 différentes pourraient encore
+  épuiser la réserve commune : la liste répond alors `429` un moment, sans rien ouvrir.
 
 **Comment l'ami entre sans code.** Une réponse positive donne la liste et un *ticket* (aléatoire,
-valable 2 minutes). Avec lui, l'ami entre dans la salle d'une séance listée (`WS /r/<salle>?ticket=…`) ;
-sans ticket valable, ou pour une salle non listée, c'est 403. Il n'a toujours pas la clé : il
-envoie une clé publique éphémère (ECDH P-256), l'application de l'hôte lui renvoie le secret de la
-séance chiffré pour lui seul (HKDF-SHA256 puis AES-GCM), avec la position courante, et l'ami
-vérifie que ce secret donne bien la salle listée. L'ami arrive donc à l'endroit où en est la
-séance, synchronisé tout de suite.
+valable 2 minutes). L'ami ouvre la salle d'une séance listée (`WS /r/<salle>`) et, dans son premier
+message (jamais dans l'adresse, que les proxys journalisent), présente le ticket avec une clé
+publique éphémère (ECDH P-256). Le relais ne fait suivre la demande qu'à l'hôte d'une séance listée,
+et un ticket ne sert qu'une fois par salle ; sans ticket valable, c'est refusé. L'application de
+l'hôte renvoie le secret de la séance chiffré pour cet ami seul (HKDF-SHA256 puis AES-GCM), avec la
+position courante, et l'ami vérifie que ce secret donne bien la salle listée. L'ami arrive donc à
+l'endroit où en est la séance, synchronisé tout de suite.
+
+**Un flot de demandes ne fait pas taire l'hôte.** Les messages adressés au relais ont leur propre
+budget (20 par 10 secondes et par connexion), à part de celui des messages de la séance (40 par
+10 secondes). Le relais ne fait suivre à l'hôte que quelques demandes d'entrée (3 d'avance, puis une
+toutes les 5 secondes par salle) ; l'hôte répond une seule fois à chaque demandeur, et 5 fois au
+plus par 10 secondes. L'hôte ne réannonce pas sa fiche à chaque geste : seulement quand elle change
+(titre, lecture/pause), au plus toutes les 5 secondes, et toutes les 15 secondes pour la position.
+Quand le relais ne peut pas lister la séance (relais ancien, sans `PLEX_URL`, introuvable par les
+amis), l'application l'indique une fois et réessaie de plus en plus rarement (1 minute, doublée
+jusqu'à 30 minutes).
 
 **Ce qu'il faut savoir.** Le relais est opéré par le propriétaire du serveur Plex, qui voit déjà
 dans Plex qui regarde quoi : la fiche d'une séance visible ne lui apprend rien de plus. Les
@@ -113,7 +145,7 @@ Messages chiffrés (binaires, AES-GCM, `iv` de 12 octets suivi du chiffré d'un 
 quels par le relais :
 
 ```text
-tick   {t:'tick', id, name, thumb?, host, playing, time, item?, live, c, by, vis?, want?}
+tick   {t:'tick', id, name, thumb?, host, playing, time, item?, live, c, by, vis?, hc?, want?}
 intent {t:'intent', id, name, action:'play'|'pause'|'seek', playing, time, item?, c}
 bye    {t:'bye', id}
 ```
@@ -135,23 +167,33 @@ bye    {t:'bye', id}
   l'emporte.
 - `vis` (de l'hôte) dit que la séance est visible : à un changement d'hôte, le nouveau la
   réannonce.
+- **Changement d'hôte** : l'hôte muet depuis 12 secondes est remplacé par le participant au plus
+  petit `id`, qui note `hc` (son horloge de Lamport + 1 ; l'hôte d'origine a `hc: 0`). Si l'ancien
+  hôte revient, il y a deux hôtes : celui dont la prise de main est la plus récente (`hc` plus grand,
+  puis `id` plus grand) reste ; l'autre redevient participant et libère l'annonce (`release`).
 
 Messages au relais (texte JSON, jamais renvoyés tels quels) :
 
 ```text
-→ {t:'announce', ticket?, card}      hôte : publier ou rafraîchir la fiche (toutes les 15 s)
-→ {t:'unlist'}                       hôte : retirer la fiche
-→ {t:'key-request', pub}             ami entré avec un ticket : demander la clé
-→ {t:'key-grant', peer, pub, box}    hôte : réponse pour cet ami seul
-← {t:'announced'} | {t:'error', error:'ticket'|'card'|'unavailable'|'nohost'}
-← {t:'key-request', peer, pub}       à l'hôte
-← {t:'key-grant', pub, box}          à l'ami qui a demandé
+→ {t:'announce', ticket?, proof, card}  hôte : publier ou rafraîchir la fiche (ticket la 1re fois)
+→ {t:'unlist'}                          hôte : retirer la fiche ; la séance devient privée
+→ {t:'release'}                         hôte : céder l'annonce (départ, passage de main)
+→ {t:'key-request', ticket, pub}        ami : demander la clé (ticket : une fois par salle)
+→ {t:'key-grant', peer, pub, box}       hôte : réponse pour cet ami seul
+← {t:'announced'}
+← {t:'error', error:'ticket'|'proof'|'owner'|'private'|'card'|'unavailable'|'nohost'|'busy'}
+← {t:'key-request', peer, pub}          à l'hôte
+← {t:'key-grant', pub, box}             à l'ami qui a demandé
 ```
+
+`proof` : 22 caractères base64url, tirés du secret de la séance par HKDF-SHA256 (info
+`multiplex-together-owner`, à côté de `multiplex-together-room` et `multiplex-together-key`).
 
 `POST …/friends` (corps `{"token":"…"}`, en `text/plain`) répond `200
 {multiplex:'relay', server, ticket, ttl:120, sessions:[{room, card, count, age}]}`, `403` (pas
 d'accès), `404 {friends:false}` (pas de `PLEX_URL`), `429` (trop de demandes) ou `503`
-(Plex injoignable ou trop permissif). `GET /rooms` indique `friends: true|false`.
+(Plex injoignable ou trop permissif). `GET /rooms` indique `friends: true|false` et, quand il
+liste, `server` (identifiant du Plex du relais), à comparer avant d'envoyer un jeton.
 
 ## Installation dans une stack (le plus simple)
 
