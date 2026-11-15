@@ -8,8 +8,9 @@ import { cancelXray, runXray, xrayAvailable } from '../xray';
 import { Carousel } from '../carousel';
 import { Icon, SeekPreview } from '../ui';
 import { PillMenu, PlayerClock, PlayerOutput, PlayerSub, Pill, SkipButton, liveTechNative } from '../playerui';
+import { TogetherNotice, TogetherPillView } from '../togetherui';
 
-type Menu = null | 'audio' | 'sub' | 'speed' | 'chapter' | 'quality' | 'output' | 'audiomode' | 'more';
+type Menu = null | 'audio' | 'sub' | 'speed' | 'chapter' | 'quality' | 'output' | 'audiomode' | 'more' | 'together';
 
 interface Track {
   id: number;
@@ -405,19 +406,8 @@ export function NativeOverlay() {
         </div>
       )}
 
-      {/* Regarder ensemble : qui est là, et ce que les autres viennent de faire. */}
-      {meta.together && (
-        <div class="player-together">
-          <span class="pill">
-            <Icon name="together" size={16} /> {meta.together.names.length ? meta.together.names.join(', ') : t('tog.alone')}
-          </span>
-          {meta.together.notice && meta.together.at && Date.now() - meta.together.at < 4000 && (
-            <span class="pill notice" key={meta.together.at}>
-              {meta.together.notice}
-            </span>
-          )}
-        </div>
-      )}
+      {/* Regarder ensemble : ce que les autres viennent de faire (les participants sont près des commandes). */}
+      {meta.together && <TogetherNotice text={meta.together.notice} at={meta.together.at} />}
 
       <div class="player-bottom">
         <div class="seek">
@@ -467,7 +457,19 @@ export function NativeOverlay() {
           </span>
           {audio.length > 0 && <PillMenu icon="audio" act="audio" label={t('player.audio')} open={menu === 'audio'} menu={menuList} onClick={openMenu('audio')} />}
           {subs.length > 0 && <PillMenu icon="subtitles" act="sub" label={t('player.subs')} open={menu === 'sub'} menu={menuList} onClick={openMenu('sub')} />}
-          <PillMenu icon="plus" act="more" label={t('player.more')} open={!!menu && menu !== 'audio' && menu !== 'sub'} menu={menuList} onClick={() => setMenu(menu ? null : 'more')} />
+          <PillMenu icon="plus" act="more" label={t('player.more')} open={!!menu && menu !== 'audio' && menu !== 'sub' && menu !== 'together'} menu={menuList} onClick={() => setMenu(menu && menu !== 'together' ? null : 'more')} />
+          {meta.together && (
+            <TogetherPillView
+              people={meta.together.people}
+              status={meta.together.status}
+              open={menu === 'together'}
+              onToggle={() => setMenu(menu === 'together' ? null : 'together')}
+              onLeave={() => {
+                setMenu(null);
+                n.action('together:leave');
+              }}
+            />
+          )}
           <span class="side">
             <button class="btn icon-btn" aria-label={t('player.fullscreen')} onClick={() => n.action('fullscreen')}>
               <Icon name="full" />

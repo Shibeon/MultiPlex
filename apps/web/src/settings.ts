@@ -85,6 +85,10 @@ export interface Settings {
   searchHistory: boolean;
   /** Adresse du relais « Regarder ensemble » (hébergé soi-même, par exemple sur un NAS). */
   togetherRelay: string;
+  /** « Regarder ensemble » : mes séances sont visibles par mes amis (choix proposé à chaque séance). */
+  togetherVisible: boolean;
+  /** Prévenir quand un ami lance une séance visible. */
+  togetherNotify: boolean;
 }
 
 export const DEFAULTS: Settings = {
@@ -127,6 +131,8 @@ export const DEFAULTS: Settings = {
   xray: true,
   searchHistory: true,
   togetherRelay: '',
+  togetherVisible: true,
+  togetherNotify: true,
 };
 
 const KEY = 'mp.settings';

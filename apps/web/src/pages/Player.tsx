@@ -14,9 +14,10 @@ import { invalidate, server } from '../store';
 import { dequeue, upNext } from '../queue';
 import { Icon, Spinner, labels, SeekPreview } from '../ui';
 import { castApi, castEnabled, openCast } from '../cast';
-import { attachPlayer } from '../together';
+import { attachPlayer, together } from '../together';
+import { TogetherNotice, TogetherPill, noticeText } from '../togetherui';
 
-type Menu = null | 'audio' | 'sub' | 'quality' | 'speed' | 'chapter' | 'version' | 'audiomode' | 'more';
+type Menu = null | 'audio' | 'sub' | 'quality' | 'speed' | 'chapter' | 'version' | 'audiomode' | 'more' | 'together';
 
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
@@ -843,6 +844,8 @@ export function Player({ id }: { id: string }) {
         </button>
       )}
 
+      {together.value?.notice && <TogetherNotice text={noticeText(together.value.notice)} at={together.value.notice.at} />}
+
       <div class="player-top">
         <button class="btn icon-btn" aria-label={t('common.back')} onClick={leave}>
           <Icon name="back" />
@@ -908,7 +911,9 @@ export function Player({ id }: { id: string }) {
           </span>
           {audioStreams.length > 0 && <PillMenu icon="audio" act="audio" label={t('player.audio')} open={menu === 'audio'} menu={menuList} onClick={openMenu('audio')} />}
           {subStreams.length > 0 && <PillMenu icon="subtitles" act="sub" label={t('player.subs')} open={menu === 'sub'} menu={menuList} onClick={openMenu('sub')} />}
-          <PillMenu icon="plus" act="more" label={t('player.more')} open={!!menu && menu !== 'audio' && menu !== 'sub'} menu={menuList} onClick={() => setMenu(menu ? null : 'more')} />
+          <PillMenu icon="plus" act="more" label={t('player.more')} open={!!menu && menu !== 'audio' && menu !== 'sub' && menu !== 'together'} menu={menuList} onClick={() => setMenu(menu && menu !== 'together' ? null : 'more')} />
+          {/* Regarder ensemble : les participants, dans leur propre place près des commandes. */}
+          <TogetherPill open={menu === 'together'} onToggle={openMenu('together')} />
           <span class="side">
             {/* Téléviseur : l'application occupe déjà tout l'écran. */}
             {!tvDevice && (

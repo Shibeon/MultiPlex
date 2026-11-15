@@ -1,7 +1,7 @@
 import { castPick } from '../cast';
 import { effect } from '@preact/signals';
-import { attachPlayer, peers, together } from '../together';
-import { noticeText } from '../togetherui';
+import { attachPlayer, leaveTogether, together } from '../together';
+import { noticeText, sessionPeople } from '../togetherui';
 import { QUALITIES, audioModeOf, randomId, streamsOf, techBadges, type Metadata, type Stream } from '@multiplex/core';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { t } from '../i18n';
@@ -70,7 +70,7 @@ export function NativePlayer({ id }: { id: string }) {
     () =>
       effect(() => {
         const s = together.value;
-        native!.setMeta({ together: s ? { names: peers.value.map((p) => p.name), notice: s.notice ? noticeText(s.notice) : undefined, at: s.notice?.at } : undefined });
+        native!.setMeta({ together: s ? { people: sessionPeople(), status: s.status, notice: s.notice ? noticeText(s.notice) : undefined, at: s.notice?.at } : undefined });
       }),
     [],
   );
@@ -186,6 +186,9 @@ export function NativePlayer({ id }: { id: string }) {
         playNext();
       } else if (type === 'prev') {
         if (prevRef.current) go(`/play/${prevRef.current.ratingKey}?t=0`, true);
+      } else if (type === 'together') {
+        // « Quitter la séance » depuis l'indicateur des participants : la lecture continue, seule.
+        if (data.action === 'leave') leaveTogether();
       } else if (type === 'audioDevice') {
         // Sortie audio changée depuis les contrôles : on la garde pour la suite.
         update({ audioDevice: String(data.id ?? '') });

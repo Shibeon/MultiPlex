@@ -249,6 +249,8 @@ export function SettingsPage() {
         <Row label={t('tog.relaySetting')}>
           <RelaySetting />
         </Row>
+        <Toggle k="togetherVisible" label={t('set.togetherVisible')} />
+        <Toggle k="togetherNotify" label={t('set.togetherNotify')} />
         <Row label={t('set.lang')}>
           <select value={s.lang} onChange={(e) => update({ lang: e.currentTarget.value as Settings['lang'] })}>
             <option value="fr">Français</option>

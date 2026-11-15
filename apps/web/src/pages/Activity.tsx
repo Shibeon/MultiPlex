@@ -1,4 +1,4 @@
-import { togetherOpen } from '../togetherui';
+import { FriendSessionsSection, togetherOpen } from '../togetherui';
 import { HttpError, type ActiveSession, type FriendActivity } from '@multiplex/core';
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import { formatClock, t } from '../i18n';
@@ -305,6 +305,7 @@ export function ActivityPage() {
         </button>
       </header>
       <ShareToggle />
+      <FriendSessionsSection />
       <LiveNow />
       {community.value ? <Feed /> : <p class="muted">{t('disc.needAccount')}</p>}
     </div>

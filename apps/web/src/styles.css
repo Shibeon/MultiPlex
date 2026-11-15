@@ -1090,8 +1090,7 @@ body:has(.cast-bar) .content { padding-bottom: 9rem; }
 .tog-dot { display: inline-block; width: 0.55rem; height: 0.55rem; border-radius: 50%; background: #ffb74d; }
 .tog-dot.open { background: #4caf50; }
 .tog-bar { position: fixed; right: 1rem; bottom: 1rem; z-index: 140; display: flex; align-items: center; gap: 0.55rem; padding: 0.45rem 0.8rem 0.45rem 0.6rem; border: 0; border-radius: 99px; background: rgba(16, 16, 20, 0.9); backdrop-filter: blur(14px); color: #fff; font: inherit; font-size: 0.9rem; cursor: pointer; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45); }
-.tog-bar.in-player { bottom: auto; top: 1rem; }
-body:has(.cast-bar) .tog-bar:not(.in-player) { bottom: 8.5rem; }
+body:has(.cast-bar) .tog-bar { bottom: 8.5rem; }
 .tog-faces { display: flex; }
 .tog-faces .tog-avatar { width: 1.6rem; height: 1.6rem; margin-left: -0.4rem; border: 2px solid rgba(16, 16, 20, 0.9); }
 .tog-faces .tog-avatar:first-child { margin-left: 0; }
@@ -1102,9 +1101,45 @@ body:has(.cast-bar) .tog-bar:not(.in-player) { bottom: 8.5rem; }
 .relay-ko { color: #ff8a80; }
 .relay-nows, .relay-old { color: #ffb74d; }
 .relay-hint { flex-basis: 100%; }
-.player-together { position: absolute; top: 1.2rem; right: 1.2rem; z-index: 5; display: grid; justify-items: end; gap: 0.4rem; pointer-events: none; }
-.player-together .pill { display: flex; align-items: center; gap: 0.4rem; padding: 0.35rem 0.75rem; border-radius: 99px; background: rgba(0, 0, 0, 0.65); color: #fff; font-size: 0.85rem; }
-.player-together .notice { animation: cast-found 0.3s ease both; }
+.tog-visible { display: grid; gap: 0.3rem; }
+.tog-visible .set-row { padding: 0; }
+.tog-ok { color: #4caf50; }
+/* Séances des amis : une carte par séance, dans une rangée (souris, doigt ou télécommande). */
+.tog-friends-section { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.5rem; min-width: 0; }
+.tog-friends-section > p { margin: 0; }
+.page .tog-friends-section { margin: 0 0 1.6rem; }
+/* Rangée dans une fenêtre ou une section : pas de débord sur la marge de la page. */
+.carousel.tog-friends { --bleed: 0px; gap: 0.7rem; margin: 0; padding: 0.3rem 0.2rem; align-items: stretch; }
+.tog-friend { width: 15.5rem; display: grid; gap: 0.25rem; justify-items: start; text-align: left; padding: 0.8rem 0.9rem; border: 0; border-radius: var(--radius); background: var(--surface-2); color: var(--text); font: inherit; cursor: pointer; }
+.tog-friend:hover, .tog-friend:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--accent); }
+.tog-friend strong { font-size: 1.02rem; line-height: 1.2; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.tog-friend .muted { font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.tog-friend-head { display: flex; align-items: center; gap: 0.45rem; font-size: 0.85rem; }
+.tog-friend-head .tog-avatar { width: 1.6rem; height: 1.6rem; font-size: 0.75rem; }
+.tog-friend-meta { display: flex; align-items: center; gap: 0.3rem; font-size: 0.82rem; opacity: 0.8; font-variant-numeric: tabular-nums; }
+.tog-friend-join { margin-top: 0.3rem; padding: 0.25rem 0.8rem; border-radius: 99px; background: var(--accent); color: var(--on-accent, #000); font-weight: 600; font-size: 0.88rem; }
+.tog-friend:disabled { cursor: progress; opacity: 0.7; }
+/* Lecteur : indicateur des participants, à sa place près des commandes (l'heure reste dégagée). */
+.player .controls .btn.pill.tog-pill { gap: 0.5em; padding-inline: 0.9em 1.1em; }
+.tog-pill .tog-faces .tog-avatar { width: 1.7rem; height: 1.7rem; font-size: 0.8rem; border-color: rgba(38, 40, 46, 0.95); }
+.tog-pill .tog-faces, .tog-pill .tog-dot { font-style: normal; }
+.tog-pill b { font-variant-numeric: tabular-nums; }
+.player .tog-pill-wrap.open > .btn.pill .tog-faces .tog-avatar { border-color: rgba(30, 31, 36, 0.97); }
+.tog-panel { padding: 0.7rem; display: grid; gap: 0.6rem; min-width: 16rem; color: #fff; }
+.tog-panel-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.15rem; max-height: min(45vh, 22rem); overflow-y: auto; }
+.tog-panel-list li { display: flex; align-items: center; gap: 0.6rem; padding: 0.45rem 0.5rem; border-radius: 0.8rem; font-size: 1rem; }
+.tog-panel-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.tog-panel-list small { font-size: 0.8rem; opacity: 0.75; white-space: nowrap; }
+.tog-panel-list .tog-host { padding: 0.05rem 0.5rem; border-radius: 99px; background: rgba(255, 255, 255, 0.14); opacity: 1; }
+.tog-panel-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: flex-end; }
+.player .tog-panel-actions .btn { padding: 0.55em 1.1em; font-size: 0.95rem; }
+.tog-notice { gap: 0.6rem; padding: 0.6rem 1.2rem; animation: cast-found 0.3s ease both; }
+@media (max-width: 700px) {
+  .player .controls .btn.pill.tog-pill { padding-inline: 0.7em 0.85em; }
+  .tog-pill .tog-faces .tog-avatar { width: 1.4rem; height: 1.4rem; }
+  .tog-pill .tog-faces .tog-avatar:nth-child(n + 3) { display: none; }
+  .tog-panel { min-width: min(16rem, 88vw); }
+}
 
 /* =====================================================================
    Lecteur (web et commandes posées sur mpv) : titre et heure en haut,
@@ -1204,6 +1239,11 @@ body:has(.cast-bar) .tog-bar:not(.in-player) { bottom: 8.5rem; }
   .controls .side .volume { display: none; }
   .skip { bottom: 13rem; }
   .player .pause-cast { bottom: 13rem; }
+}
+/* Téléphone : les libellés des pilules sont masqués, mais l'indicateur des participants
+   garde ses visages et son nombre (ce sont eux, l'information). */
+@media (max-width: 700px) {
+  .player .controls .pill.tog-pill .tog-faces .tog-avatar { position: static; width: 1.4rem; height: 1.4rem; overflow: hidden; clip-path: none; }
 }
 .player-top > .btn .icon { width: 1.5rem; height: 1.5rem; }
 .player .transport .btn .icon { width: 2.5rem; height: 2.5rem; }

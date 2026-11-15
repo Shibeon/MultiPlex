@@ -6,41 +6,53 @@
 // dans l'invitation : le relais ne voit ni titre, ni pseudo, ni position.
 //
 // La synchronisation ne dépend pas du lecteur : chaque lecteur (web, mpv) fournit un petit
-// adaptateur (position, pause, lecture, saut, vitesse) et ce module s'occupe du reste.
+// adaptateur (position, pause, lecture, saut, vitesse) et la règle commune (@multiplex/core,
+// togethersync.ts : dernier écrivain gagnant dans l'ordre de Lamport) s'occupe du reste. Hôte et
+// participants commandent la lecture de la même façon ; volume, sous-titres, pistes et qualité
+// restent propres à chacun.
+//
+// Séances visibles par les amis : un hôte peut rendre sa séance visible à ceux qui ont accès à son
+// serveur Plex (vérifié par le relais auprès de ce serveur). Un ami autorisé la voit dans la liste
+// et y entre sans code : l'hôte lui remet le secret de l'invitation, chiffré pour lui seul.
 import {
   DemoServer,
   MAX_ROOM_LOOKUP,
+  PlexServer,
+  TogetherSync,
   b64,
   deriveLegacy,
   deriveSession,
+  findRelay,
   findRoom,
   formatInvite,
+  friendsUrl,
   getServers,
+  grantRequestKeys,
   inviteText,
+  isFriendsAnswer,
   makeSecret,
+  openGrant,
   parseInvite,
   relayCandidates,
   relayDiscoverable,
   relayUrl as coreRelayUrl,
   roomsUrl,
+  sealGrant,
+  serverCredential,
+  type FriendCard,
+  type FriendsAnswer,
+  type GrantPayload,
   type Metadata,
   type PlexResource,
+  type SyncAction,
+  type SyncPlayer,
 } from '@multiplex/core';
 import { signal } from '@preact/signals';
 import { settings } from './settings';
 import { auth, client, resources, server } from './store';
 
-export interface Playback {
-  time(): number;
-  paused(): boolean;
-  play(): void;
-  pause(): void;
-  seek(time: number): void;
-  /** Vitesse de lecture, pour rattraper un petit décalage sans saut visible. */
-  rate?(rate: number): void;
-  /** La vidéo est chargée et avance vraiment (avant : rien n'est surveillé ni annoncé). */
-  ready(): boolean;
-}
+/** Ce que le lecteur expose à la séance : position et lecture/pause, rien d'autre. */
+export type Playback = SyncPlayer;
 
 /** Ce que l'on regarde : retrouvé chez chacun par son identifiant Plex. */
 export interface SharedItem {
@@ -60,10 +72,17 @@ export interface Peer {
   host: boolean;
   playing: boolean;
   time: number;
+  /** Dans le lecteur (et non sur une fiche). */
+  live: boolean;
   item?: SharedItem;
   seen: number;
 }
 
+/**
+ * Présence, toutes les 3 s. `c`/`by` : tampon de la commande que suit son auteur (togethersync.ts).
+ * `want` : son auteur arrive ou revient, et demande une présence tout de suite à chacun.
+ * `vis` (hôte) : séance visible par les amis, repris par qui deviendrait hôte.
+ */
 interface Tick {
   t: 'tick';
   id: string;
@@ -73,17 +92,22 @@ interface Tick {
   playing: boolean;
   time: number;
   item?: SharedItem;
-  /** Le joueur est dans le lecteur (et non sur une fiche). */
   live: boolean;
+  c: number;
+  by: string;
+  vis?: boolean;
+  want?: boolean;
 }
+/** Commande : lecture, pause ou saut, tamponnée (`c` = horloge de Lamport de son auteur `id`). */
 interface Intent {
   t: 'intent';
   id: string;
   name: string;
-  action: 'play' | 'pause' | 'seek';
+  action: SyncAction;
   playing: boolean;
   time: number;
   item?: SharedItem;
+  c: number;
 }
 interface Bye {
   t: 'bye';
@@ -105,7 +129,11 @@ export interface TogetherState {
   /** Titre de la séance (celui de l'hôte). */
   item?: SharedItem;
   /** Dernière action d'un autre participant, pour l'annoncer. */
-  notice?: { name: string; action: Intent['action']; at: number };
+  notice?: { name: string; action: SyncAction; at: number };
+  /** Séance visible par les amis (choix de l'hôte). */
+  visible: boolean;
+  /** Hôte : la séance est-elle vraiment listée par le relais ? (« no » : ce relais ne le peut pas). */
+  listed?: 'pending' | 'yes' | 'no';
 }
 
 export const together = signal<TogetherState | null>(null);
@@ -163,20 +191,25 @@ const me = { id: b64(crypto.getRandomValues(new Uint8Array(6))) };
 const myName = () => auth.value?.user?.title || auth.value?.user?.username || 'MultiPlex';
 const myThumb = () => auth.value?.user?.thumb;
 
+/** La règle de synchronisation (voir @multiplex/core, togethersync.ts). */
+const sync = new TogetherSync(me.id);
+
 let ws: WebSocket | null = null;
 let key: CryptoKey | null = null;
 let ticker = 0;
+let ticks = 0;
 let retry = 0;
 let closing = false;
 let current: { relay: string; room: string } | null = null;
+/** Secret de l'invitation et serveur qui la sale (invitations courtes) : de quoi faire entrer un ami. */
+let grant: { secret: string; server: string } | null = null;
+/** Ce relais nous a laissé annoncer la séance (ticket accepté) depuis la dernière connexion. */
+let announcing = false;
+let lastWantReply = 0;
 
 // Lecture en cours, synchronisée.
 let player: Playback | null = null;
 let playingItem: SharedItem | undefined;
-/** Référence : où en est la séance (position, lecture/pause) et à quel instant on l'a apprise. */
-let ref: { time: number; playing: boolean; at: number } | null = null;
-let applyingUntil = 0;
-let last = { time: 0, paused: true, at: 0 };
 let watcher = 0;
 
 async function encrypt(msg: Message): Promise<ArrayBuffer> {
@@ -199,25 +232,43 @@ async function decrypt(data: ArrayBuffer): Promise<Message | null> {
   }
 }
 
+const online = () => !!ws && ws.readyState === WebSocket.OPEN && !!key;
+
 async function send(msg: Message): Promise<void> {
-  if (!ws || ws.readyState !== WebSocket.OPEN || !key) return;
-  ws.send(await encrypt(msg));
+  if (!online()) return;
+  ws!.send(await encrypt(msg));
+}
+
+/** Message au relais lui-même (texte, en clair) : annonce et remise de clé. */
+function sendControl(msg: Record<string, unknown>): void {
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
 }
 
 const isHost = () => !!together.value?.host;
 
-function tick(): Tick {
+/** Où en est ce lecteur-ci, ou la séance quand on n'est pas dans le lecteur. */
+function here(): { time: number; playing: boolean } {
   const p = player;
+  if (p) return { time: p.time(), playing: !p.paused() };
+  const r = sync.ref;
+  return { time: sync.position() ?? 0, playing: !!r?.playing };
+}
+
+function tick(want = false): Tick {
+  const h = here();
+  const t = together.value;
   return {
     t: 'tick',
     id: me.id,
     name: myName(),
     thumb: myThumb(),
     host: isHost(),
-    playing: !!p && !p.paused(),
-    time: p ? p.time() : (ref?.time ?? 0),
-    item: playingItem ?? together.value?.item,
-    live: !!p,
+    ...h,
+    item: playingItem ?? t?.item,
+    live: !!player,
+    ...sync.stamp(),
+    vis: t?.host ? t.visible : undefined,
+    want: want || undefined,
   };
 }
 
@@ -231,6 +282,7 @@ function upsertPeer(m: Tick | Intent) {
     host: m.t === 'tick' ? !!m.host : (prev?.host ?? false),
     playing: !!m.playing,
     time: Number(m.time) || 0,
+    live: m.t === 'tick' ? !!m.live : (prev?.live ?? true),
     item: m.item ?? prev?.item,
     seen: Date.now(),
   });
@@ -245,71 +297,51 @@ function onMessage(m: Message) {
   upsertPeer(m);
   const t = together.value;
   if (!t) return;
-  if (m.t === 'tick' && m.host && m.item && (!t.item || itemId(t.item) !== itemId(m.item))) together.value = { ...t, item: m.item };
-  // Position de référence : les ticks de l'hôte, et toute action de n'importe qui.
-  if (m.t === 'intent' || (m.t === 'tick' && m.host && !isHost() && m.live)) {
-    ref = { time: Number(m.time) || 0, playing: !!m.playing, at: performance.now() };
+  if (m.t === 'tick') {
+    if (m.host && m.item && (!t.item || itemId(t.item) !== itemId(m.item))) together.value = { ...together.value!, item: m.item };
+    if (m.host && !t.host && typeof m.vis === 'boolean' && m.vis !== t.visible) together.value = { ...together.value!, visible: m.vis };
+    sync.onTick(m, t.host);
+    // Quelqu'un arrive ou revient : il a besoin de notre état tout de suite (au plus une fois par seconde).
+    if (m.want && Date.now() - lastWantReply > 1000) {
+      lastWantReply = Date.now();
+      void send(tick());
+    }
+    return;
   }
-  if (m.t === 'intent') {
-    together.value = { ...together.value!, notice: { name: m.name, action: m.action, at: Date.now() } };
-    apply(true);
+  // Commande : appliquée seulement si elle est la plus récente (voir togethersync.ts).
+  if (sync.onIntent(m)) {
+    together.value = { ...together.value!, notice: { name: String(m.name).slice(0, 60), action: m.action, at: Date.now() } };
+    if (isHost()) announce();
   }
 }
 
-/** Met le lecteur local au diapason de la référence. `hard` : action explicite d'un participant. */
-function apply(hard: boolean) {
-  const p = player;
-  if (!p || !ref) return;
-  const now = performance.now();
-  const expected = ref.time + (ref.playing ? (now - ref.at) / 1000 : 0);
-  const diff = p.time() - expected;
-  const paused = p.paused();
-  if (ref.playing === paused || Math.abs(diff) > (hard ? 0.8 : 2)) applyingUntil = now + 1500;
-  if (Math.abs(diff) > (hard ? 0.8 : 2)) {
-    p.seek(expected);
-    p.rate?.(1);
-  } else if (!hard && ref.playing && !paused && p.rate) {
-    // Petit écart : on accélère ou ralentit à peine, sans saut visible.
-    p.rate(Math.abs(diff) < 0.25 ? 1 : 1 - Math.max(-0.05, Math.min(0.05, diff * 0.08)));
+/** Message texte du relais : annonce acceptée ou refusée, demande d'entrée d'un ami. */
+function onControl(m: { t?: string; error?: string; peer?: string; pub?: string }) {
+  const t = together.value;
+  if (!t) return;
+  if (m.t === 'announced') {
+    if (t.listed !== 'yes') together.value = { ...t, listed: 'yes' };
+  } else if (m.t === 'error' && (m.error === 'ticket' || m.error === 'unavailable')) {
+    announcing = false;
+    together.value = { ...t, listed: 'no' };
+  } else if (m.t === 'key-request' && typeof m.peer === 'string' && typeof m.pub === 'string') {
+    void handOver(m.peer, m.pub);
   }
-  if (ref.playing && paused) p.play();
-  else if (!ref.playing && !paused) p.pause();
-  last = { time: expected, paused: !ref.playing, at: now };
 }
 
 /**
- * Surveille le lecteur local : une pause, une reprise ou un saut fait ici par la personne est
- * annoncé aux autres. Ce que l'on vient d'appliquer pour suivre la séance ne compte pas.
+ * Un ami autorisé (vérifié par le relais auprès du serveur Plex) demande à entrer : l'hôte lui
+ * remet le secret de l'invitation et l'état de la séance, chiffrés pour sa clé éphémère seule.
  */
-let wasReady = false;
-function watch() {
-  const p = player;
-  if (!p) return;
-  const now = performance.now();
-  const time = p.time();
-  const paused = p.paused();
-  if (!p.ready()) {
-    wasReady = false;
-    last = { time, paused, at: now };
-    return;
+async function handOver(peer: string, pub: string): Promise<void> {
+  const t = together.value;
+  if (!t?.host || !t.visible || !grant) return;
+  try {
+    const sealed = await sealGrant(pub, { secret: grant.secret, server: grant.server, state: { ...here(), ...sync.stamp() } });
+    sendControl({ t: 'key-grant', peer, pub: sealed.pub, box: sealed.box });
+  } catch {
+    /* clé publique invalide : ignorée */
   }
-  if (!wasReady) {
-    // La vidéo démarre : pas une action de la personne. On se cale sur la séance si elle existe.
-    wasReady = true;
-    last = { time, paused, at: now };
-    if (!isHost() && ref) apply(true);
-    return;
-  }
-  const expected = last.time + (last.paused ? 0 : (now - last.at) / 1000);
-  if (now > applyingUntil) {
-    const jumped = Math.abs(time - expected) > 1.6;
-    if (paused !== last.paused || jumped) {
-      const action: Intent['action'] = jumped ? 'seek' : paused ? 'pause' : 'play';
-      ref = { time, playing: !paused, at: now };
-      void send({ t: 'intent', id: me.id, name: myName(), action, playing: !paused, time, item: playingItem });
-    } else if (!isHost()) apply(false);
-  }
-  last = { time, paused, at: now };
 }
 
 function connect() {
@@ -319,13 +351,23 @@ function connect() {
   const sock = new WebSocket(`${current.relay}/r/${current.room}`);
   sock.binaryType = 'arraybuffer';
   ws = sock;
+  announcing = false;
   sock.onopen = () => {
     retry = 0;
     if (together.value) together.value = { ...together.value, status: 'open' };
-    void send(tick());
+    // Arrivée ou retour : on demande l'état de chacun (resynchronisation, voir togethersync.ts).
+    void send(tick(true));
+    if (isHost()) announce();
   };
   sock.onmessage = (e) => {
     if (e.data instanceof ArrayBuffer) void decrypt(e.data).then((m) => m && onMessage(m));
+    else if (typeof e.data === 'string') {
+      try {
+        onControl(JSON.parse(e.data));
+      } catch {
+        /* message illisible : ignoré */
+      }
+    }
   };
   sock.onclose = () => {
     if (ws !== sock) return;
@@ -337,15 +379,238 @@ function connect() {
   };
 }
 
-/** Ouvre une séance (hôte) et renvoie le code d'invitation. */
-export async function startTogether(item?: Metadata): Promise<string> {
+// ----- Jetons présentés au relais (séances visibles) --------------------------------------------
+
+/** Jeton délégué par le serveur actuel (quand plex.tv ne donne pour lui que le jeton du compte). */
+let delegated: { server: string; token: string; until: number } | null = null;
+
+/**
+ * Jeton qui prouve au relais d'un serveur qu'on y a accès : le jeton propre à ce serveur, ou un
+ * jeton délégué par lui. Jamais le jeton du compte plex.tv (voir @multiplex/core, serverCredential).
+ */
+async function credentialFor(res: PlexResource): Promise<string | null> {
+  const own = serverCredential(res, auth.value?.token);
+  if (own) return own;
+  const srv = server.value;
+  if (!(srv instanceof PlexServer) || srv.id !== res.clientIdentifier) return null;
+  if (delegated && delegated.server === srv.id && delegated.until > Date.now()) return delegated.token;
+  try {
+    const token = await srv.delegationToken();
+    if (token === auth.value?.token) return null;
+    delegated = { server: srv.id, token, until: Date.now() + 10 * 60_000 };
+    return token;
+  } catch {
+    return null;
+  }
+}
+
+/** Liste du relais pour ce jeton (jeton dans le corps : ni dans l'adresse, ni en en-tête). */
+async function askFriends(relay: string, token: string): Promise<FriendsAnswer | null> {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 6000);
+  try {
+    // text/plain : requête « simple », sans aller-retour OPTIONS.
+    const r = await fetch(friendsUrl(relay), { method: 'POST', headers: { 'content-type': 'text/plain' }, body: JSON.stringify({ token }), cache: 'no-store', signal: ctl.signal });
+    if (!r.ok) return null;
+    const a: unknown = await r.json();
+    return isFriendsAnswer(a) ? a : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Fiche annoncée : nom de l'hôte, titre, position. Rien sur l'appareil, l'adresse ou le flux. */
+function card(): FriendCard | null {
+  const t = together.value;
+  const it = t?.item ?? playingItem;
+  if (!it) return null;
+  return { name: myName(), title: it.title, sub: it.sub, type: it.type, guid: it.guid || undefined, key: it.key, ...here() };
+}
+
+/**
+ * Hôte d'une séance visible : l'annonce au relais (la première fois avec un ticket, obtenu en
+ * prouvant l'accès au serveur ; ensuite, pour mettre la position à jour). Le jeton du serveur n'est
+ * remis qu'à un relais trouvé sur les noms publics de ce même serveur.
+ */
+function announce(): void {
+  const t = together.value;
+  if (!t?.host || !t.visible || !grant || !current || !online()) return;
+  const c = card();
+  if (!c) return;
+  if (announcing) return sendControl({ t: 'announce', card: c });
+  announcing = true;
+  const sock = ws;
+  const relay = current.relay;
+  const srvId = grant.server;
+  if (t.listed !== 'yes') together.value = { ...t, listed: 'pending' };
+  void (async () => {
+    const res = (await servers()).find((r) => r.clientIdentifier === srvId);
+    const token = res && relayDiscoverable(relay, [res]) ? await credentialFor(res) : null;
+    const answer = token ? await askFriends(relay, token) : null;
+    if (ws !== sock || !together.value) return;
+    if (!answer || answer.server !== srvId) {
+      announcing = false;
+      together.value = { ...together.value, listed: 'no' };
+      return;
+    }
+    const now = card();
+    if (now && together.value.visible) sendControl({ t: 'announce', ticket: answer.ticket, card: now });
+    else announcing = false;
+  })();
+}
+
+/** Hôte : rend la séance visible par ses amis, ou la retire de leur liste. */
+export function setVisible(on: boolean): void {
+  const t = together.value;
+  if (!t) return;
+  together.value = { ...t, visible: on, listed: on ? t.listed : undefined };
+  if (!t.host) return;
+  if (on) announce();
+  else {
+    sendControl({ t: 'unlist' });
+    announcing = false;
+  }
+  void send(tick());
+}
+
+// ----- Séances des amis ---------------------------------------------------------------------------
+
+/** Une séance visible d'un ami, telle qu'un relais la liste. */
+export interface FriendSession {
+  relay: string;
+  /** Serveur Plex du relais (celui dont l'accès a été vérifié). */
+  server: string;
+  serverName: string;
+  room: string;
+  card: FriendCard;
+  count: number;
+  /** Instant (Date.now) de la dernière annonce de l'hôte. */
+  at: number;
+  ticket: string;
+  ticketUntil: number;
+}
+
+export const friendSessions = signal<FriendSession[]>([]);
+
+/**
+ * Demande aux relais des serveurs que l'on voit les séances visibles. Pour chaque serveur : son
+ * relais (cherché sur ses noms publics, comme pour une invitation), puis la liste, en présentant
+ * le jeton de CE serveur. La séance que l'on est en train de suivre n'y figure pas.
+ */
+export async function refreshFriendSessions(): Promise<FriendSession[]> {
+  if (!auth.value || server.value instanceof DemoServer) return friendSessions.value;
+  const list = (await servers()).slice(0, MAX_ROOM_LOOKUP);
+  const found = await Promise.all(
+    list.map(async (res): Promise<FriendSession[]> => {
+      try {
+        const relay = await findRelay(relayCandidates([res]), (r) => askRelay(r, []), knownRelays);
+        if (!relay?.friends) return [];
+        const token = await credentialFor(res);
+        const answer = token ? await askFriends(relay.relay, token) : null;
+        if (!answer || answer.server !== res.clientIdentifier) return [];
+        const now = Date.now();
+        return answer.sessions.map((s) => ({
+          relay: relay.relay,
+          server: res.clientIdentifier,
+          serverName: res.name,
+          room: s.room,
+          card: s.card,
+          count: s.count,
+          at: now - s.age,
+          ticket: answer.ticket,
+          ticketUntil: now + answer.ttl * 1000 - 15_000,
+        }));
+      } catch {
+        return [];
+      }
+    }),
+  );
+  setFriendSessions(found.flat());
+  return friendSessions.value;
+}
+
+/** Nouvelle liste (la séance suivie ici en est retirée). */
+export function setFriendSessions(list: FriendSession[]): void {
+  friendSessions.value = list.filter((s) => s.room !== current?.room);
+}
+
+/** Titre d'une séance d'ami, pour le retrouver chez soi. */
+export const friendItem = (s: Pick<FriendSession, 'card' | 'server'>): SharedItem => ({
+  guid: s.card.guid ?? '',
+  server: s.server,
+  key: s.card.key,
+  type: s.card.type ?? 'movie',
+  title: s.card.title,
+  sub: s.card.sub,
+});
+
+/** Position d'une séance d'ami maintenant (d'après l'annonce de l'hôte). */
+export const friendTime = (s: FriendSession): number => s.card.time + (s.card.playing ? (Date.now() - s.at) / 1000 : 0);
+
+/**
+ * Entre dans la séance d'un ami, sans code : le relais, qui a vérifié l'accès au serveur, laisse
+ * entrer avec le ticket ; l'hôte remet alors le secret de l'invitation, chiffré pour une clé
+ * éphémère créée ici. La salle qu'on en tire doit être celle qui était listée.
+ */
+export async function joinFriend(s: FriendSession): Promise<void> {
+  let session = s;
+  if (Date.now() > session.ticketUntil) {
+    const fresh = (await refreshFriendSessions()).find((x) => x.room === s.room && x.relay === s.relay);
+    if (!fresh) throw new Error('notfound');
+    session = fresh;
+  }
+  const req = await grantRequestKeys();
+  const payload = await new Promise<GrantPayload>((resolve, reject) => {
+    let done = false;
+    const sock = new WebSocket(`${session.relay}/r/${session.room}?ticket=${encodeURIComponent(session.ticket)}`);
+    const finish = (err: Error | null, p?: GrantPayload) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      sock.close();
+      if (err) reject(err);
+      else resolve(p!);
+    };
+    const timer = setTimeout(() => finish(new Error('nohost')), 10_000);
+    sock.onopen = () => sock.send(JSON.stringify({ t: 'key-request', pub: req.pub }));
+    sock.onmessage = (e) => {
+      if (typeof e.data !== 'string') return;
+      let m: { t?: string; pub?: string; box?: string; error?: string };
+      try {
+        m = JSON.parse(e.data);
+      } catch {
+        return;
+      }
+      if (m.t === 'key-grant' && m.pub && m.box) {
+        openGrant(req.priv, req.pub, m.pub, m.box).then(
+          (p) => finish(null, p),
+          () => finish(new Error('failed')),
+        );
+      } else if (m.t === 'error') finish(new Error(m.error === 'nohost' ? 'nohost' : 'failed'));
+    };
+    sock.onerror = () => finish(new Error('failed'));
+    sock.onclose = () => finish(new Error('notfound'));
+  });
+  const d = await deriveSession(payload.secret, payload.server);
+  if (d.room !== session.room) throw new Error('failed');
+  open({ relay: session.relay, ...d }, { code: formatInvite(payload.secret) }, false, friendItem(session), { secret: payload.secret, server: payload.server }, true);
+  if (payload.state) sync.adopt(payload.state);
+}
+
+// ----- Ouvrir, rejoindre, quitter ----------------------------------------------------------------
+
+/** Ouvre une séance (hôte) et renvoie le code d'invitation. `visible` : visible par les amis. */
+export async function startTogether(item?: Metadata, opts: { visible?: boolean } = {}): Promise<string> {
   const relay = relayUrl();
   if (!relay) throw new Error('relay');
   const secret = makeSecret();
   const srv = server.value;
   const d = await deriveSession(secret, srv?.id ?? '');
   const code = formatInvite(secret);
-  open({ relay, ...d }, { code, fullCode: formatInvite(secret, relay) }, true, item ? sharedOf(item) : undefined);
+  const visible = (opts.visible ?? settings.value.togetherVisible) && !!srv?.id;
+  open({ relay, ...d }, { code, fullCode: formatInvite(secret, relay) }, true, item ? sharedOf(item) : undefined, srv?.id ? { secret, server: srv.id } : null, visible);
   // Les amis trouveront-ils ce relais grâce au serveur ? (voir relayCandidates)
   void servers().then((list) => {
     const mine = list.filter((r) => r.clientIdentifier === srv?.id);
@@ -366,7 +631,7 @@ export async function joinTogether(code: string): Promise<void> {
   const c = parseCode(code);
   if (!c) throw new Error('code');
   if (c.v !== 3) {
-    open({ relay: c.relay, ...(await deriveLegacy(c)) }, { code: inviteText(c) }, false);
+    open({ relay: c.relay, ...(await deriveLegacy(c)) }, { code: inviteText(c) }, false, undefined, null, false);
     return;
   }
   const list = await servers();
@@ -380,29 +645,35 @@ export async function joinTogether(code: string): Promise<void> {
     askRelay,
     knownRelays,
   );
-  const session = found && sessions.find((s) => s.room === found.room);
-  if (!found || !session) throw new Error('notfound');
-  open({ relay: found.relay, ...session }, { code: inviteText(c) }, false);
+  const i = found ? sessions.findIndex((s) => s.room === found.room) : -1;
+  if (!found || i < 0) throw new Error('notfound');
+  open({ relay: found.relay, ...sessions[i] }, { code: inviteText(c) }, false, undefined, { secret: c.secret, server: ids[i] }, false);
 }
 
-function open(d: { relay: string; room: string; key: CryptoKey }, codes: { code: string; fullCode?: string }, host: boolean, item?: SharedItem) {
+function open(d: { relay: string; room: string; key: CryptoKey }, codes: { code: string; fullCode?: string }, host: boolean, item: SharedItem | undefined, g: typeof grant, visible: boolean) {
   leaveTogether();
   closing = false;
   current = { relay: d.relay, room: d.room };
   key = d.key;
-  together.value = { ...codes, host, status: 'connecting', item };
+  grant = g;
+  together.value = { ...codes, host, status: 'connecting', item, visible };
   peers.value = [];
+  friendSessions.value = friendSessions.value.filter((s) => s.room !== d.room);
   connect();
   // Présence : un signe de vie toutes les 3 secondes ; un participant muet depuis 12 s est parti.
+  ticks = 0;
   ticker = window.setInterval(() => {
     void send(tick());
     const gone = Date.now() - 12_000;
     if (peers.value.some((p) => p.seen < gone)) peers.value = peers.value.filter((p) => p.seen >= gone);
-    // L'hôte est parti : le premier participant (par identifiant) prend la main.
     const t = together.value;
+    // L'hôte est parti : le premier participant (par identifiant) prend la main, et l'annonce.
     if (t && !t.host && !peers.value.some((p) => p.host) && peers.value.every((p) => p.id > me.id) && t.status === 'open' && peers.value.length) {
       together.value = { ...t, host: true };
+      announce();
     }
+    // Hôte d'une séance visible : la position annoncée est rafraîchie toutes les 15 s.
+    if (++ticks % 5 === 0 && isHost()) announce();
   }, 3000);
 }
 
@@ -410,6 +681,7 @@ export function leaveTogether(): void {
   if (!together.value) return;
   closing = true;
   void send({ t: 'bye', id: me.id });
+  if (isHost()) sendControl({ t: 'unlist' });
   clearInterval(ticker);
   const sock = ws;
   ws = null;
@@ -417,7 +689,9 @@ export function leaveTogether(): void {
   together.value = null;
   peers.value = [];
   current = null;
-  ref = null;
+  grant = null;
+  announcing = false;
+  sync.reset();
 }
 
 /** Identité d'un titre dans la séance. */
@@ -432,6 +706,36 @@ export const sharedOf = (m: Metadata): SharedItem => ({
   sub: m.type === 'episode' ? `S${m.parentIndex ?? 0} · E${m.index ?? 0} — ${m.title}` : m.year ? String(m.year) : undefined,
 });
 
+/** Le titre `m` est-il celui de la séance ? */
+export function isSessionItem(m: Pick<Metadata, 'guid' | 'ratingKey'>, it = together.value?.item): boolean {
+  if (!it) return false;
+  return (!!it.guid && m.guid === it.guid) || (it.server === server.value?.id && it.key === m.ratingKey);
+}
+
+/**
+ * Une seule lecture pendant une séance. Lancer `m` est-il possible tel quel (« none » : c'est le
+ * titre de la séance, ou l'hôte passe à un autre épisode de la même série), à proposer à l'hôte
+ * pour tout le monde (« switch »), ou faut-il quitter la séance pour le regarder (« leave ») ?
+ */
+export function playConflict(m: Pick<Metadata, 'guid' | 'ratingKey' | 'type' | 'grandparentTitle'>): 'none' | 'switch' | 'leave' {
+  const t = together.value;
+  if (!t) return 'none';
+  const it = t.item;
+  if (!it) return t.host ? 'none' : 'leave';
+  if (isSessionItem(m, it)) return 'none';
+  if (t.host && m.type === 'episode' && it.type === 'episode' && m.grandparentTitle === it.title) return 'none';
+  return t.host ? 'switch' : 'leave';
+}
+
+/** Hôte : la séance passe à ce titre, pour tout le monde. */
+export function shareTitle(m: Metadata): void {
+  const t = together.value;
+  if (!t?.host) return;
+  together.value = { ...t, item: sharedOf(m) };
+  void send(tick());
+  announce();
+}
+
 /**
  * Le lecteur annonce qu'il lit `item` : la séance suit ce lecteur jusqu'à `detach`. L'hôte
  * change aussi le titre de la séance (épisode suivant, par exemple).
@@ -443,15 +747,19 @@ export function attachPlayer(p: Playback, item: Metadata): () => void {
   playingGuid.value = itemId(playingItem);
   const t = together.value;
   if (t.host && (!t.item || itemId(t.item) !== itemId(playingItem))) together.value = { ...t, item: playingItem };
-  last = { time: p.time(), paused: p.paused(), at: performance.now() };
-  wasReady = false;
+  sync.attach(p);
   clearInterval(watcher);
-  watcher = window.setInterval(watch, 500);
+  watcher = window.setInterval(() => {
+    const out = sync.poll({ host: isHost(), online: online() });
+    if (!out) return;
+    void send({ t: 'intent', id: me.id, name: myName(), ...out, item: playingItem });
+    if (isHost()) announce();
+  }, 500);
   void send(tick());
   return () => {
     if (player !== p) return;
     clearInterval(watcher);
-    p.rate?.(1);
+    sync.detach(p);
     player = null;
     playingItem = undefined;
     playingGuid.value = undefined;
@@ -461,9 +769,8 @@ export function attachPlayer(p: Playback, item: Metadata): () => void {
 
 /** Position de la séance maintenant (pour lancer la lecture au bon endroit en la rejoignant). */
 export function sessionTime(): number {
-  if (!ref) {
-    const host = peers.value.find((p) => p.host);
-    return host?.time ?? 0;
-  }
-  return ref.time + (ref.playing ? (performance.now() - ref.at) / 1000 : 0);
+  const at = sync.position();
+  if (at !== null) return at;
+  const host = peers.value.find((p) => p.host);
+  return host?.time ?? 0;
 }

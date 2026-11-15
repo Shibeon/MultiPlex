@@ -24,7 +24,7 @@ import { auth, discover, home, libraries, managedProfile, server, status } from 
 import { Icon } from './ui';
 import { ReadyGate } from './ready';
 import { CastBar, CastPicker } from './castui';
-import { TogetherBar, TogetherDialog } from './togetherui';
+import { TogetherBar, TogetherDialog, TogetherGate } from './togetherui';
 
 function NavLink({ href, icon, label, iconOnly }: { href: string; icon: string; label: string; iconOnly?: boolean }) {
   const cur = `#${route.value.hash.split('?')[0]}`;
@@ -171,14 +171,25 @@ function Routes() {
   const [kind, id] = route.value.parts;
   const navRef = useFitNav();
   // Un titre téléchargé se lit avec ou sans serveur.
-  if (kind === 'offline-play' && id) return <OfflinePlayer key={id} id={id} />;
+  if (kind === 'offline-play' && id) {
+    return (
+      <TogetherGate key={id} id={id} offline>
+        <OfflinePlayer id={id} />
+      </TogetherGate>
+    );
+  }
   if (status.value === 'offline') return <OfflineShell />;
   if (status.value !== 'ready' || !server.value) return <Gate />;
   if (kind === 'play' && id) {
     if (resumeAfter.peek()) resumeAfter.value = null;
     // Dans l'application de bureau, mpv lit le fichier d'origine ; « ?web=1 » force le lecteur intégré.
     const useNative = nativeAvailable.value && settings.value.nativePlayer && !route.value.query.has('web');
-    return useNative ? <NativePlayer key={id} id={id} /> : <Player key={id} id={id} />;
+    // Pendant une séance « Regarder ensemble », une seule lecture : voir TogetherGate.
+    return (
+      <TogetherGate key={id} id={id}>
+        {useNative ? <NativePlayer id={id} /> : <Player id={id} />}
+      </TogetherGate>
+    );
   }
   return (
     <div class={`shell ${settings.value.layout === 'side' ? 'side' : 'top'}`}>

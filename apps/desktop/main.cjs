@@ -617,6 +617,9 @@ ipcMain.on('overlay:action', (_e, name) => {
   } else if (typeof name === 'string' && /^quality:[a-z0-9]{1,12}$/.test(name)) {
     // Le changement de qualité relance la lecture : c'est la page principale qui sait le faire.
     sendTo(main, 'mpv:event', 'quality', { id: name.slice(8) });
+  } else if (name === 'together:leave') {
+    // « Quitter la séance » depuis l'indicateur des participants : la page principale tient la séance.
+    sendTo(main, 'mpv:event', 'together', { action: 'leave' });
   } else if (name === 'prev') {
     sendTo(main, 'mpv:event', 'prev', {});
   } else if (name === 'next') {

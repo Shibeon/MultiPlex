@@ -29,8 +29,8 @@ export interface NativePlayOptions {
 
 /** Ce que la page principale sait du titre en cours et transmet à la fenêtre de contrôles. */
 export interface NativeMeta {
-  /** Regarder ensemble : participants et dernière action annoncée. */
-  together?: { names: string[]; notice?: string; at?: number };
+  /** Regarder ensemble : participants (moi d'abord), état de la connexion, dernière action annoncée. */
+  together?: { people: import('./togetherui').TogetherPerson[]; status: string; notice?: string; at?: number };
   title?: string;
   sub?: string;
   /** Marqueurs d'intro et de générique, en secondes. */
@@ -56,7 +56,7 @@ export interface NativeMeta {
 }
 
 export type NativeCommand = 'toggle' | 'pause' | 'seek' | 'seekBy' | 'volume' | 'mute' | 'speed' | 'aid' | 'sid' | 'stats' | 'key' | 'audioDevice' | 'audioMode';
-export type NativeEvent = 'state' | 'ended' | 'error' | 'next' | 'prev' | 'quality' | 'notice' | 'audioDevice';
+export type NativeEvent = 'state' | 'ended' | 'error' | 'next' | 'prev' | 'quality' | 'notice' | 'audioDevice' | 'together';
 
 /** État de la mise à jour de l'application de bureau. */
 export interface UpdateState {
@@ -126,7 +126,7 @@ export interface NativeApi {
   setMeta(meta: NativeMeta): void;
   overlayInit(): Promise<{ meta: NativeMeta; state: Record<string, unknown> }>;
   onMeta(listener: (meta: NativeMeta) => void): () => void;
-  action(name: 'back' | 'cast' | 'fullscreen' | 'next' | 'prev' | `quality:${string}` | `person:${string}`): void;
+  action(name: 'back' | 'cast' | 'fullscreen' | 'next' | 'prev' | `quality:${string}` | `person:${string}` | 'together:leave'): void;
 }
 
 /** Un titre gardé pour le hors ligne. */
