@@ -42,7 +42,7 @@ let ctx: { srv: MediaServer; item: Metadata; session: string; transcode: string;
 
 function report(state: 'playing' | 'paused' | 'stopped', time: number, duration: number) {
   if (!ctx || !time) return;
-  ctx.srv.timeline({ ratingKey: ctx.item.ratingKey, state, timeMs: time * 1000, durationMs: duration * 1000 || ctx.item.duration || 0, session: ctx.session }).catch(() => {});
+  ctx.srv.timeline({ ratingKey: ctx.item.ratingKey, state, timeMs: time * 1000, durationMs: Number.isFinite(duration) && duration > 0 ? duration * 1000 : ctx.item.duration || 0, session: ctx.session }).catch(() => {});
 }
 
 function finish() {

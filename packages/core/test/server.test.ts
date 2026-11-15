@@ -233,6 +233,28 @@ describe('PlexServer contre un faux PMS', () => {
     expect([last().path, last().q.get('session')]).toEqual(['/video/:/transcode/universal/stop', plan.session]);
   });
 
+  it('n’envoie jamais une progression aberrante (fausse lecture « vue »)', async () => {
+    const sent = (r: Partial<{ timeMs: number; durationMs: number }>) => srv.timeline({ ratingKey: '10', state: 'stopped', timeMs: 303000, durationMs: 2901000, session: 's1', ...r });
+    // Flux HLS sans fin connue : video.duration vaut Infinity. Pas de « duration=Infinity » :
+    // le serveur garde la durée qu'il connaît.
+    await sent({ durationMs: Infinity });
+    expect([last().q.get('time'), last().q.get('duration')]).toEqual(['303000', null]);
+    await sent({ durationMs: NaN });
+    expect([last().q.get('time'), last().q.get('duration')]).toEqual(['303000', null]);
+    await sent({ durationMs: 0 });
+    expect([last().q.get('time'), last().q.get('duration')]).toEqual(['303000', null]);
+    // Position au-delà de la durée annoncée : c'est la durée qui est fausse (unités, autre
+    // fichier) ; la remonter ferait passer le titre pour vu.
+    await sent({ timeMs: 303000, durationMs: 2901 });
+    expect([last().q.get('time'), last().q.get('duration')]).toEqual(['303000', null]);
+    // Position illisible : rien n'est envoyé.
+    const before = log.length;
+    await sent({ timeMs: NaN });
+    await sent({ timeMs: Infinity });
+    await sent({ timeMs: -5 });
+    expect(log.length).toBe(before);
+  });
+
   it('liste les lectures en cours', async () => {
     const [a, b] = await srv.sessions();
     expect([a.id, a.user, a.state, a.item.viewOffset]).toEqual(['abc', 'Ami', 'paused', 600000]);

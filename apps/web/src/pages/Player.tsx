@@ -142,7 +142,7 @@ export function Player({ id }: { id: string }) {
     const p = plan.current;
     if (!v || !it || !p || !v.currentTime) return;
     srv
-      .timeline({ ratingKey: it.ratingKey, state, timeMs: v.currentTime * 1000, durationMs: (v.duration || 0) * 1000 || it.duration || 0, session: p.session })
+      .timeline({ ratingKey: it.ratingKey, state, timeMs: v.currentTime * 1000, durationMs: Number.isFinite(v.duration) && v.duration > 0 ? v.duration * 1000 : it.duration || 0, session: p.session })
       .catch(() => {});
   };
 

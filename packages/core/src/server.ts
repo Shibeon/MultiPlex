@@ -233,14 +233,24 @@ export class PlexServer implements MediaServer {
     await request(this.url(`/library/parts/${partId}`, { ...sel, allParts: 1 }), { method: 'PUT' });
   }
 
+  /**
+   * Progression remontée au serveur, qui marque le titre vu quand elle dépasse son seuil (90 %
+   * par défaut). Une valeur aberrante ne part donc jamais : position illisible, rien n'est
+   * envoyé ; durée inconnue (Infinity d'un flux HLS, NaN, 0) ou plus courte que la position
+   * (unités ou fichier différents), elle est omise et le serveur garde celle qu'il connaît.
+   */
   async timeline(r: TimelineReport): Promise<void> {
+    const time = Math.round(r.timeMs);
+    if (!Number.isFinite(time) || time < 0) return;
+    const duration = Math.round(r.durationMs);
+    const knownDuration = Number.isFinite(duration) && duration > 0 && time <= duration ? duration : undefined;
     await request(
       this.url('/:/timeline', {
         ratingKey: r.ratingKey,
         key: `/library/metadata/${r.ratingKey}`,
         state: r.state,
-        time: Math.round(r.timeMs),
-        duration: Math.round(r.durationMs),
+        time,
+        duration: knownDuration,
         'X-Plex-Session-Identifier': r.session,
       }),
       { timeout: 5000 },
