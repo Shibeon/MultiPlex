@@ -1,6 +1,32 @@
 [
   {
     "versions": {
+      "desktop": "0.1.34",
+      "web": "0.1.34",
+      "android": "0.1.34",
+      "tv": "0.1.34"
+    },
+    "fr": [
+      "Rangées : la molette fait de nouveau défiler la page ; pour parcourir une rangée à la souris, cliquez-glissez (un simple clic ouvre toujours la fiche). Tactile, trackpad et clavier inchangés.",
+      "Interface : sections nettement plus aérées, sur ordinateur, TV et téléphone.",
+      "Ma liste : chaque titre indique s’il est Disponible, Non disponible ou À vérifier sur votre serveur ; filtre « Disponibles uniquement » et tri par disponibilité.",
+      "Regarder ensemble : invitation courte (MPX-XXXX-XXXX), sans adresse ; l’app de vos amis trouve le relais grâce à votre serveur Plex (voir le guide du relais). Les anciennes invitations restent acceptées.",
+      "Serveur Plex : MultiPlex se présente avec son nom, sa version et l’appareil (« MultiPlex (Windows) »…) dans le tableau de bord du serveur.",
+      "Profils gérés Plex Home : les onglets « Ma liste » et « Amis » sont masqués.",
+      "Fiche : sur téléphone, le menu « ⋯ » reste entièrement dans l’écran."
+    ],
+    "en": [
+      "Rows: the mouse wheel scrolls the page again; to browse a row with the mouse, click and drag (a simple click still opens the item). Touch, trackpad and keyboard unchanged.",
+      "Interface: much more space between sections, on desktop, TV and phone.",
+      "My list: each title shows whether it is Available, Not available or To check on your server; “Available only” filter and sort by availability.",
+      "Watch together: short invitation (MPX-XXXX-XXXX) with no address; your friends’ app finds the relay through your Plex server (see the relay guide). Old invitations still work.",
+      "Plex server: MultiPlex now identifies itself with its name, version and device (“MultiPlex (Windows)”…) on the server dashboard.",
+      "Plex Home managed profiles: the “My list” and “Friends” tabs are hidden.",
+      "Details: on phones, the “⋯” menu stays fully on screen."
+    ]
+  },
+  {
+    "versions": {
       "desktop": "0.1.33",
       "web": "0.1.33",
       "android": "0.1.33",
