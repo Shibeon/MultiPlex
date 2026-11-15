@@ -1,6 +1,24 @@
 [
   {
     "versions": {
+      "desktop": "0.1.37",
+      "web": "0.1.37",
+      "android": "0.1.37",
+      "tv": "0.1.37"
+    },
+    "fr": [
+      "Regarder ensemble : une séance n’est visible que par les amis Plex de l’hôte, jamais par les autres utilisateurs du serveur ; le relais vérifie qui demande et affiche le nom d’utilisateur Plex vérifié de l’hôte.",
+      "Regarder ensemble : l’interrupteur devient « Visible par mes amis Plex » ; sans relais configuré pour les amis, la séance reste « Non listée ». L’invitation par code ne change pas.",
+      "Relais : sécurité renforcée (aucune usurpation de l’hôte ou du propriétaire, accès retiré dès qu’un partage ou une amitié disparaît)."
+    ],
+    "en": [
+      "Watch together: a session is visible only to the host’s Plex friends, never to other users of the server; the relay checks who is asking and shows the host’s verified Plex username.",
+      "Watch together: the switch becomes “Visible to my Plex friends”; without a relay set up for friends, the session stays “Not listed”. Code invites are unchanged.",
+      "Relay: hardened security (no impersonation of the host or the owner, access removed as soon as a share or friendship ends)."
+    ]
+  },
+  {
+    "versions": {
       "desktop": "0.1.36",
       "web": "0.1.36",
       "android": "0.1.36",
