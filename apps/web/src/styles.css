@@ -22,6 +22,11 @@
      qui laisse voir deux cartes et un quart de la suivante au bord de l'écran. Seuls les écrans
      étroits (téléphones) sont concernés : la carte suivante y dépasse toujours nettement. */
   --row-card-w: min(var(--card-w), max(6.5rem, calc((100vw - var(--page-pad) - 2 * var(--gap)) / 2.25)));
+  /* Rangées de personnes (distribution, personnes de la recherche) : même idée, photo de la
+     largeur habituelle, mais jamais plus que ce qui laisse voir trois cartes et un tiers de la
+     suivante. Seuls les téléphones étroits (moins de ~450 px) sont concernés. */
+  --cast-gap: clamp(0.8rem, 1.6vw, 1.6rem);
+  --cast-card-w: min(clamp(7.5rem, 9.5vw, 10rem), max(5.5rem, calc((100vw - var(--page-pad) - 3 * var(--cast-gap)) / 3.35)));
   --row-pad: 14px; /* place autour des cartes d'une rangée pour l'agrandissement au survol */
   --row-pad-b: 14px; /* idem sous les cartes */
   /* Bouton Lecture du lecteur : fond ivoire, et un halo chaud court qui reste dans l'écart avec
@@ -1352,8 +1357,8 @@ body:has(.cast-bar) .tog-bar:not(.in-player) { bottom: 8.5rem; }
 /* Distribution : photos arrondies, nom et rôle dessous. */
 .hub.cast { margin-top: var(--section-gap); }
 .hub.cast h2 { font-size: 1.6rem; }
-.cast-row { gap: clamp(0.8rem, 1.6vw, 1.6rem); }
-.cast-card { flex: 0 0 clamp(7.5rem, 9.5vw, 10rem); display: grid; justify-items: center; gap: 0.15rem; text-align: center; }
+.cast-row { gap: var(--cast-gap); }
+.cast-card { flex: 0 0 var(--cast-card-w); display: grid; justify-items: center; gap: 0.15rem; text-align: center; }
 .cast-card .cast-face { width: 100%; height: auto; aspect-ratio: 1.1; margin-bottom: 0.55rem; border-radius: calc(var(--radius) * 1.4); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35); }
 .cast-card .cast-face img { object-position: center 22%; }
 .cast-card .cast-face b { font-size: 2.6rem; }
