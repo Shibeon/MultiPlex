@@ -1,10 +1,11 @@
-import type { Hub, LibraryOptions, MediaServer, Metadata } from '@multiplex/core';
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { rankPeople, type Hub, type LibraryOptions, type MediaServer, type Metadata } from '@multiplex/core';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { formatDuration, libraryTitle, t } from '../i18n';
 import { go, route } from '../router';
 import { cardWidth, load, save, settings } from '../settings';
-import { libraries, server, useData } from '../store';
+import { discover, libraries, server, useData } from '../store';
 import { DiscoverResults } from './Discover';
+import { PeopleRow, PersonSpotlight } from './Person';
 import { clearSearches, forgetSearch, rememberSearch, searchHistory } from '../searchHistory';
 import { Card, ErrorBox, HubRow, Icon, Spinner, VirtualGrid, artSize, labels } from '../ui';
 
@@ -479,11 +480,16 @@ export function SearchPage() {
   }, [text]);
 
   const { data, error, loading } = useData(query ? `${srv.id}:search:${query}` : null, () => srv.search(query));
+  // Personnes du catalogue Plex : en plus de celles du serveur ; une erreur ici ne cache rien d'autre.
+  const d = discover.value;
+  const known = useData(d && query.length >= 2 ? `disc:people:${query}` : null, () => d!.searchPeople(query));
+  const people = useMemo(() => rankPeople(query, data?.people ?? [], known.data ?? []), [query, data, known.data]);
+  const anyPeople = !!people.featured || people.others.length > 0;
 
   // Une recherche entre dans l'historique quand on la valide (Entrée), quand on ouvre un de ses
   // résultats, ou quand on quitte la page après qu'elle a trouvé quelque chose.
   const found = useRef('');
-  found.current = query && data?.length ? query : '';
+  found.current = query && (data?.hubs.length || anyPeople) ? query : '';
   useEffect(() => () => found.current && rememberSearch(found.current), []);
 
   const typed = text.trim().toLowerCase();
@@ -512,7 +518,7 @@ export function SearchPage() {
           if (e.key === 'Enter') rememberSearch(text);
           // Flèche bas : vers les recherches récentes, puis les résultats.
           if (e.key === 'ArrowDown') {
-            const next = document.querySelector<HTMLElement>('.recent-search button, .page .card');
+            const next = document.querySelector<HTMLElement>('.recent-search button, .page .person-spot, .page .card, .page .cast-card');
             if (next) {
               e.preventDefault();
               next.focus();
@@ -547,8 +553,11 @@ export function SearchPage() {
       )}
       {error && <ErrorBox error={error} />}
       {query && loading && !data && <Spinner />}
-      {query && data?.length === 0 && <p class="muted">{t('search.none')}</p>}
-      {data?.map((h) => <HubRow key={h.hubIdentifier} hub={h} />)}
+      {query && data?.hubs.length === 0 && !anyPeople && <p class="muted">{t('search.none')}</p>}
+      {/* Une personne nommée en entier passe devant les films ; les autres suivent les résultats du serveur. */}
+      {people.featured && <PersonSpotlight key={people.featured.key} person={people.featured} />}
+      {data?.hubs.map((h) => <HubRow key={h.hubIdentifier} hub={h} />)}
+      <PeopleRow people={people.others} />
       <DiscoverResults query={query} />
     </div>
   );

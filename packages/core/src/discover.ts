@@ -1,5 +1,6 @@
 import { identityHeaders } from './auth';
 import { getJson, request } from './http';
+import { nameWords, peopleFromDiscover, type PersonHit } from './people';
 import type { ClientInfo, Metadata, Page } from './types';
 
 /**
@@ -12,6 +13,8 @@ import type { ClientInfo, Metadata, Page } from './types';
 export interface Discover {
   watchlist(offset: number, limit: number): Promise<Page<Metadata>>;
   search(query: string, limit?: number): Promise<Metadata[]>;
+  /** Personnes du catalogue dont le nom correspond à la recherche (acteurs, réalisateurs…). */
+  searchPeople(query: string, limit?: number): Promise<PersonHit[]>;
   /** Fiche d'un titre du catalogue, avec `watchlisted`. */
   details(id: string): Promise<Metadata & { watchlisted: boolean }>;
   isWatchlisted(id: string): Promise<boolean>;
@@ -161,6 +164,15 @@ export class PlexDiscover implements Discover {
       .filter((m) => !seen.has(m.ratingKey) && !!seen.add(m.ratingKey));
   }
 
+  async searchPeople(query: string, limit = 10): Promise<PersonHit[]> {
+    // Recherche de personnes du catalogue : `searchTypes=people` auprès du fournisseur de
+    // métadonnées, comme dans l'exemple publié avec python-plexapi (ticket 1158). Chaque
+    // personne y est un `Directory` ; toute autre forme est ignorée.
+    const q = new URLSearchParams({ query, limit: String(limit), searchTypes: 'people', includeMetadata: '1', filterPeople: '1' });
+    const { MediaContainer } = await getJson<{ MediaContainer?: unknown }>(`${METADATA}/library/search?${q}`, { headers: identityHeaders(this.client, this.token) });
+    return peopleFromDiscover(MediaContainer);
+  }
+
   async seasonEpisodes(seasonId: string, lang = 'fr'): Promise<Metadata[]> {
     // Le catalogue « discover » ne liste pas les épisodes d'une saison ; le fournisseur de
     // métadonnées, si (le même que celui du serveur), avec les épisodes annoncés et leur date.
@@ -270,6 +282,33 @@ export class DemoDiscover implements Discover {
   async search(query: string, limit = 24): Promise<Metadata[]> {
     const q = query.toLowerCase();
     return this.catalogue.filter((m) => m.title.toLowerCase().includes(q)).slice(0, limit);
+  }
+
+  async searchPeople(query: string, limit = 10): Promise<PersonHit[]> {
+    // Quelques personnes fictives ; Inès Morel est aussi dans la distribution du serveur de démonstration.
+    const words = nameWords(query).join(' ');
+    if (!words) return [];
+    const face = (hue: number) =>
+      `data:image/svg+xml,${encodeURIComponent(
+        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="hsl(${hue},45%,46%)"/><stop offset="1" stop-color="hsl(${(hue + 50) % 360},50%,18%)"/></linearGradient></defs><rect width="200" height="200" fill="url(#g)"/><circle cx="100" cy="78" r="38" fill="rgba(255,255,255,.55)"/><path d="M30 200c6-48 36-74 70-74s64 26 70 74z" fill="rgba(255,255,255,.55)"/></svg>`,
+      )}`;
+    const people: PersonHit[] = [
+      {
+        key: 'demo00000000000000b0',
+        name: 'Inès Morel',
+        thumb: face(200),
+        score: 0.9,
+        jobs: [
+          { type: 'actor', title: 'Actor', count: 117 },
+          { type: 'appeared', title: 'Appearances', count: 9 },
+          { type: 'producer', title: 'Producer', count: 6 },
+          { type: 'director', title: 'Director', count: 3 },
+        ],
+      },
+      { key: 'demo00000000000000d1', name: 'Inès Moreau', thumb: face(20), score: 0.5, jobs: [{ type: 'actor', title: 'Actor', count: 24 }] },
+      { key: 'demo00000000000000d2', name: 'Jules Morel', thumb: face(120), score: 0.4, jobs: [{ type: 'writer', title: 'Writer', count: 7 }] },
+    ];
+    return people.filter((p) => nameWords(p.name).join(' ').includes(words)).slice(0, limit);
   }
 
   async isWatchlisted(id: string): Promise<boolean> {

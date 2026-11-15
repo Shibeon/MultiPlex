@@ -1,4 +1,4 @@
-import type { Metadata, Tag } from '@multiplex/core';
+import { PERSON_KEY, type Metadata, type PersonHit, type Tag } from '@multiplex/core';
 import { tvDevice } from '../platform';
 import { signal } from '@preact/signals';
 import { useMemo, useState } from 'preact/hooks';
@@ -16,7 +16,7 @@ const known = new Map<string, { name: string; thumb?: string }>();
 /** Identifiant d'une personne : `tagKey` sur le serveur, `id` dans le catalogue Plex. */
 function personKey(p: Tag): string | undefined {
   const key = p.tagKey ?? (typeof p.id === 'string' ? p.id : undefined);
-  return key && /^[0-9a-z]{8,40}$/i.test(key) ? key : undefined;
+  return key && PERSON_KEY.test(key) ? key : undefined;
 }
 
 /** Lien vers la fiche d'une personne ; sans identifiant, pas de lien. */
@@ -69,25 +69,86 @@ export function CastRow({ people, title }: { people: Tag[] | undefined; title: s
         {title} {people.length > 6 && <span class="muted">{people.length}</span>}
       </h2>
       <Carousel class="cast-row">
-        {people.slice(0, ROW_LIMIT).map((p, i) => {
-          const body = (
-            <>
-              <span class="cast-face">{p.thumb ? <img loading="lazy" decoding="async" referrerpolicy="no-referrer" src={p.thumb} alt="" /> : <b>{p.tag.slice(0, 1)}</b>}</span>
-              <strong>{p.tag}</strong>
-              {p.role && <small class="muted">{p.role}</small>}
-            </>
-          );
-          const href = personHref(p);
-          return href ? (
-            <a key={`${p.tag}${i}`} class="cast-card" href={href}>
-              {body}
-            </a>
-          ) : (
-            <div key={`${p.tag}${i}`} class="cast-card">
-              {body}
-            </div>
-          );
-        })}
+        {people.slice(0, ROW_LIMIT).map((p, i) => (
+          <CastCard key={`${p.tag}${i}`} person={p} note={p.role} />
+        ))}
+      </Carousel>
+    </section>
+  );
+}
+
+/** Carte d'une personne : photo arrondie, nom, une ligne dessous ; mène à sa fiche si elle a un identifiant. */
+function CastCard({ person: p, note }: { person: Tag; note?: string }) {
+  const body = (
+    <>
+      <span class="cast-face">{p.thumb ? <img loading="lazy" decoding="async" referrerpolicy="no-referrer" src={p.thumb} alt="" /> : <b>{p.tag.slice(0, 1)}</b>}</span>
+      <strong>{p.tag}</strong>
+      {note && <small class="muted">{note}</small>}
+    </>
+  );
+  const href = personHref(p);
+  return href ? (
+    <a class="cast-card" href={href}>
+      {body}
+    </a>
+  ) : (
+    <div class="cast-card">{body}</div>
+  );
+}
+
+/** Intitulé d'un métier (« Acteur », « Réalisation »…), sinon celui donné par Plex. */
+function jobTitle(job: { type: string; title?: string }): string {
+  const key = `person.as.${job.type}`;
+  return t(key) === key ? job.title || job.type : t(key);
+}
+
+const asTag = (p: PersonHit): Tag => ({ tag: p.name, tagKey: p.key, thumb: p.thumb });
+
+/** Ce que fait une personne et combien de titres : « Acteur · Production », « 117 titres ». */
+function personLines(p: PersonHit): { jobs: string; count: string } {
+  const jobs = [...new Set(p.jobs.map(jobTitle))].slice(0, 3).join(' · ');
+  const n = (k: string, v: number) => t(v === 1 ? `${k}1` : k).replace('{n}', String(v));
+  const total = p.jobs.reduce((m, j) => Math.max(m, j.count ?? 0), 0);
+  const count = p.libraryCount ? n('search.person.here', p.libraryCount) : total ? n('search.person.titles', total) : '';
+  return { jobs, count };
+}
+
+/**
+ * Personne que la recherche désigne clairement (son nom complet) : une grande carte en tête des
+ * résultats, avant les films et les séries, qui mène à sa fiche.
+ */
+export function PersonSpotlight({ person }: { person: PersonHit }) {
+  const href = personHref(asTag(person));
+  if (!href) return null;
+  const { jobs, count } = personLines(person);
+  return (
+    <section class="hub person-spot-hub" aria-label={t('search.people')}>
+      <a class="person-spot" href={href}>
+        <span class="person-face">{person.thumb ? <img referrerpolicy="no-referrer" src={person.thumb} alt="" /> : <b>{person.name.slice(0, 1)}</b>}</span>
+        <span class="person-spot-text">
+          <small class="crumb">{t('search.person')}</small>
+          <strong>{person.name}</strong>
+          {jobs && <span class="person-spot-jobs">{jobs}</span>}
+          {count && <span class="muted">{count}</span>}
+        </span>
+        <span class="person-spot-go" aria-hidden="true">
+          <Icon name="forward" size={22} />
+        </span>
+      </a>
+    </section>
+  );
+}
+
+/** Les autres personnes trouvées, en rangée de cartes comme une distribution. */
+export function PeopleRow({ people }: { people: PersonHit[] }) {
+  if (!people.length) return null;
+  return (
+    <section class="hub cast">
+      <h2>{t('search.people')}</h2>
+      <Carousel class="cast-row">
+        {people.slice(0, ROW_LIMIT).map((p) => (
+          <CastCard key={p.key} person={asTag(p)} note={p.jobs[0] && jobTitle(p.jobs[0])} />
+        ))}
       </Carousel>
     </section>
   );

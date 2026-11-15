@@ -1,4 +1,5 @@
 import { HttpError, getJson, randomId, request } from './http';
+import { peopleFromHubs } from './people';
 import { planPlayback, transcodeParams } from './playback';
 import type {
   ActiveSession,
@@ -12,6 +13,7 @@ import type {
   Page,
   PlaybackOptions,
   PlaybackPlan,
+  SearchResults,
   Stream,
   TimelineReport,
 } from './types';
@@ -100,9 +102,10 @@ export class PlexServer implements MediaServer {
     return (await this.mc<{ Metadata?: Metadata[] }>(`/library/metadata/${ratingKey}/children`)).Metadata ?? [];
   }
 
-  async search(query: string, limit = 20): Promise<Hub[]> {
+  async search(query: string, limit = 20): Promise<SearchResults> {
     const hubs = (await this.mc<{ Hub?: Hub[] }>('/hubs/search', { query, limit })).Hub ?? [];
-    return hubs.filter((h) => h.Metadata?.length);
+    // Les personnes arrivent dans leurs propres rangées, sous forme de `Directory` (sans `Metadata`).
+    return { hubs: hubs.filter((h) => h.Metadata?.length), people: peopleFromHubs(hubs) };
   }
 
   image(path: string | undefined, width: number, height: number, opts?: { png?: boolean }): string {

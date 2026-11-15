@@ -50,7 +50,21 @@ const routes: Record<string, (q: URLSearchParams) => unknown> = {
   '/library/metadata/404': () => ({}),
   '/library/metadata/20/children': () => ({ Metadata: [movie] }),
   '/library/all': (q) => ({ Metadata: q.get('guid') === 'plex://movie/aaaaaaaaaaaaaaaaaaaaaaaa' ? [movie] : [] }),
-  '/hubs/search': () => ({ Hub: [{ hubIdentifier: 'movie', title: 'Films', type: 'movie', Metadata: [movie] }] }),
+  // Rangée d'acteurs telle que la décrit python-plexapi (`LibraryMediaTag`, élément `Directory`).
+  '/hubs/search': () => ({
+    Hub: [
+      { hubIdentifier: 'movie', title: 'Films', type: 'movie', Metadata: [movie] },
+      {
+        hubIdentifier: 'actor',
+        title: 'Acteurs',
+        type: 'actor',
+        Directory: [
+          { count: 4, filter: 'actor=91', id: 91, key: '/library/sections/1/all?actor=91', librarySectionID: 1, reason: 'section', score: 0.9, tag: 'Christian Bale', tagKey: '5d77682b54f42c001f8c2a5c', tagType: 6, thumb: 'https://metadata-static.plex.tv/b/people/bale.jpg', type: 'tag' },
+          { count: 1, id: 92, tag: 'Sans Identifiant', tagType: 6, type: 'tag' },
+        ],
+      },
+    ],
+  }),
   '/:/timeline': () => ({}),
   '/status/sessions': () => ({
     Metadata: [
@@ -146,7 +160,10 @@ describe('PlexServer contre un faux PMS', () => {
     expect(last().q.get('includeMarkers')).toBe('1');
     await expect(srv.metadata('404')).rejects.toThrow('introuvable');
     expect(await srv.children('20')).toHaveLength(1);
-    expect(await srv.search('fil m&x')).toHaveLength(1);
+    const found = await srv.search('fil m&x');
+    expect(found.hubs).toHaveLength(1);
+    // La rangée d'acteurs ne s'affiche pas comme des films : elle donne les personnes (avec un identifiant).
+    expect(found.people).toEqual([{ key: '5d77682b54f42c001f8c2a5c', name: 'Christian Bale', thumb: 'https://metadata-static.plex.tv/b/people/bale.jpg', jobs: [{ type: 'actor', count: 4 }], libraryCount: 4 }]);
     expect(last().q.get('query')).toBe('fil m&x');
   });
 

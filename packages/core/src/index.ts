@@ -9,5 +9,6 @@ export * from './markers';
 export * from './ratings';
 export * from './audio';
 export * from './wheel';
+export * from './people';
 export { PlexServer } from './server';
 export { DemoServer } from './demo';
