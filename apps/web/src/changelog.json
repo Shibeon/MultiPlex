@@ -1,6 +1,28 @@
 [
   {
     "versions": {
+      "desktop": "0.1.33",
+      "web": "0.1.33",
+      "android": "0.1.33",
+      "tv": "0.1.33"
+    },
+    "fr": [
+      "Lecteur : nouveau mode audio dans « Plus » et dans Réglages → Lecture. Mode nuit : scènes d’action moins fortes, dialogues faibles plus audibles. Voix renforcées : dialogues mis en avant (canal central relevé en 5.1 / 7.1). Sans effet quand le son est transmis brut à un ampli.",
+      "Recherche : chercher un acteur ou une réalisatrice affiche sa fiche en tête des résultats ; les autres personnes trouvées sont dans une rangée « Personnes ».",
+      "Rangées : chaque section tient sur une seule ligne, y compris sur la fiche d’une personne (une rangée par métier) ; la molette de la souris fait défiler la rangée survolée, puis la page une fois au bout.",
+      "Interface : sections plus aérées, barre de défilement fine qui ne touche plus le titre suivant, et la carte suivante dépasse au bord pour montrer qu’on peut faire défiler.",
+      "Lecteur : la pastille « Transcodage » disparaît ; le détail ⓘ explique toujours la lecture."
+    ],
+    "en": [
+      "Player: new audio mode under “More” and in Settings → Playback. Night mode: quieter action scenes, soft dialogue easier to hear. Clear voice: dialogue brought forward (centre channel raised in 5.1 / 7.1). No effect when audio is passed through untouched to an amplifier.",
+      "Search: searching for an actor or director shows their card at the top of the results; other matching people are in a “People” row.",
+      "Rows: every section stays on a single line, including on a person’s page (one row per role); the mouse wheel scrolls the row under the pointer, then the page once it reaches the end.",
+      "Interface: more space between sections, a thin scrollbar that no longer touches the next title, and the next card peeks at the edge to show the row scrolls.",
+      "Player: the “Transcoding” chip is gone; the ⓘ details still explain playback."
+    ]
+  },
+  {
+    "versions": {
       "desktop": "0.1.32",
       "web": "0.1.32",
       "android": "0.1.32",
