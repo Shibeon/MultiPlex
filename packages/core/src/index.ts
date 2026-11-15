@@ -1,6 +1,7 @@
 export * from './types';
 export * from './http';
 export * from './auth';
+export * from './identity';
 export * from './playback';
 export * from './theme';
 export * from './discover';

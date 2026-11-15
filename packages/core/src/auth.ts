@@ -1,17 +1,11 @@
 import { getJson } from './http';
+import { identityParams } from './identity';
 import type { ClientInfo, PlexConnection, PlexPin, PlexResource, PlexUser } from './types';
 
 const TV = 'https://plex.tv/api/v2';
 
 export function identityHeaders(c: ClientInfo, token?: string): Record<string, string> {
-  const h: Record<string, string> = {
-    'X-Plex-Client-Identifier': c.clientId,
-    'X-Plex-Product': c.product,
-    'X-Plex-Version': c.version,
-    'X-Plex-Platform': c.platform,
-    'X-Plex-Device': c.device,
-    'X-Plex-Device-Name': c.deviceName,
-  };
+  const h = identityParams(c);
   if (token) h['X-Plex-Token'] = token;
   return h;
 }

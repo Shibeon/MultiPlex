@@ -1,3 +1,4 @@
+import versions from '../../../versions.json';
 import { native } from './native';
 
 /**
@@ -23,3 +24,6 @@ export const platform: Platform = detect();
  */
 export const tvDevice: boolean =
   platform === 'tv' || (platform === 'android' && typeof navigator !== 'undefined' && (navigator.maxTouchPoints === 0 || /\bTV\b|AFT/.test(navigator.userAgent)));
+
+/** Version de cette plateforme (versions.json : bureau, web, Android et TV ont chacun la leur). */
+export const VERSION: string = (versions as Record<string, string>)[platform];
