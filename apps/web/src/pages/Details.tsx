@@ -1,6 +1,6 @@
 import { clearLogoPath, seasonCatalogId, ultraBlurCorners, techBadges, upcomingEpisodes, type Metadata } from '@multiplex/core';
 import { resolvePlayable } from '../queue';
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
 import { showInfo } from '../menu';
 import { PlayerTech } from '../playerui';
@@ -333,6 +333,18 @@ export function Details({ id }: { id: string }) {
 function MoreMenu({ children }: { children: ComponentChildren }) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
+  // La liste s'aligne sur le bouton (centrée, ou à droite sur téléphone) ; quand le bouton passe
+  // à la ligne au bord gauche de l'écran, elle en sortirait : on la décale pour qu'elle y tienne.
+  useLayoutEffect(() => {
+    const menu = box.current?.querySelector<HTMLElement>('.dx-menu');
+    if (!open || !menu) return;
+    const margin = 8;
+    menu.style.translate = '';
+    const r = menu.getBoundingClientRect();
+    const room = document.documentElement.clientWidth;
+    const shift = r.left < margin ? margin - r.left : r.right > room - margin ? Math.max(room - margin - r.right, margin - r.left) : 0;
+    if (shift) menu.style.translate = `${shift}px 0`;
+  }, [open]);
   useEffect(() => {
     if (!open) return;
     box.current?.querySelector<HTMLElement>('.dx-menu > *')?.focus();
