@@ -18,6 +18,10 @@
   --page-pad: clamp(1rem, 3vw, 2.5rem); /* marge latérale des pages */
   --section-gap: 4.5rem; /* d'une section à la suivante : du bas du texte des cartes au titre suivant (72 px) */
   --title-gap: 0.9rem; /* titre de section → cartes */
+  /* Largeur d'une affiche dans une rangée : celle du réglage (--card-w), mais jamais plus que ce
+     qui laisse voir deux cartes et un quart de la suivante au bord de l'écran. Seuls les écrans
+     étroits (téléphones) sont concernés : la carte suivante y dépasse toujours nettement. */
+  --row-card-w: min(var(--card-w), max(6.5rem, calc((100vw - var(--page-pad) - 2 * var(--gap)) / 2.25)));
   --row-pad: 14px; /* place autour des cartes d'une rangée pour l'agrandissement au survol */
   --row-pad-b: 14px; /* idem sous les cartes */
   /* Bouton Lecture du lecteur : fond ivoire, et un halo chaud court qui reste dans l'écart avec
@@ -173,7 +177,7 @@ input[type='color'] { padding: 0; width: 3em; height: 2em; }
   .carousel-wrap:has(> .feed-friends, > .pause-cast-row) > .row-arrow.next { right: 0.2rem; }
 }
 .carousel > * { flex: 0 0 auto; }
-.carousel > .card { flex-basis: var(--card-w); }
+.carousel > .card { flex-basis: var(--row-card-w); }
 /* À la souris, la rangée se fait glisser (carousel.tsx, useRowDrag) : la main s'affiche quand elle
    déborde ; pendant le glisser, ni sélection de texte ni glisser natif des liens et des images. */
 @media (hover: hover) and (pointer: fine) { .carousel.can-drag { cursor: grab; } }
@@ -362,7 +366,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter'
 .backdrop { opacity: var(--backdrop-opacity, 0.28); }
 
 /* --- vignettes paysage --- */
-.carousel > .card.wide { flex-basis: calc(var(--card-w) * 1.9); }
+.carousel > .card.wide { flex-basis: calc(var(--row-card-w) * 1.9); }
 .card.wide .poster { aspect-ratio: 16 / 9; }
 .wide-caption { position: absolute; inset: auto 0 0 0; display: grid; padding: 2rem 0.9rem 0.75rem; color: #fff; background: linear-gradient(transparent, rgba(0, 0, 0, 0.88)); }
 .wide-caption strong, .wide-caption small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -821,9 +825,9 @@ input.switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 3
    titre descendu de --lift (plus 4 px) sans le couper. Sections bien séparées : l'interface est
    agrandie (police racine × 1,4), 3,6 rem font ~81 px sur un écran de 1600 px. */
 .couch { --row-pad: 28px; --row-pad-b: calc(var(--card-w) * 1.5 * 0.045 + 14px); --section-gap: 3.6rem; --title-gap: 0.8rem; }
-/* Téléviseur (écran logique de 960 × 540, police racine ~16 px) : la hauteur est comptée ; 3 rem
-   font ~48 px, la même part de l'écran que 81 px sur 900 de haut. */
-.couch.tv { --section-gap: 3rem; }
+/* Téléviseur (écran logique de 960 × 540, police racine ~16 px) : la hauteur est comptée, mais
+   les sections restent bien séparées ; 3,65 rem font ~59 px. */
+.couch.tv { --section-gap: 3.65rem; }
 .couch .card-grid { row-gap: calc(var(--gap) + var(--card-w) * 1.5 * 0.045 + 10px); }
 .couch .btn:focus-visible, .couch .nav-link:focus-visible { transform: scale(1.06); box-shadow: 0 0 34px color-mix(in srgb, var(--accent) 50%, transparent); }
 .couch .card-title { font-weight: 600; }
