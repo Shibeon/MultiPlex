@@ -113,6 +113,17 @@ export class PlexServer implements MediaServer {
     return (mc.Directory ?? []).filter((d) => d.key && d.title).map((d) => ({ key: String(d.key), title: d.title }));
   }
 
+  /**
+   * Jeton temporaire, délégué par ce serveur (`/security/token?type=delegation&scope=all`, comme
+   * python-plexapi `PlexServer.createToken`, qui le remet à un appareil tiers à la place du sien).
+   * Sert à prouver à un relais qu'on a accès à ce serveur sans lui remettre le jeton du compte.
+   */
+  async delegationToken(): Promise<string> {
+    const mc = await this.mc<{ token?: string }>('/security/token', { type: 'delegation', scope: 'all' }, 8000);
+    if (!mc.token) throw new Error('delegation');
+    return mc.token;
+  }
+
   async metadata(ratingKey: string): Promise<Metadata> {
     const mc = await this.mc<{ Metadata?: Metadata[] }>(`/library/metadata/${ratingKey}`, { includeMarkers: 1, includeChapters: 1, includeGuids: 1 });
     const m = mc.Metadata?.[0];

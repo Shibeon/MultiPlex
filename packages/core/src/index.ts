@@ -14,5 +14,6 @@ export * from './rowscroll';
 export * from './availability';
 export * from './people';
 export * from './together';
+export * from './togethersync';
 export { PlexServer } from './server';
 export { DemoServer } from './demo';

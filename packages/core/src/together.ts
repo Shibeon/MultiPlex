@@ -228,3 +228,136 @@ export function findRoom(
     });
   });
 }
+
+// ---------------------------------------------------------------------------------------------
+// Séances visibles par les amis (voir apps/relay/README.md, « Séances visibles par vos amis »).
+//
+// Un relais configuré avec l'adresse de son serveur Plex (PLEX_URL) liste les séances que leurs
+// hôtes ont rendues visibles, mais seulement à qui prouve avoir accès à ce serveur : l'application
+// lui présente le jeton propre à ce serveur (celui que plex.tv donne pour lui dans les
+// ressources), que le relais essaie auprès de son propre Plex. Le jeton du compte plex.tv, lui,
+// ne part jamais : il ouvre tout le compte, pas seulement ce serveur. Et le jeton d'un serveur
+// n'est remis qu'à un relais trouvé sur les noms publics de ce même serveur (relayCandidates).
+
+/** Une séance visible, telle que le relais la liste à un ami autorisé. */
+export interface FriendCard {
+  /** Nom de l'hôte, titre et sous-titre de ce qu'il regarde. */
+  name: string;
+  title: string;
+  sub?: string;
+  type?: string;
+  guid?: string;
+  /** Numéro du titre sur le serveur du relais. */
+  key?: string;
+  /** Position (secondes) et lecture/pause au moment de l'annonce. */
+  time: number;
+  playing: boolean;
+}
+
+export interface FriendsAnswer {
+  multiplex: 'relay';
+  /** Identifiant (machineIdentifier) du serveur Plex auprès duquel le relais a vérifié l'accès. */
+  server: string;
+  /** Jeton d'entrée, court (quelques minutes) : annoncer une séance, entrer dans une séance listée. */
+  ticket: string;
+  ttl: number;
+  sessions: { room: string; card: FriendCard; count: number; age: number }[];
+}
+
+export const isFriendsAnswer = (x: unknown): x is FriendsAnswer => {
+  const a = x as FriendsAnswer;
+  return !!a && typeof a === 'object' && a.multiplex === 'relay' && typeof a.server === 'string' && typeof a.ticket === 'string' && Array.isArray(a.sessions);
+};
+
+/** Adresse HTTP de la liste des séances visibles d'un relais (POST, jeton dans le corps). */
+export const friendsUrl = (relay: string) => `${relay.replace(/^ws/, 'http')}/friends`;
+
+/**
+ * Jeton à présenter au relais d'un serveur pour prouver qu'on y a accès : le jeton propre à ce
+ * serveur, jamais celui du compte. Quand plex.tv donne pour ce serveur le jeton du compte lui-même
+ * (cela peut arriver pour ses propres serveurs), rien : l'appelant peut alors demander au serveur
+ * un jeton délégué (voir PlexServer.delegationToken).
+ */
+export function serverCredential(res: Pick<PlexResource, 'accessToken'>, accountToken: string | undefined): string | null {
+  const t = res.accessToken;
+  return t && t !== accountToken ? t : null;
+}
+
+/**
+ * Premier relais MultiPlex (dans l'ordre de préférence) parmi des adresses candidates, sans
+ * attendre les moins bien classées. `ask` rend la réponse à « GET …/rooms » (sans salle) ;
+ * `friends` dit si ce relais sait lister les séances visibles.
+ */
+export function findRelay(relays: string[], ask: (relay: string) => Promise<unknown>, known?: Map<string, boolean>): Promise<{ relay: string; friends: boolean } | null> {
+  const list = [...new Set(relays)].filter((r) => known?.get(r) !== false).slice(0, MAX_RELAY_CANDIDATES);
+  if (!list.length) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    const state: (boolean | null | undefined)[] = list.map(() => undefined);
+    const settle = () => {
+      for (let i = 0; i < list.length; i++) {
+        if (state[i] === undefined) return;
+        if (state[i] !== null) return resolve({ relay: list[i], friends: !!state[i] });
+      }
+      resolve(null);
+    };
+    list.forEach((relay, i) => {
+      ask(relay)
+        .then(
+          (a) => {
+            const ok = isRoomsAnswer(a);
+            known?.set(relay, ok);
+            state[i] = ok ? (a as RoomsAnswer & { friends?: boolean }).friends === true : null;
+          },
+          () => (state[i] = null),
+        )
+        .then(settle);
+    });
+  });
+}
+
+/** Ce que l'hôte remet, chiffré pour lui seul, à un ami autorisé qui demande à entrer. */
+export interface GrantPayload {
+  /** Secret de l'invitation et serveur qui la sale : l'ami en tire salle et clé (deriveSession). */
+  secret: string;
+  server: string;
+  /** Où en est la séance, pour arriver au bon endroit sans attendre. */
+  state?: { time: number; playing: boolean; c: number; by: string };
+}
+
+const GRANT_SALT = new TextEncoder().encode('multiplex-together-grant-v1');
+const ECDH = { name: 'ECDH', namedCurve: 'P-256' } as const;
+
+async function grantKey(priv: CryptoKey, peerPub: string, info: string): Promise<CryptoKey> {
+  const pub = await crypto.subtle.importKey('raw', unb64(peerPub), ECDH, false, []);
+  const bits = await crypto.subtle.deriveBits({ name: 'ECDH', public: pub }, priv, 256);
+  const base = await crypto.subtle.importKey('raw', bits, 'HKDF', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({ name: 'HKDF', hash: 'SHA-256', salt: GRANT_SALT, info: new TextEncoder().encode(info) }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+
+/** Clé éphémère (P-256) d'une demande d'entrée : la publique part au relais, la privée reste ici. */
+export async function grantRequestKeys(): Promise<{ pub: string; priv: CryptoKey }> {
+  const pair = (await crypto.subtle.generateKey(ECDH, false, ['deriveBits'])) as CryptoKeyPair;
+  return { pub: b64(new Uint8Array(await crypto.subtle.exportKey('raw', pair.publicKey))), priv: pair.privateKey };
+}
+
+/** Hôte : chiffre `payload` pour la clé publique de la demande (ECDH éphémère, HKDF, AES-GCM). */
+export async function sealGrant(requestPub: string, payload: GrantPayload): Promise<{ pub: string; box: string }> {
+  const mine = await grantRequestKeys();
+  const key = await grantKey(mine.priv, requestPub, `${requestPub}|${mine.pub}`);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(JSON.stringify(payload))));
+  const out = new Uint8Array(12 + ct.length);
+  out.set(iv);
+  out.set(ct, 12);
+  return { pub: mine.pub, box: b64(out) };
+}
+
+/** Ami : ouvre la remise de l'hôte (rejette si elle n'est pas pour lui, ou abîmée). */
+export async function openGrant(priv: CryptoKey, requestPub: string, grantPub: string, box: string): Promise<GrantPayload> {
+  const key = await grantKey(priv, grantPub, `${requestPub}|${grantPub}`);
+  const bytes = unb64(box);
+  const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: bytes.slice(0, 12) }, key, bytes.slice(12));
+  const p = JSON.parse(new TextDecoder().decode(plain)) as GrantPayload;
+  if (!p || typeof p.secret !== 'string' || clean(p.secret).length !== INVITE_LENGTH || typeof p.server !== 'string' || !p.server) throw new Error('grant');
+  return p;
+}
