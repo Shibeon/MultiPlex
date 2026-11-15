@@ -116,6 +116,17 @@ export async function getHomeUsers(c: ClientInfo, token: string): Promise<HomeUs
     .map((u) => ({ id: Number(u.id) || 0, uuid: u.uuid, title: String(u.title ?? '?'), thumb: u.thumb || undefined, admin: !!u.admin, restricted: !!u.restricted, protected: !!u.protected }));
 }
 
+/**
+ * Vrai si le profil connecté est un profil géré du foyer Plex Home : ni liste de suivi ni amis
+ * pour lui. Sa fiche dans la liste du foyer fait foi ; sans elle (liste pas encore chargée, ou
+ * pas de foyer), on s'en tient à ce que plex.tv a dit du compte à la connexion. Dans le doute : non.
+ */
+export function isManagedProfile(user: Pick<PlexUser, 'uuid' | 'restricted'> | null | undefined, home: readonly Pick<HomeUser, 'uuid' | 'restricted'>[]): boolean {
+  if (!user) return false;
+  const me = home.find((u) => u.uuid === user.uuid);
+  return me ? me.restricted === true : user.restricted === true;
+}
+
 /** Passe sur un autre profil du foyer et renvoie son jeton. `pin` : son code, s'il est protégé. */
 export async function switchHomeUser(c: ClientInfo, token: string, uuid: string, pin?: string): Promise<string> {
   if (!/^[0-9a-f]{8,40}$/i.test(uuid)) throw new Error('Profil invalide');

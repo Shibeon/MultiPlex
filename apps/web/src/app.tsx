@@ -18,9 +18,9 @@ import { nativeAvailable } from './native';
 import { SettingsPage } from './pages/Settings';
 import { ThemesPage } from './pages/Themes';
 import { UpdateBanner, WhatsNew } from './pages/Update';
-import { back, route } from './router';
+import { back, go, route } from './router';
 import { settings } from './settings';
-import { auth, discover, home, libraries, server, status } from './store';
+import { auth, discover, home, libraries, managedProfile, server, status } from './store';
 import { Icon } from './ui';
 import { ReadyGate } from './ready';
 import { CastBar, CastPicker } from './castui';
@@ -109,12 +109,21 @@ function BackBar() {
   );
 }
 
+/** Pages réservées aux profils non gérés : un profil géré qui y arrive (lien, historique) repart à l'accueil. */
+const NOT_MANAGED = new Set(['activity', 'watchlist']);
+
+function ToHome() {
+  useLayoutEffect(() => go('/', true), []);
+  return null;
+}
+
 function Page() {
   const [kind, id] = route.value.parts;
   // `key` : chaque élément repart d'un état neuf.
   if (kind === 'library' && id) return <LibraryPage key={id} id={id} />;
   if (kind === 'item' && id) return <Details key={id} id={id} />;
   if (kind === 'search') return <SearchPage />;
+  if (NOT_MANAGED.has(kind) && managedProfile.value) return <ToHome />;
   if (kind === 'activity') return <ActivityPage />;
   if (kind === 'watchlist') return <WatchlistPage />;
   if (kind === 'discover' && id) return <DiscoverDetails key={id} id={id} />;
@@ -187,9 +196,10 @@ function Routes() {
         {libraries.value.map((l) => (
           <NavLink key={l.key} href={`#/library/${l.key}`} icon={l.type} label={libraryTitle(l)} />
         ))}
-        {discover.value && <NavLink href="#/watchlist" icon="bookmark" label={t('nav.watchlist')} />}
+        {/* Ni liste de suivi ni amis pour un profil géré du foyer. */}
+        {discover.value && !managedProfile.value && <NavLink href="#/watchlist" icon="bookmark" label={t('nav.watchlist')} />}
         <div class="nav-sep" />
-        <NavLink href="#/activity" icon="friends" label={t('nav.live')} iconOnly />
+        {!managedProfile.value && <NavLink href="#/activity" icon="friends" label={t('nav.live')} iconOnly />}
         {offlineApi && <NavLink href="#/offline" icon="download" label={t('nav.offline')} iconOnly />}
         <div class="nav-sep grow" />
         <i class="nav-divider" aria-hidden="true" />

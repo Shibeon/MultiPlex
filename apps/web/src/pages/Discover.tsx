@@ -2,7 +2,7 @@ import { discoverId, discoverImage, type Metadata } from '@multiplex/core';
 import { useEffect, useState } from 'preact/hooks';
 import { formatDuration, t } from '../i18n';
 import { settings } from '../settings';
-import { discover, invalidate, server, useData } from '../store';
+import { discover, invalidate, managedProfile, server, useData } from '../store';
 import { Carousel } from '../carousel';
 import { ErrorBox, Icon, Spinner } from '../ui';
 import { CastRow, PeopleLinks } from './Person';
@@ -68,7 +68,8 @@ export function DiscoverCard({ item, local, note }: { item: Metadata; local?: Me
 
 /** Bouton « liste de suivi » pour un titre du catalogue, utilisable aussi depuis une fiche du serveur. */
 export function WatchlistButton({ id, initial }: { id: string; initial?: boolean }) {
-  const d = discover.value;
+  // Pas de liste de suivi pour un profil géré du foyer.
+  const d = managedProfile.value ? null : discover.value;
   const known = useData(d && initial === undefined ? `disc:state:${id}` : null, () => d!.isWatchlisted(id));
   const [local, setLocal] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
