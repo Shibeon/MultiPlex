@@ -1,6 +1,30 @@
 [
   {
     "versions": {
+      "desktop": "0.1.36",
+      "web": "0.1.36",
+      "android": "0.1.36",
+      "tv": "0.1.36"
+    },
+    "fr": [
+      "Regarder ensemble : les séances de vos amis qui ont accès au même serveur Plex apparaissent dans Activité et dans Regarder ensemble ; une notification discrète propose « Rejoindre », sans lien ni code, à la position en cours.",
+      "Regarder ensemble : « Visible par mes amis » au lancement, activé par défaut ; deux réglages pour la visibilité par défaut et les notifications. Une séance privée n’est jamais listée.",
+      "Regarder ensemble : tout le monde peut lire, mettre en pause, avancer ou reculer, synchronisé pour tous ; volume, sous-titres, qualité et audio restent propres à chacun.",
+      "Regarder ensemble : une seule lecture pendant une séance ; lancer autre chose ou envoyer vers un appareil propose de quitter la séance.",
+      "Lecteur : les participants passent dans une pastille près de « Plus », avec la liste complète sur demande ; l’heure et la fin estimée ne sont plus masquées.",
+      "Lecture : la position envoyée au serveur n’est plus jamais infinie ou incohérente."
+    ],
+    "en": [
+      "Watch together: sessions of friends who share your Plex server appear in Activity and in Watch together; a discreet notification offers “Join”, with no link or code, at the current position.",
+      "Watch together: “Visible to my friends” at start, on by default; two settings for default visibility and notifications. A private session is never listed.",
+      "Watch together: everyone can play, pause, skip or seek, synced for all; volume, subtitles, quality and audio stay personal.",
+      "Watch together: one playback during a session; starting something else or casting offers to leave the session.",
+      "Player: participants move to a pill next to “More”, with the full list on demand; the clock and estimated end are no longer covered.",
+      "Playback: the position sent to the server is never infinite or inconsistent any more."
+    ]
+  },
+  {
+    "versions": {
       "desktop": "0.1.35",
       "web": "0.1.35",
       "android": "0.1.35",
