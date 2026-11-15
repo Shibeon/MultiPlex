@@ -12,6 +12,7 @@ import { Card, ErrorBox, HubRow, Icon, Ratings, Spinner, StarRating, artSize, is
 import { ServerWatchlistButton } from './Discover';
 import { OfflineButton } from './Offline';
 import { CastButton } from '../castui';
+import { Carousel } from '../carousel';
 import { TogetherButton } from '../togetherui';
 import { CastRow, PeopleLinks } from './Person';
 
@@ -317,7 +318,7 @@ export function Details({ id }: { id: string }) {
               {kids.data && <UpcomingEpisodes season={item} have={kids.data} />}
             </div>
           ) : (
-            <div class="row wrap">{kids.data?.map((m) => <Card key={m.ratingKey} item={{ ...m, parentTitle: m.title, title: '' }} />)}</div>
+            <Carousel>{kids.data?.map((m) => <Card key={m.ratingKey} item={{ ...m, parentTitle: m.title, title: '' }} />)}</Carousel>
           )}
         </section>
       )}

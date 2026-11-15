@@ -1,4 +1,5 @@
 import { imdbIdOf, ratingBadges, techBadges, type Hub, type Metadata } from '@multiplex/core';
+import { Carousel } from './carousel';
 import { tvDevice } from './platform';
 import type { ComponentChildren, JSX } from 'preact';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
@@ -343,9 +344,7 @@ export function HubRow({ hub }: { hub: Hub }) {
   return (
     <section class="hub" data-hub={hub.hubIdentifier}>
       <h2>{hub.title}</h2>
-      <div class="row">
-        {(hub.Metadata ?? []).map((m) => (wide ? <WideCard key={m.ratingKey} item={m} /> : <Card key={m.ratingKey} item={m} />))}
-      </div>
+      <Carousel>{(hub.Metadata ?? []).map((m) => (wide ? <WideCard key={m.ratingKey} item={m} /> : <Card key={m.ratingKey} item={m} />))}</Carousel>
     </section>
   );
 }

@@ -191,7 +191,7 @@ export function OfflinePage() {
       {movies.length > 0 && (
         <section class="hub">
           <h2>{t('off.movies')}</h2>
-          <div class="row wrap grid-gap">
+          <div class="card-grid">
             {movies.map((e) => (
               <MovieCard key={e.id} e={e} />
             ))}

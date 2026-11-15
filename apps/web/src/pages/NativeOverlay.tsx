@@ -5,6 +5,7 @@ import { moveFocus } from '../nav';
 import { couchOn, settings, update } from '../settings';
 import { AUDIO_MODES, audioModeOf, nativeAudioModeShown } from '@multiplex/core';
 import { cancelXray, runXray, xrayAvailable } from '../xray';
+import { Carousel } from '../carousel';
 import { Icon, SeekPreview } from '../ui';
 import { PillMenu, PlayerClock, PlayerOutput, PlayerSub, Pill, SkipButton, liveTechNative } from '../playerui';
 
@@ -392,7 +393,7 @@ export function NativeOverlay() {
           <h3 data-xray={xray?.state ?? 'off'}>
             {xrayOn ? t('xray.onScreen') : t('item.cast')} {!xrayOn && <small>{xrayNote}</small>}
           </h3>
-          <div class="pause-cast-row">
+          <Carousel class="pause-cast-row">
             {castShown.map((i) => [meta.cast![i], i] as const).map(([c, i]) => (
               <button key={`${c.name}${i}`} class={`pause-cast-card${seen.has(i) ? ' on-screen' : ''}`} disabled={!c.key} onClick={() => c.key && n.action(`person:${c.key}`)}>
                 <span class="cast-face">{c.thumb ? <img referrerpolicy="no-referrer" src={c.thumb} alt="" /> : <b>{c.name.slice(0, 1)}</b>}</span>
@@ -400,7 +401,7 @@ export function NativeOverlay() {
                 {c.role && <small>{c.role}</small>}
               </button>
             ))}
-          </div>
+          </Carousel>
         </div>
       )}
 

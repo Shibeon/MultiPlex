@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'preact/hooks';
 import { formatClock, t } from '../i18n';
 import { settings } from '../settings';
 import { auth, community, server, useData } from '../store';
+import { Carousel } from '../carousel';
 import { ErrorBox, Icon, Spinner, labels } from '../ui';
 
 const REFRESH_MS = 10000;
@@ -255,7 +256,7 @@ function Feed() {
   return (
     <section class="feed">
       {friends.length > 1 && (
-        <div class="feed-friends" role="tablist" aria-label={t('live.friends')}>
+        <Carousel class="feed-friends" role="tablist" aria-label={t('live.friends')}>
           <button role="tab" aria-selected={!who} class={`feed-friend${!who ? ' on' : ''}`} onClick={() => setWho('')}>
             <span class="avatar all">
               <Icon name="live" size={18} />
@@ -268,7 +269,7 @@ function Feed() {
               <small>{f.user.name}</small>
             </button>
           ))}
-        </div>
+        </Carousel>
       )}
 
       {error && !data ? (

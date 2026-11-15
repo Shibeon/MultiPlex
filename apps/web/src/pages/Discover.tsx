@@ -3,6 +3,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { formatDuration, t } from '../i18n';
 import { settings } from '../settings';
 import { discover, invalidate, server, useData } from '../store';
+import { Carousel } from '../carousel';
 import { ErrorBox, Icon, Spinner } from '../ui';
 import { CastRow, PeopleLinks } from './Person';
 
@@ -117,7 +118,7 @@ export function WatchlistPage() {
       {error && <ErrorBox error={error} retry={reload} />}
       {!data && !error && <Spinner />}
       {data?.total === 0 && <p class="muted">{t('disc.empty')}</p>}
-      <div class="row wrap grid-gap">
+      <div class="card-grid">
         {data?.items.map((m) => (
           <DiscoverCard key={m.ratingKey} item={m} local={localOf(m)} />
         ))}
@@ -145,11 +146,11 @@ export function DiscoverResults({ query }: { query: string }) {
       {error && <ErrorBox error={error} />}
       {!data && !error && <Spinner />}
       {data?.length === 0 && <p class="muted">{t('search.none')}</p>}
-      <div class="row">
+      <Carousel>
         {data?.map((m) => (
           <DiscoverCard key={m.ratingKey} item={m} />
         ))}
-      </div>
+      </Carousel>
     </section>
   );
 }
