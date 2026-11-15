@@ -1,6 +1,6 @@
 // « Regarder ensemble » : bouton, fenêtre de séance (créer, inviter, rejoindre) et pastille des
 // participants.
-import type { Metadata } from '@multiplex/core';
+import { isRoomsAnswer, roomsUrl, type Metadata } from '@multiplex/core';
 import { signal } from '@preact/signals';
 import { useEffect, useState } from 'preact/hooks';
 import { t } from './i18n';
@@ -73,12 +73,12 @@ export function TogetherDialog() {
       () => setBusy(false),
       (e: Error) => {
         setBusy(false);
-        setError(t(e.message === 'code' ? 'tog.badCode' : e.message === 'relay' ? 'tog.noRelay' : 'tog.failed'));
+        setError(t(e.message === 'code' ? 'tog.badCode' : e.message === 'relay' ? 'tog.noRelay' : e.message === 'notfound' ? 'tog.notFound' : 'tog.failed'));
       },
     );
   };
-  const copy = () =>
-    void navigator.clipboard?.writeText(s!.code).then(
+  const copy = (text = s!.code) =>
+    void navigator.clipboard?.writeText(text).then(
       () => say(t('tog.copied')),
       () => setError(t('tog.copyFailed')),
     );
@@ -119,7 +119,7 @@ export function TogetherDialog() {
             >
               <input type="text" placeholder={t('tog.codePlaceholder')} aria-label={t('tog.join')} value={code} onInput={(e) => setCode(e.currentTarget.value)} />
               <button class="btn" disabled={busy || !parseCode(code)}>
-                {t('tog.join')}
+                {busy && parseCode(code) ? t('tog.searching') : t('tog.join')}
               </button>
             </form>
           </>
@@ -152,11 +152,19 @@ export function TogetherDialog() {
             </div>
             <label class="tog-code">
               <span>{t('tog.invite')}</span>
-              <input readOnly value={s.code} onFocus={(e) => e.currentTarget.select()} />
+              <input readOnly value={s.code} spellcheck={false} onFocus={(e) => e.currentTarget.select()} />
             </label>
             <small class="muted">{t('tog.inviteHint')}</small>
+            {s.host && s.discoverable === false && s.fullCode && (
+              <small class="tog-warn">
+                {t('tog.notDiscoverable')}{' '}
+                <button class="link" onClick={() => copy(s.fullCode)}>
+                  {t('tog.copyFull')}
+                </button>
+              </small>
+            )}
             <div class="tog-actions">
-              <button class="btn primary" onClick={copy}>
+              <button class="btn primary" onClick={() => copy()}>
                 {t('tog.copy')}
               </button>
               {s.item && (s.host ? open.item : true) && (
@@ -240,7 +248,7 @@ export function TogetherBar() {
 
 /** Réglage : adresse du relais, avec un essai. */
 export function RelaySetting() {
-  const [state, setState] = useState<'idle' | 'testing' | 'ok' | 'ko' | 'nows'>('idle');
+  const [state, setState] = useState<'idle' | 'testing' | 'ok' | 'ko' | 'nows' | 'old'>('idle');
   const value = settings.value.togetherRelay;
   const test = () => {
     const ws = relayUrl();
@@ -260,7 +268,10 @@ export function RelaySetting() {
         sock.onopen = () => {
           clearTimeout(timer);
           sock.close();
-          setState('ok');
+          // Un relais d'avant les invitations courtes ne sait pas dire quelles salles existent.
+          fetch(roomsUrl(ws, []), { cache: 'no-store' })
+            .then((r) => r.json())
+            .then((a) => setState(isRoomsAnswer(a) ? 'ok' : 'old'), () => setState('old'));
         };
         sock.onerror = () => {
           clearTimeout(timer);
@@ -285,6 +296,7 @@ export function RelaySetting() {
         {t('tog.test')}
       </button>
       {state !== 'idle' && <small class={`relay-${state}`}>{t(`tog.test.${state}`)}</small>}
+      <small class="muted relay-hint">{t('tog.relayHint')}</small>
     </span>
   );
 }
