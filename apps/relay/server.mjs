@@ -59,6 +59,12 @@ const PROBE_EVERY_MS = 10 * 60_000;
 // Partages relus auprès de plex.tv au plus une fois par minute quand un jeton accepté par Plex n'y
 // figure pas encore (un partage tout neuf), en plus de la relecture toutes les 10 minutes.
 const DIRECTORY_MIN_MS = 60_000;
+// Un jeton que Plex accepte mais que plex.tv ne nomme pas encore (un partage tout neuf) : verdict
+// gardé le temps d'une relecture seulement.
+const VERDICT_UNNAMED_MS = DIRECTORY_MIN_MS;
+// Plex ou plex.tv en échec : nouvel essai après 1 minute, puis le double à chaque échec, 30 au plus.
+const PROBE_RETRY_MS = 60_000;
+const PROBE_RETRY_MAX_MS = 30 * 60_000;
 
 /** Seau à jetons : `burst` d'avance, `perSecond` regagnés chaque seconde. */
 export function bucket(burst, perSecond, now = Date.now) {
@@ -215,7 +221,18 @@ export function xmlElements(xml, tag) {
   return out;
 }
 
-const userName = (u) => str(u?.title, 60) ?? str(u?.username, 60) ?? str(u?.friendlyName, 60);
+/**
+ * Nom d'un compte plex.tv sur une fiche. Le `title` se choisit librement (deux comptes peuvent
+ * avoir le même), le `username` est unique sur plex.tv : « title (username) » quand ils diffèrent,
+ * sinon le username ; le title seul pour un profil géré, qui n'a pas de username.
+ */
+export function displayName(u) {
+  const title = str(u?.title, 60) ?? str(u?.friendlyName, 60);
+  const username = str(u?.username, 60);
+  if (username) return title && title !== username ? `${title} (${username})` : username;
+  return title;
+}
+const userName = displayName;
 /** Numéro de compte plex.tv (entier positif), sous forme de texte ; sinon undefined. */
 const accountId = (v) => (/^\d{1,12}$/.test(String(v ?? '')) && Number(v) > 0 ? String(Number(v)) : undefined);
 
@@ -296,7 +313,7 @@ export function allowList(v) {
  */
 export function sanitizeCard(c, verifiedName) {
   if (!c || typeof c !== 'object') return null;
-  const name = str(verifiedName, 60);
+  const name = str(verifiedName, 130);
   const title = str(c.title, 200);
   if (!name || !title) return null;
   const time = typeof c.time === 'number' && Number.isFinite(c.time) ? Math.max(0, Math.min(1e6, c.time)) : 0;
@@ -324,8 +341,9 @@ export function createRelay(opts = {}) {
   const ipLimit = perIp(opts.ipBurst ?? 60, opts.ipPerSecond ?? 0.5, now);
   const missLimit = bucket(opts.missBurst ?? 600, opts.missPerSecond ?? 10, now);
 
-  // salle → { peers, created, card, cardAt, owner, proof, private, keyRequests, host, allow }
-  // `host` : compte plex.tv vérifié de l'hôte qui l'annonce ; `allow` : ses amis (numéros de compte).
+  // salle → { peers, created, card, cardAt, owner, proof, private, keyRequests, host, hostId, allow }
+  // `host` : compte plex.tv vérifié de l'hôte qui l'annonce ; `hostId` : son numéro, attaché à la
+  // salle dès la première annonce (seul ce compte peut la réannoncer) ; `allow` : ses amis.
   const rooms = new Map();
 
   // Séances visibles par les amis : seulement si le relais connaît son serveur Plex (PLEX_URL) ET
@@ -336,19 +354,75 @@ export function createRelay(opts = {}) {
   const verifier = plexUrl && plexToken ? (opts.verifier ?? plexVerifier(plexUrl)) : null;
   const account = verifier ? (opts.account ?? plexAccount(plexToken, { base: opts.plexTvUrl })) : null;
   if (plexUrl && !plexToken) console.warn('Séances visibles désactivées : PLEX_URL sans PLEX_TOKEN (le relais ne saurait pas qui est ami avec qui).');
-  const friends = { ready: false, server: '', reason: verifier ? 'pending' : 'off', probedAt: -Infinity };
+  // `retryAt` : prochain essai permis après un échec (délai doublé à chaque fois, `retryMs`).
+  const friends = { ready: false, server: '', reason: verifier ? 'pending' : 'off', probedAt: -Infinity, retryAt: -Infinity, retryMs: 0 };
   /**
    * Qui est derrière un jeton de serveur, d'après plex.tv : empreinte (SHA-256) du jeton de chaque
    * partage → compte de l'ami ; et le propriétaire lui-même, reconnu par Plex comme administrateur.
    * Aucun jeton n'est gardé, seulement leur empreinte.
    */
-  const directory = { owner: null, byHash: new Map(), loadedAt: -Infinity, triedAt: -Infinity, loading: null, ownerCheck: true };
+  const directory = { owner: null, byHash: new Map(), known: new Set(), loadedAt: -Infinity, triedAt: -Infinity, loading: null, ownerCheck: true };
   // Vérifications demandées à Plex (jetons pas encore connus) : bornées pour tout le monde.
   const plexLimit = bucket(opts.plexBurst ?? 30, opts.plexPerSecond ?? 2, now);
   // … et d'abord par adresse (IPv6 : par /64), pour qu'aucune ne vide la réserve commune.
   const plexIp = perIp(opts.plexIpBurst ?? 5, opts.plexIpPerSecond ?? 1 / 30, now);
-  const verdicts = new Map(); // empreinte du jeton → { ok, until }
-  const tickets = new Map(); // ticket → { until, used: salles où il a déjà servi }
+  const verdicts = new Map(); // empreinte du jeton → { ok, user, until }
+  const tickets = new Map(); // ticket → { until, used: salles où il a déjà servi, user }
+
+  const delist = (room) => {
+    room.card = null;
+    room.cardAt = 0;
+    room.host = null;
+    room.allow = null;
+  };
+  /** Connexions ouvertes (renseigné plus bas, une fois le serveur WebSocket créé). */
+  let sockets = () => [];
+
+  /**
+   * Tout ce que le relais a accordé est retiré : verdicts, tickets, fiches listées, et l'annonce
+   * des connexions déjà autorisées (qui devront présenter un nouveau ticket). Appelé quand le relais
+   * ne peut plus savoir qui est qui (Plex trop permissif, plex.tv illisible).
+   */
+  function revokeAll() {
+    verdicts.clear();
+    tickets.clear();
+    for (const room of rooms.values()) delist(room);
+    for (const ws of sockets()) {
+      ws.authorized = false;
+      ws.user = null;
+    }
+  }
+
+  /**
+   * Après une relecture des partages : un compte qui n'est plus partagé (ni propriétaire) perd tout
+   * ce qui lui avait été accordé ; il disparaît des listes d'amis ; son annonce est retirée.
+   */
+  function revalidate() {
+    const known = directory.known;
+    for (const [k, v] of verdicts) if (v.user && !known.has(v.user.id)) verdicts.delete(k);
+    for (const [k, e] of tickets) if (e.user && !known.has(e.user.id)) tickets.delete(k);
+    for (const ws of sockets()) {
+      if (ws.user && !known.has(ws.user.id)) {
+        ws.authorized = false;
+        ws.user = null;
+      }
+    }
+    for (const room of rooms.values()) {
+      if (room.host && !known.has(room.host.id)) delist(room);
+      if (room.allow) for (const uid of room.allow) if (!known.has(uid)) room.allow.delete(uid);
+    }
+  }
+
+  /** Le relais cesse de lister ; `revoke` : et retire tout ce qu'il avait accordé. */
+  function disable(reason, revoke) {
+    const was = friends.ready;
+    friends.ready = false;
+    friends.reason = reason;
+    if (revoke) revokeAll();
+    friends.retryMs = friends.retryMs ? Math.min(PROBE_RETRY_MAX_MS, friends.retryMs * 2) : PROBE_RETRY_MS;
+    friends.retryAt = now() + friends.retryMs;
+    if (reason === 'open' && (was || revoke)) console.warn('Séances visibles désactivées : ce Plex accepte un jeton inventé (adresses autorisées sans authentification ?).');
+  }
 
   /**
    * Relit auprès de plex.tv le propriétaire, les partages du serveur et les amis du propriétaire
@@ -373,7 +447,9 @@ export function createRelay(opts = {}) {
         if (!directory.ownerCheck) console.warn('Propriétaire non reconnu : ce Plex laisse un ami lire /status/sessions.');
         directory.owner = owner;
         directory.byHash = byHash;
+        directory.known = new Set([owner.id, ...[...byHash.values()].map((u) => u.id)]);
         directory.loadedAt = now();
+        revalidate();
         return true;
       } finally {
         directory.loading = null;
@@ -382,21 +458,19 @@ export function createRelay(opts = {}) {
     return directory.loading;
   }
 
-  async function probe() {
-    if (!verifier) return;
+  /**
+   * Vérifie le Plex du relais (contre-épreuve comprise) puis relit les partages. Une seule à la
+   * fois. En cas d'échec, le prochain essai attend (1 minute, puis le double, 30 au plus) : ni le
+   * balayage ni une demande anonyme ne le relancent avant.
+   */
+  async function probeOnce() {
     friends.probedAt = now();
     try {
       const p = await verifier.probe();
       friends.server = p.server;
-      if (p.open) {
-        friends.ready = false;
-        friends.reason = 'open';
-        console.warn('Séances visibles désactivées : ce Plex accepte un jeton inventé (adresses autorisées sans authentification ?).');
-        return;
-      }
+      if (p.open) return disable('open', true);
     } catch (e) {
-      friends.ready = false;
-      friends.reason = 'unreachable';
+      disable('unreachable', false);
       console.warn(`Séances visibles indisponibles : ${e.message}`);
       return;
     }
@@ -404,23 +478,49 @@ export function createRelay(opts = {}) {
       await loadDirectory();
       friends.ready = true;
       friends.reason = 'ok';
+      friends.retryMs = 0;
+      friends.retryAt = -Infinity;
     } catch (e) {
       // Partages illisibles : le relais ne sait plus qui est qui, il ne liste plus rien.
-      friends.ready = false;
-      friends.reason = 'plextv';
       directory.byHash = new Map();
+      directory.known = new Set();
       directory.owner = null;
+      disable('plextv', true);
       console.warn(`Séances visibles indisponibles : ${e.message}`);
     }
   }
-  const probing = probe();
+  let probing = Promise.resolve();
+  let probeRunning = false;
+  function probe() {
+    if (!verifier || probeRunning) return probing;
+    probeRunning = true;
+    probing = probeOnce().finally(() => (probeRunning = false));
+    return probing;
+  }
+  /** Un nouvel essai est-il permis maintenant ? (rythme normal, ou délai après un échec) */
+  const probeDue = () => (friends.ready ? now() - friends.probedAt >= PROBE_EVERY_MS : now() >= friends.retryAt);
+  probe();
 
-  /** Compte derrière un jeton accepté par Plex : un ami (partage), le propriétaire, ou null. */
+  /** Jeton tiré au hasard : celui que Plex doit refuser (contre-épreuve). */
+  const randomToken = () => randomBytes(15).toString('base64url');
+
+  /**
+   * Compte derrière un jeton accepté par Plex : un ami (partage), le propriétaire, ou null. Le
+   * propriétaire n'est reconnu que si, au même moment, un jeton tiré au hasard est refusé par
+   * /status/sessions : un Plex qui laisse tout le monde le lire (adresses autorisées sans
+   * authentification, ajoutées après le démarrage) ferait sinon d'un jeton inventé le propriétaire.
+   */
   async function identify(token) {
     const h = sha(token);
     const known = directory.byHash.get(h);
     if (known) return known;
-    if (directory.owner && directory.ownerCheck && (await verifier.admin(token))) return directory.owner;
+    if (directory.owner && directory.ownerCheck && (await verifier.admin(token))) {
+      if (await verifier.admin(randomToken())) {
+        disable('open', true);
+        throw new Error('open');
+      }
+      return directory.owner;
+    }
     // Un partage tout neuf : plex.tv relu, au plus une fois par minute.
     if (now() - directory.triedAt >= DIRECTORY_MIN_MS) {
       await loadDirectory().catch(() => {});
@@ -445,12 +545,21 @@ export function createRelay(opts = {}) {
     let user = null;
     try {
       ok = await verifier.check(token);
-      if (ok) user = await identify(token);
+      if (ok) {
+        // Contre-épreuve au moment même : si Plex accepte aussi un jeton inventé, il n'authentifie
+        // plus personne (adresses autorisées sans authentification) ; le relais retire tout.
+        if (await verifier.check(randomToken())) {
+          disable('open', true);
+          return null;
+        }
+        user = await identify(token);
+      }
     } catch {
       return null;
     }
+    if (!friends.ready) return null;
     verdicts.delete(h);
-    verdicts.set(h, { ok, user, until: now() + (ok ? VERDICT_OK_MS : VERDICT_KO_MS) });
+    verdicts.set(h, { ok, user, until: now() + (!ok ? VERDICT_KO_MS : user ? VERDICT_OK_MS : VERDICT_UNNAMED_MS) });
     if (verdicts.size > MAX_VERDICTS) verdicts.delete(verdicts.keys().next().value);
     return ok && { user };
   }
@@ -474,7 +583,7 @@ export function createRelay(opts = {}) {
    * ni l'hôte lui-même (il y est déjà). Pour tous les autres, la liste est vide, comme s'il n'y
    * avait aucune séance.
    */
-  const canSee = (r, user) => !!r.card && !!user && !!r.allow?.has(user.id) && r.host?.id !== user.id;
+  const canSee = (r, user) => friends.ready && !!r.card && !!user && !!r.allow?.has(user.id) && r.host?.id !== user.id;
   const listed = (user) =>
     [...rooms]
       .filter(([, r]) => canSee(r, user))
@@ -518,7 +627,8 @@ export function createRelay(opts = {}) {
     } catch {
       token = undefined;
     }
-    if (!friends.ready && now() - friends.probedAt > 30_000) await probe();
+    // Relais pas prêt : un nouvel essai seulement quand le délai après le dernier échec est passé.
+    if (!friends.ready && probeDue()) await probe();
     if (!friends.ready) return json(res, 503, { multiplex: 'relay', error: 'unavailable' });
     const ok = await authorize(token, ip);
     if (ok === 'limited') return json(res, 429, { multiplex: 'relay', error: 'slow down' }, { 'retry-after': '10' });
@@ -569,6 +679,7 @@ export function createRelay(opts = {}) {
   });
 
   const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_MESSAGE, perMessageDeflate: false });
+  sockets = () => wss.clients;
 
   const refuse = (socket, status) => {
     socket.write(`HTTP/1.1 ${status}\r\n\r\n`);
@@ -593,15 +704,16 @@ export function createRelay(opts = {}) {
   const live = (ws) => !!ws && ws.readyState === ws.OPEN;
 
   /**
-   * Une salle listée a UN hôte : le premier qui l'annonce (`owner`, avec l'empreinte de sa preuve).
-   * Son compte plex.tv est celui de son ticket (vérifié, jamais déclaré), et chaque annonce peut
+   * Une salle listée a UN hôte : le compte plex.tv qui l'annonce le premier (`hostId`, vérifié par
+   * son ticket, jamais déclaré), avec l'empreinte de sa preuve d'hôte. Seul ce compte peut ensuite
+   * l'annoncer, depuis n'importe laquelle de ses connexions (la plus récente devient `owner`, qui
+   * reçoit les demandes de clé) : jamais un autre membre, même avec la preuve. Chaque annonce peut
    * porter sa liste d'amis (`friends`, numéros de compte plex.tv), que le relais remplace à chaque
-   * fois : un ami retiré perd la séance à l'annonce suivante. La première annonce d'un hôte doit
-   * la porter.
-   * Lui seul la rafraîchit, la retire (« unlist » : elle devient privée, et personne d'autre ne
-   * peut la relancer) ou la cède (« release » : passage de main, elle reste annonçable). S'il se
-   * déconnecte, la fiche disparaît ; un membre qui a la même preuve (tirée du secret de la séance)
-   * peut alors la reprendre, sauf si elle était devenue privée.
+   * fois et réduit aux comptes qu'il connaît : un ami retiré perd la séance à l'annonce suivante.
+   * La première annonce d'une connexion doit la porter.
+   * L'hôte la retire (« unlist » : elle devient privée) ou libère l'annonce (« release »). S'il se
+   * déconnecte, la fiche disparaît et la séance n'est plus listée (ses membres continuent, et les
+   * invitations par code marchent toujours) jusqu'à ce que ce même compte la réannonce.
    */
   function control(room, id, ws, data) {
     if (data.length > MAX_CONTROL) return;
@@ -613,6 +725,7 @@ export function createRelay(opts = {}) {
     }
     if (!m || typeof m !== 'object') return;
     const owner = live(room.owner) ? room.owner : null;
+    const isHost = () => !!ws.user && !!room.hostId && ws.user.id === room.hostId;
     if (m.t === 'announce') {
       if (!friends.ready) return reply(ws, { t: 'error', error: 'unavailable' });
       if (!ws.authorized) {
@@ -625,8 +738,7 @@ export function createRelay(opts = {}) {
         ws.user = ticket.user;
       }
       if (typeof m.proof !== 'string' || !PROOF.test(m.proof)) return reply(ws, { t: 'error', error: 'proof' });
-      if (room.private && owner !== ws) return reply(ws, { t: 'error', error: 'private' });
-      if ((room.proof && room.proof !== sha(m.proof)) || (owner && owner !== ws)) return reply(ws, { t: 'error', error: 'owner' });
+      if ((room.proof && room.proof !== sha(m.proof)) || (room.hostId && !isHost())) return reply(ws, { t: 'error', error: 'owner' });
       const allow = m.friends === undefined ? undefined : allowList(m.friends);
       if (allow === null) return reply(ws, { t: 'error', error: 'friends' });
       // Sans liste d'amis, pas d'annonce (une application plus ancienne n'en envoie pas).
@@ -634,11 +746,14 @@ export function createRelay(opts = {}) {
       const card = sanitizeCard(m.card, ws.user.name);
       if (!card) return reply(ws, { t: 'error', error: 'card' });
       room.proof ??= sha(m.proof);
+      room.hostId ??= ws.user.id;
       room.owner = ws;
       room.private = false;
       room.host = ws.user;
       if (allow) {
-        allow.delete(ws.user.id);
+        // Seulement les comptes que le relais connaît (partages et propriétaire) : le reste du
+        // cercle d'amis de l'hôte ne le regarde pas, et n'est pas gardé.
+        for (const uid of allow) if (!directory.known.has(uid) || uid === ws.user.id) allow.delete(uid);
         room.allow = allow;
       }
       room.card = card;
@@ -646,19 +761,17 @@ export function createRelay(opts = {}) {
       return reply(ws, { t: 'announced' });
     }
     if (m.t === 'unlist' || m.t === 'release') {
-      if (owner !== ws) return;
-      room.card = null;
-      room.cardAt = 0;
-      room.host = null;
-      room.allow = null;
+      if (owner !== ws && !(ws.authorized && isHost())) return;
+      delist(room);
       if (m.t === 'unlist') room.private = true;
-      else room.owner = null;
+      room.owner = null;
       return;
     }
     if (m.t === 'key-request') {
       // Un ami entré sans invitation : ticket dans ce message (jamais dans l'adresse), valable pour
       // une seule entrée dans cette salle, et seulement vers l'hôte d'une séance listée.
       // Et seulement pour un ami de l'hôte : pour tout autre, même réponse qu'un ticket invalide.
+      if (!friends.ready) return reply(ws, { t: 'error', error: 'unavailable' });
       if (!room.card || ws.asked || typeof m.pub !== 'string' || !KEY.test(m.pub)) return;
       if (!validTicket(m.ticket, id) || !canSee(room, tickets.get(m.ticket).user)) return reply(ws, { t: 'error', error: 'ticket' });
       if (!owner) return reply(ws, { t: 'error', error: 'nohost' });
@@ -678,7 +791,7 @@ export function createRelay(opts = {}) {
     let room = rooms.get(id);
     if (!room) {
       const keyRequests = bucket(KEY_REQUESTS.burst, KEY_REQUESTS.perSecond, now);
-      rooms.set(id, (room = { peers: new Set(), created: now(), card: null, cardAt: 0, owner: null, proof: null, private: false, keyRequests, host: null, allow: null }));
+      rooms.set(id, (room = { peers: new Set(), created: now(), card: null, cardAt: 0, owner: null, proof: null, private: false, keyRequests, host: null, hostId: null, allow: null }));
     }
     const peers = room.peers;
     peers.add(ws);
@@ -704,12 +817,9 @@ export function createRelay(opts = {}) {
     ws.on('close', () => {
       peers.delete(ws);
       if (room.owner === ws) {
-        // L'hôte est parti : la fiche disparaît ; une séance devenue privée le reste.
+        // L'hôte est parti : la séance n'est plus listée, jusqu'à ce que son compte la réannonce.
         room.owner = null;
-        room.card = null;
-        room.cardAt = 0;
-        room.host = null;
-        room.allow = null;
+        delist(room);
       }
       if (!peers.size && rooms.get(id) === room) rooms.delete(id);
     });
@@ -728,7 +838,7 @@ export function createRelay(opts = {}) {
     plexIp.sweep();
     for (const [k, e] of tickets) if (e.until <= t) tickets.delete(k);
     for (const [k, v] of verdicts) if (v.until <= t) verdicts.delete(k);
-    if (verifier && t - friends.probedAt >= PROBE_EVERY_MS) void probe();
+    if (verifier && probeDue()) void probe();
   }
 
   // Connexions mortes (téléphone en veille, réseau coupé) : on les ferme au bout de 30 secondes.
@@ -751,8 +861,10 @@ export function createRelay(opts = {}) {
     sweep,
     friends,
     directory,
-    /** Résolue une fois la première vérification du serveur Plex faite. */
-    probing,
+    /** Résolue une fois la dernière vérification du serveur Plex faite. */
+    get probing() {
+      return probing;
+    },
     close() {
       clearInterval(timer);
       for (const ws of wss.clients) ws.terminate();

@@ -350,6 +350,29 @@ export function friendAllowList(friends: Pick<PlexFriend, 'id'>[], selfId?: stri
   return [...out];
 }
 
+/** Liste d'amis remise au relais : les numéros, et la lecture de plex.tv (Date.now) dont ils viennent. */
+export interface FriendsSent {
+  ids: string;
+  at: number;
+}
+
+/**
+ * Hôte d'une séance annoncée, à chaque rafraîchissement : que joindre à l'annonce ? `ids` : la liste
+ * d'amis lue sur plex.tv (null si plex.tv n'a pas répondu), `readAt` : quand elle a été lue.
+ *
+ * - null : plex.tv muet. On ne garde pas une liste peut-être périmée (un ami retiré verrait encore
+ *   la séance) : l'appelant libère l'annonce, la séance n'est plus listée.
+ * - sinon `friends` quand la liste a changé OU a été relue depuis le dernier envoi (le relais ne
+ *   garde que les comptes qu'il connaît déjà : un ami qui vient de recevoir un partage n'y entre
+ *   qu'au renvoi suivant), et le nouvel état `sent`.
+ */
+export function friendsForAnnounce(ids: string[] | null, sent: FriendsSent, readAt: number): { friends?: string[]; sent: FriendsSent } | null {
+  if (!ids) return null;
+  const key = ids.join(',');
+  if (key === sent.ids && readAt <= sent.at) return { sent };
+  return { friends: ids, sent: { ids: key, at: readAt } };
+}
+
 /** Adresse HTTP de la liste des séances visibles d'un relais (POST, jeton dans le corps). */
 export const friendsUrl = (relay: string) => `${relay.replace(/^ws/, 'http')}/friends`;
 

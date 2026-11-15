@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { after, before, test } from 'node:test';
 import WebSocket from 'ws';
-import { allowList, createRelay, limitKey, sanitizeCard, xmlElements } from './server.mjs';
+import { allowList, createRelay, displayName, limitKey, sanitizeCard, xmlElements } from './server.mjs';
 
 const ROOM = 'FFFFFFFFFFFFFFFFFFFFFF';
 const PRIVATE_ROOM = 'PPPPPPPPPPPPPPPPPPPPPP';
@@ -31,8 +31,11 @@ const OWNER = 'owner-delegation-token';
 // Accepté par Plex mais inconnu de plex.tv (un profil du foyer, par exemple) : personne.
 const UNNAMED = 'unnamed-server-token';
 
-/** Faux Plex : `open` = laisse tout passer ; `adminOpen` = /status/sessions ouvert à tous. */
-function mockPlex({ open = false, adminOpen = false, tokens = [HOST, FRIEND, OTHER, OWNER, UNNAMED] } = {}) {
+/**
+ * Faux Plex : `open` = laisse tout passer (`state.open` : à partir d'un moment du test) ;
+ * `adminOpen` = /status/sessions ouvert à tous ses utilisateurs.
+ */
+function mockPlex({ open: always = false, state = {}, adminOpen = false, tokens = [HOST, FRIEND, OTHER, OWNER, UNNAMED] } = {}) {
   const calls = [];
   const srv = createServer((req, res) => {
     const token = req.headers['x-plex-token'];
@@ -41,7 +44,8 @@ function mockPlex({ open = false, adminOpen = false, tokens = [HOST, FRIEND, OTH
       res.writeHead(200, { 'content-type': 'application/json' });
       return res.end(JSON.stringify({ MediaContainer: { size: 0, claimed: true, machineIdentifier: SERVER_ID, version: '1.43.4' } }));
     }
-    const allowed = req.url === '/library/sections' ? open || tokens.includes(token) : req.url === '/status/sessions' ? open || token === OWNER || (adminOpen && tokens.includes(token)) : null;
+    const open = always || !!state.open;
+    const allowed = req.url === '/library/sections' ? open || tokens.includes(token) : req.url === '/status/sessions' ? open || !!state.adminAll || token === OWNER || (adminOpen && tokens.includes(token)) : null;
     if (allowed === null) {
       res.writeHead(404);
       return res.end();
@@ -254,7 +258,7 @@ test('séance listée aux seuls amis Plex de l’hôte ; ni aux autres utilisate
     a.sessions.map((s) => s.room),
     [ROOM],
   );
-  assert.deepEqual(a.sessions[0].card, { name: 'Dominique', title: 'Le Grand Voyage', sub: '1987', type: 'movie', guid: 'plex://movie/abc', key: '42', time: 125.5, playing: true });
+  assert.deepEqual(a.sessions[0].card, { name: 'Dominique (dom)', title: 'Le Grand Voyage', sub: '1987', type: 'movie', guid: 'plex://movie/abc', key: '42', time: 125.5, playing: true });
   assert.equal(a.sessions[0].count, 1);
   // Le propriétaire, ami de l'hôte, reconnu par son jeton délégué (administrateur du serveur).
   assert.deepEqual(
@@ -334,7 +338,7 @@ test('le propriétaire héberge : reconnu par son jeton délégué, nommé d’a
   assert.deepEqual(await announce(host, base, { token: OWNER, c: card('Faux nom'), friends: [HOST_ID] }), { t: 'announced' });
   const s = await sessionsFor(base, HOST);
   assert.equal(s.length, 1);
-  assert.equal(s[0].card.name, 'Proprio');
+  assert.equal(s[0].card.name, 'Proprio (proprio)');
   assert.deepEqual(await sessionsFor(base, FRIEND), []);
   assert.deepEqual(await sessionsFor(base, OWNER), []);
   host.close();
@@ -442,36 +446,44 @@ test('la séance appartient à son premier hôte : personne d’autre ne l’ann
   // L'hôte rend la séance privée : personne d'autre ne la relance, même avec la preuve.
   host.send(JSON.stringify({ t: 'unlist' }));
   await until(() => !relay.rooms.get(ROOM2).card);
-  assert.deepEqual(await announce(intruder, base, { token: FRIEND }), { t: 'error', error: 'private' });
+  assert.deepEqual(await announce(intruder, base, { token: FRIEND }), { t: 'error', error: 'owner' });
   host.close();
   await until(() => relay.rooms.get(ROOM2).peers.size === 2);
-  assert.deepEqual(await announce(intruder, base, { token: FRIEND }), { t: 'error', error: 'private' });
+  assert.deepEqual(await announce(intruder, base, { token: FRIEND }), { t: 'error', error: 'owner' });
   assert.equal(relay.rooms.get(ROOM2).card, null);
   for (const ws of [intruder, friend]) ws.close();
 });
 
-test('hôte reparti : un membre (qui a la preuve) reprend l’annonce, sous son nom et avec SES amis ; un inconnu non', async () => {
+test('hôte reparti : la séance n’est plus listée ; seul le même compte (autre connexion) la réannonce, aucun membre', async () => {
   const ROOM3 = 'GGGGGGGGGGGGGGGGGGGGGG';
   const host = await open(base, ROOM3);
   const member = await open(base, ROOM3);
   assert.deepEqual(await announce(host, base), { t: 'announced' });
   host.close();
   await until(() => !relay.rooms.get(ROOM3).card);
-  const stranger = await open(base, ROOM3);
-  assert.deepEqual(await announce(stranger, base, { proof: 'Z'.repeat(22), token: FRIEND }), { t: 'error', error: 'owner' });
-  // Le nouvel hôte doit apporter sa liste : celle de l'ancien ne le suit pas.
-  assert.deepEqual(await announce(member, base, { token: FRIEND, friends: null }), { t: 'error', error: 'unavailable' });
-  assert.deepEqual(await control(member, { t: 'announce', proof: PROOF, card: card(), friends: [OTHER_ID] }), { t: 'announced' });
-  assert.equal((await sessionsFor(base, OTHER)).find((s) => s.room === ROOM3)?.card.name, 'Camille');
   assert.deepEqual(
-    (await sessionsFor(base, OWNER)).filter((s) => s.room === ROOM3),
+    (await sessionsFor(base, FRIEND)).filter((s) => s.room === ROOM3),
     [],
   );
-  // Passage de main volontaire : « release » libère l'annonce sans rendre la séance privée.
-  member.send(JSON.stringify({ t: 'release' }));
+  // Un membre qui a la preuve, sous un autre compte : pas de reprise (la fiche porterait son nom
+  // et sa liste d'amis sur la séance d'un autre).
+  assert.deepEqual(await announce(member, base, { token: FRIEND, friends: [OTHER_ID] }), { t: 'error', error: 'owner' });
+  const stranger = await open(base, ROOM3);
+  assert.deepEqual(await announce(stranger, base, { proof: 'Z'.repeat(22), token: OTHER }), { t: 'error', error: 'owner' });
+  assert.deepEqual(await sessionsFor(base, OTHER), []);
+  // L'hôte revient (nouvelle connexion, même compte) : il la réannonce.
+  const back = await open(base, ROOM3);
+  assert.deepEqual(await announce(back, base), { t: 'announced' });
+  assert.equal((await sessionsFor(base, FRIEND)).find((s) => s.room === ROOM3)?.card.name, 'Dominique (dom)');
+  // Une deuxième connexion du même compte prend la main sur la première ; un autre compte non.
+  const second = await open(base, ROOM3);
+  assert.deepEqual(await announce(second, base, { c: card('x', 'Depuis le salon') }), { t: 'announced' });
+  assert.equal(relay.rooms.get(ROOM3).card.title, 'Depuis le salon');
+  // « release » libère l'annonce sans rendre la séance privée ; le même compte la reprend.
+  second.send(JSON.stringify({ t: 'release' }));
   await until(() => !relay.rooms.get(ROOM3).card);
-  assert.deepEqual(await control(member, { t: 'announce', proof: PROOF, card: card(), friends: [OTHER_ID] }), { t: 'announced' });
-  for (const ws of [member, stranger]) ws.close();
+  assert.deepEqual(await control(second, { t: 'announce', proof: PROOF, card: card(), friends: [FRIEND_ID] }), { t: 'announced' });
+  for (const ws of [member, stranger, back, second]) ws.close();
 });
 
 test('nouveau partage : plex.tv relu (au plus une fois par minute), le nouvel ami reconnu', async () => {
@@ -489,13 +501,18 @@ test('nouveau partage : plex.tv relu (au plus une fois par minute), le nouvel am
   // Moins d'une minute après la dernière lecture : pas de relecture, rien de listé.
   assert.deepEqual(await sessionsFor(b, 'new-share-token'), []);
   assert.equal(shares(), 1);
-  // Plus tard (verdict expiré, et plus d'une minute depuis la dernière lecture) : relu, reconnu.
-  clock += 6 * 60_000;
+  // Le relais n'a pas gardé 2004 dans la liste de l'hôte : il ne le connaissait pas.
+  assert.deepEqual([...r.rooms.get(ROOM8).allow], []);
+  // Une minute plus tard (verdict « sans nom » gardé une minute seulement) : relu, reconnu…
+  clock += 61_000;
+  assert.deepEqual(await sessionsFor(b, 'new-share-token'), []);
+  assert.equal(shares(), 2);
+  // … et dès que l'hôte renvoie sa liste (l'application la renvoie à chaque relecture), il la voit.
+  assert.deepEqual(await control(host, { t: 'announce', proof: PROOF, card: card(), friends: ['2004'] }), { t: 'announced' });
   assert.deepEqual(
     (await sessionsFor(b, 'new-share-token')).map((s) => s.room),
     [ROOM8],
   );
-  assert.equal(shares(), 2);
   host.close();
   await r.close();
   await p.close();
@@ -590,7 +607,8 @@ test('verdicts gardés quelques minutes ; vérifications auprès de Plex bornée
   const { relay: r, base: b } = await startRelay(await p.listen(), await t.listen(), { plexBurst: 3, plexPerSecond: 0.001, plexIpBurst: 100 });
   const before = p.calls.filter((c) => c.path === '/library/sections').length; // contre-épreuve
   for (let i = 0; i < 5; i++) assert.equal((await list(b, FRIEND)).status, 200);
-  assert.equal(p.calls.filter((c) => c.path === '/library/sections').length - before, 1);
+  // Le jeton, puis un jeton tiré au hasard (qui doit être refusé), une seule fois.
+  assert.equal(p.calls.filter((c) => c.path === '/library/sections').length - before, 2);
   // Jetons inventés en rafale : au-delà de la réserve, 429 sans même demander à Plex.
   const statuses = [];
   for (let i = 0; i < 4; i++) statuses.push((await list(b, `faux-${i}`)).status);
@@ -640,6 +658,137 @@ test('XML de plex.tv : attributs des éléments demandés, entités décodées',
   ]);
   assert.deepEqual(xmlElements(xml, 'User'), [{ id: '9', title: 'Léa "L"' }]);
   assert.deepEqual(xmlElements(xml, 'Server'), []);
+});
+
+test('Plex ouvert après le démarrage : un jeton inventé n’est personne ; tout ce qui était autorisé est retiré', async () => {
+  const st = {};
+  const p = mockPlex({ state: st });
+  const t = mockPlexTv();
+  const { relay: r, base: b } = await startRelay(await p.listen(), await t.listen());
+  const host = await open(b, ROOM);
+  assert.deepEqual(await announce(host, b, { friends: [FRIEND_ID, OWNER_ID] }), { t: 'announced' });
+  const friendTicket = await ticketFor(b, FRIEND);
+  // Le propriétaire ajoute le réseau du relais aux « adresses autorisées sans authentification ».
+  st.open = true;
+  // Un jeton inventé : ni propriétaire, ni liste, ni ticket.
+  const res = await list(b, 'attacker-invented-token-xyz');
+  assert.equal(res.status, 503);
+  assert.deepEqual(await res.json(), { multiplex: 'relay', error: 'unavailable' });
+  assert.equal(r.friends.ready, false);
+  assert.equal(r.friends.reason, 'open');
+  // Tout ce qui avait été accordé est retiré : fiches, tickets, verdicts, annonces des connexions.
+  assert.equal(r.rooms.get(ROOM).card, null);
+  assert.equal((await list(b, FRIEND)).status, 503);
+  const att = await open(b, ROOM);
+  assert.deepEqual(await control(att, { t: 'key-request', ticket: friendTicket, pub: PUB }), { t: 'error', error: 'unavailable' });
+  assert.deepEqual(await control(host, { t: 'announce', proof: PROOF, card: card() }), { t: 'error', error: 'unavailable' });
+  await new Promise((ok) => setTimeout(ok, 50));
+  assert.equal(host.inbox.filter((m) => m.t === 'key-request').length, 0);
+  assert.equal((await (await fetch(`http://${b}/rooms?ids=`)).json()).friends, false);
+  for (const ws of [host, att]) ws.close();
+  await r.close();
+  await p.close();
+  await t.close();
+});
+
+test('Plex qui ouvre /status/sessions à tous après le démarrage : aucun jeton ne devient le propriétaire', async () => {
+  const st = {};
+  const p = mockPlex({ state: st });
+  const t = mockPlexTv();
+  const { relay: r, base: b } = await startRelay(await p.listen(), await t.listen());
+  const host = await open(b, ROOM);
+  assert.deepEqual(await announce(host, b, { friends: [OWNER_ID] }), { t: 'announced' });
+  // /library/sections reste fermé à l'inconnu, /status/sessions s'ouvre à tous.
+  st.adminAll = true;
+  // UNNAMED (un utilisateur du serveur que plex.tv ne nomme pas) ne passe pas pour le propriétaire.
+  const res = await list(b, UNNAMED);
+  assert.equal(res.status, 503);
+  assert.equal(r.friends.ready, false);
+  assert.equal(r.rooms.get(ROOM).card, null);
+  host.close();
+  await r.close();
+  await p.close();
+  await t.close();
+});
+
+test('liste d’amis : seuls les comptes que le relais connaît sont gardés', async () => {
+  const ROOM9 = 'SSSSSSSSSSSSSSSSSSSSSS';
+  const host = await open(base, ROOM9);
+  assert.deepEqual(await announce(host, base, { friends: [FRIEND_ID, '999999', OWNER_ID, '31337'] }), { t: 'announced' });
+  assert.deepEqual([...relay.rooms.get(ROOM9).allow].sort(), [OWNER_ID, FRIEND_ID].sort());
+  host.close();
+});
+
+test('partages relus : un hôte, un ami ou un membre qui ne sont plus partagés perdent tout', async () => {
+  const p = mockPlex();
+  const t = mockPlexTv();
+  let clock = 1_000_000;
+  const { relay: r, base: b } = await startRelay(await p.listen(), await t.listen(), { now: () => clock });
+  const ROOMA = 'TTTTTTTTTTTTTTTTTTTTTT';
+  const ROOMB = 'UUUUUUUUUUUUUUUUUUUUUU';
+  // Dominique héberge A pour Camille et Eli ; Camille héberge B pour Eli.
+  const hostA = await open(b, ROOMA);
+  assert.deepEqual(await announce(hostA, b, { friends: [FRIEND_ID, OTHER_ID] }), { t: 'announced' });
+  const hostB = await open(b, ROOMB);
+  assert.deepEqual(await announce(hostB, b, { token: FRIEND, friends: [OTHER_ID] }), { t: 'announced' });
+  const otherTicket = await ticketFor(b, OTHER);
+  // Le propriétaire retire le partage d'Eli puis celui de Dominique.
+  t.state.shares = t.state.shares.filter(([id]) => id !== OTHER_ID && id !== HOST_ID);
+  clock += 10 * 60_000 + 1;
+  r.sweep();
+  await until(() => t.calls.filter((c) => c.path.endsWith('/shared_servers')).length === 2);
+  await until(() => !r.directory.loading);
+  // Dominique n'est plus partagé : A n'est plus listée, et sa connexion ne peut plus l'annoncer.
+  assert.equal(r.rooms.get(ROOMA).card, null);
+  assert.deepEqual(await control(hostA, { t: 'announce', proof: PROOF, card: card() }), { t: 'error', error: 'ticket' });
+  // Eli n'est plus partagé : retiré de la liste de B, son ticket ne vaut plus rien.
+  assert.deepEqual([...r.rooms.get(ROOMB).allow], []);
+  const other = await open(b, ROOMB);
+  assert.deepEqual(await control(other, { t: 'key-request', ticket: otherTicket, pub: PUB }), { t: 'error', error: 'ticket' });
+  // Son jeton n'est plus reconnu (Plex l'accepte encore dans ce faux, plex.tv ne le nomme plus).
+  assert.deepEqual(await sessionsFor(b, OTHER), []);
+  for (const ws of [hostA, hostB, other]) ws.close();
+  await r.close();
+  await p.close();
+  await t.close();
+});
+
+test('plex.tv en échec : nouvel essai de plus en plus tard, même si l’on frappe à la porte', async () => {
+  const p = mockPlex();
+  const t = mockPlexTv({ fail: true });
+  let clock = 1_000_000;
+  const { relay: r, base: b } = await startRelay(await p.listen(), await t.listen(), { now: () => clock });
+  const probes = () => t.calls.filter((c) => c.path === '/api/v2/user').length;
+  assert.equal(probes(), 1);
+  // Des demandes anonymes toutes les 31 s pendant 10 minutes : pas un essai à chacune.
+  for (let i = 0; i < 20; i++) {
+    clock += 31_000;
+    assert.equal((await list(b, `anonyme-${i}`, `203.0.113.${i + 1}`)).status, 503);
+  }
+  // 1 min, 2 min, 4 min : trois nouveaux essais en 10 min 20 s, au lieu de vingt.
+  assert.equal(probes(), 4);
+  // Le délai plafonne à 30 minutes.
+  for (let i = 0; i < 12; i++) {
+    clock += 31 * 60_000;
+    r.sweep();
+    await r.probing;
+  }
+  const before = probes();
+  clock += 29 * 60_000;
+  r.sweep();
+  assert.equal((await list(b, 'anonyme-x', '203.0.113.200')).status, 503);
+  assert.equal(probes(), before);
+  await r.close();
+  await p.close();
+  await t.close();
+});
+
+test('nom d’une fiche : « titre (pseudo) », le pseudo plex.tv étant unique', () => {
+  assert.equal(displayName({ title: 'Camille', username: 'camille' }), 'Camille (camille)');
+  assert.equal(displayName({ title: 'camille', username: 'camille' }), 'camille');
+  assert.equal(displayName({ title: 'Les enfants' }), 'Les enfants');
+  assert.equal(displayName({ username: 'dom' }), 'dom');
+  assert.equal(displayName({}), undefined);
 });
 
 test('aucun jeton dans ce que le relais écrit', () => {

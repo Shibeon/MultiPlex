@@ -30,6 +30,7 @@ import {
   findRoom,
   formatInvite,
   friendAllowList,
+  friendsForAnnounce,
   friendsUrl,
   getServers,
   grantRequestKeys,
@@ -47,6 +48,7 @@ import {
   serverCredential,
   type FriendCard,
   type FriendsAnswer,
+  type FriendsSent,
   type GrantPayload,
   type Metadata,
   type PlexResource,
@@ -87,7 +89,9 @@ export interface Peer {
 /**
  * Présence, toutes les 3 s. `c`/`by` : tampon de la commande que suit son auteur (togethersync.ts).
  * `want` : son auteur arrive ou revient, et demande une présence tout de suite à chacun.
- * `vis` (hôte) : séance visible par les amis, repris par qui deviendrait hôte.
+ * `vis` (hôte) : séance visible par les amis. Qui deviendrait hôte la reprend à son compte, mais le
+ * relais ne liste une séance que pour le compte qui l'a annoncée le premier : chez un autre, elle
+ * reste « non listée » (les invitations par code marchent toujours).
  * `hc` (hôte) : quand il a pris la main (horloge de Lamport ; 0 pour l'hôte d'origine). Deux hôtes
  * après une coupure : celui qui l'a prise le plus récemment reste (voir hostYields).
  */
@@ -450,7 +454,7 @@ const FRIENDS_TTL_MS = 2 * 60_000;
 /**
  * Liste d'amis à joindre à l'annonce : lue sur plex.tv avec le jeton du compte, ici (ni le jeton
  * ni la liste ne passent par le relais ; seuls les numéros partent avec l'annonce). null quand
- * plex.tv ne répond pas : sans liste, la séance n'est pas listée.
+ * plex.tv ne répond pas : la séance n'est alors plus listée (jamais une liste périmée).
  */
 async function friendIds(): Promise<string[] | null> {
   const a = auth.value;
@@ -465,8 +469,12 @@ async function friendIds(): Promise<string[] | null> {
   }
 }
 
-/** Liste d'amis déjà remise au relais pendant cette annonce (renvoyée seulement si elle change). */
-let friendsSent = '';
+/**
+ * Liste d'amis remise au relais pendant cette annonce, et la lecture de plex.tv dont elle vient.
+ * Renvoyée quand elle change ET après chaque relecture : le relais ne garde que les comptes qu'il
+ * connaît déjà, et un ami qui vient de recevoir un partage n'y entre qu'au renvoi suivant.
+ */
+let friendsSent: FriendsSent = { ids: '', at: 0 };
 
 /** Liste du relais pour ce jeton (jeton dans le corps : ni dans l'adresse, ni en en-tête). */
 async function askFriends(relay: string, token: string): Promise<FriendsAnswer | null> {
@@ -531,10 +539,15 @@ function announce(refresh = false): void {
     const proof = current.owner;
     void friendIds().then((ids) => {
       if (ws !== sock || announcing !== 'on') return;
-      // plex.tv muet : la fiche suit, la dernière liste remise au relais reste en place.
-      const changed = !!ids && ids.join(',') !== friendsSent;
-      if (changed) friendsSent = ids.join(',');
-      sendControl({ t: 'announce', proof, card: card() ?? c, ...(changed ? { friends: ids } : {}) });
+      // plex.tv muet : on ne garde pas une liste qui n'est peut-être plus la bonne. L'annonce est
+      // libérée (la séance n'est plus listée) ; elle reprendra, avec une liste fraîche, plus tard.
+      const next = friendsForAnnounce(ids, friendsSent, myFriends?.at ?? 0);
+      if (!next) {
+        sendControl({ t: 'release' });
+        return notListed();
+      }
+      friendsSent = next.sent;
+      sendControl({ t: 'announce', proof, card: card() ?? c, ...(next.friends ? { friends: next.friends } : {}) });
     });
     return;
   }
@@ -561,7 +574,7 @@ function announce(refresh = false): void {
     }
     announcing = 'on';
     cardSent = { sig: cardSig(c2), at: Date.now() };
-    friendsSent = ids.join(',');
+    friendsSent = { ids: ids.join(','), at: myFriends?.at ?? 0 };
     sendControl({ t: 'announce', ticket: answer.ticket, proof, card: c2, friends: ids });
   })();
 }
@@ -793,7 +806,8 @@ function open(d: { relay: string; room: string; key: CryptoKey; owner?: string }
     const gone = Date.now() - 12_000;
     if (peers.value.some((p) => p.seen < gone)) peers.value = peers.value.filter((p) => p.seen >= gone);
     const t = together.value;
-    // L'hôte est parti : le premier participant (par identifiant) prend la main, et l'annonce.
+    // L'hôte est parti : le premier participant (par identifiant) prend la main. Il essaie de
+    // l'annoncer, mais le relais ne la liste que pour le compte de l'hôte d'origine.
     if (t && !t.host && !peers.value.some((p) => p.host) && peers.value.every((p) => p.id > me.id) && t.status === 'open' && peers.value.length) {
       hostClaim = sync.clock + 1;
       together.value = { ...t, host: true };
@@ -808,7 +822,7 @@ export function leaveTogether(): void {
   if (!together.value) return;
   closing = true;
   void send({ t: 'bye', id: me.id });
-  // L'hôte part : l'annonce est libérée (pas rendue privée), le suivant la reprendra si elle est visible.
+  // L'hôte part : l'annonce est libérée (pas rendue privée) ; seul son compte pourra la réannoncer.
   if (isHost() && announcing === 'on') sendControl({ t: 'release' });
   clearInterval(ticker);
   const sock = ws;

@@ -1,7 +1,7 @@
 // Séances visibles par les amis, côté application : quel jeton part (jamais celui du compte),
 // recherche du relais, et remise de la clé par l'hôte (ECDH éphémère).
 import { describe, expect, it } from 'vitest';
-import { deriveSession, findRelay, friendAllowList, grantRequestKeys, hostYields, isFriendsAnswer, MAX_FRIEND_ALLOW, openGrant, parsePlexFriends, RelayBackoff, sealGrant, serverCredential } from '../src';
+import { deriveSession, findRelay, friendAllowList, friendsForAnnounce, grantRequestKeys, hostYields, isFriendsAnswer, MAX_FRIEND_ALLOW, openGrant, parsePlexFriends, RelayBackoff, sealGrant, serverCredential } from '../src';
 
 describe('jeton présenté au relais', () => {
   it('le jeton propre au serveur, jamais celui du compte', () => {
@@ -62,6 +62,17 @@ describe('liste d’amis jointe à l’annonce', () => {
     expect(friendAllowList([])).toEqual([]);
     const many = Array.from({ length: MAX_FRIEND_ALLOW + 50 }, (_, i) => ({ id: String(i + 1) }));
     expect(friendAllowList(many)).toHaveLength(MAX_FRIEND_ALLOW);
+  });
+
+  it('plex.tv muet au rafraîchissement : aucune liste périmée, l’annonce est libérée', () => {
+    expect(friendsForAnnounce(null, { ids: '2001,2004', at: 5 }, 5)).toBeNull();
+  });
+
+  it('liste renvoyée quand elle change ou vient d’être relue, pas à chaque rafraîchissement', () => {
+    const sent = { ids: '2001', at: 10 };
+    expect(friendsForAnnounce(['2001'], sent, 10)).toEqual({ sent });
+    expect(friendsForAnnounce(['2001'], sent, 20)).toEqual({ friends: ['2001'], sent: { ids: '2001', at: 20 } });
+    expect(friendsForAnnounce([], sent, 10)).toEqual({ friends: [], sent: { ids: '', at: 10 } });
   });
 
   it('un ami retiré de plex.tv disparaît de la liste suivante', () => {
