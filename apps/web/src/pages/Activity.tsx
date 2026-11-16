@@ -128,11 +128,16 @@ export function toPosts(feed: FriendActivity[]): Post[] {
   return posts;
 }
 
+/** Le compte connecté : on l'appelle « Vous », jamais par le nom complet de son compte Plex. */
+function isMe(user: FriendActivity['user']): boolean {
+  const u = auth.value?.user;
+  return !!u && (user.username === u.username || [u.uuid, String(u.id)].includes(user.id));
+}
+
 function PostCard({ p }: { p: Post }) {
   const a = p.first;
   const n = p.episodes.length;
-  const u = auth.value?.user;
-  const me = !!u && (a.user.username === u.username || [u.uuid, String(u.id)].includes(a.user.id));
+  const me = isMe(a.user);
   const verb = n > 1 ? t('feed.episodes').replace('{n}', String(n)) : n === 1 ? t('feed.episode') : t('feed.movie');
   const media = (
     <>
@@ -267,7 +272,7 @@ function Feed() {
           {friends.map((f) => (
             <button key={f.user.id} role="tab" aria-selected={who === f.user.id} class={`feed-friend${who === f.user.id ? ' on' : ''}`} onClick={() => setWho(who === f.user.id ? '' : f.user.id)}>
               <Avatar name={f.user.name} src={f.user.avatar} />
-              <small>{f.user.name}</small>
+              <small>{isMe(f.user) ? t('feed.me') : f.user.name}</small>
             </button>
           ))}
         </Carousel>
