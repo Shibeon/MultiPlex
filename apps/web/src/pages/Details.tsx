@@ -1,5 +1,5 @@
 import { seasonCatalogId, ultraBlurCorners, techBadges, upcomingEpisodes, type Metadata } from '@multiplex/core';
-import { resolvePlayable } from '../queue';
+import { endShuffle, resolvePlayable, startShuffle } from '../queue';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
 import { showInfo } from '../menu';
@@ -139,7 +139,20 @@ export function Details({ id }: { id: string }) {
     setBusy(true);
     try {
       const target = await resolvePlayable(srv, item);
-      if (target) go(`/play/${target.ratingKey}${fromStart ? '?t=0' : ''}`);
+      if (target) {
+        endShuffle();
+        go(`/play/${target.ratingKey}${fromStart ? '?t=0' : ''}`);
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const shuffle = async () => {
+    setBusy(true);
+    try {
+      const first = await startShuffle(srv, item);
+      if (first) go(`/play/${first.ratingKey}?t=0`);
     } finally {
       setBusy(false);
     }
@@ -234,6 +247,11 @@ export function Details({ id }: { id: string }) {
             {!!item.viewOffset && (
               <button class="btn" disabled={busy} onClick={() => void play(true)}>
                 <Icon name="restart" size={20} /> {t('item.restart')}
+              </button>
+            )}
+            {(item.type === 'show' || item.type === 'season') && (
+              <button class="btn" disabled={busy} onClick={() => void shuffle()}>
+                <Icon name="shuffle" size={20} /> {t('item.shuffle')}
               </button>
             )}
             <ServerWatchlistButton item={item} />

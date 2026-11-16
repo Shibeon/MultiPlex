@@ -8,7 +8,7 @@ import type { ComponentChildren } from 'preact';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { formatDuration, t } from './i18n';
 import { native } from './native';
-import { enqueue, resolvePlayable, upNext, clearQueue } from './queue';
+import { enqueue, endShuffle, resolvePlayable, upNext, clearQueue } from './queue';
 import { go } from './router';
 import { discover, invalidate, managedProfile, server, useData } from './store';
 import { Icon, isWatched, labels } from './ui';
@@ -179,7 +179,11 @@ function Menu({ at }: { at: MenuTarget }) {
           label={m?.viewOffset ? t('item.resume') : t('item.play')}
           onClick={() => {
             close();
-            void resolvePlayable(srv, m!).then((p) => p && go(`/play/${p.ratingKey}`));
+            void resolvePlayable(srv, m!).then((p) => {
+              if (!p) return;
+              endShuffle();
+              go(`/play/${p.ratingKey}`);
+            });
           }}
         />
       )}
