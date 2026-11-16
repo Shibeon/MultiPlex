@@ -383,7 +383,7 @@ export function NativeOverlay() {
         <div class="player-title">
           <strong>{meta.title}</strong>
           {meta.sub && <PlayerSub text={meta.sub} />}
-          <PlayerOutput badges={liveTechNative(s, meta)} source={meta.tech ?? []} />
+          <PlayerOutput live={liveTechNative(s, meta)} />
         </div>
         <PlayerClock remaining={duration - time} speed={speed} />
       </div>

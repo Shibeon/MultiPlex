@@ -1669,21 +1669,26 @@ input.search-input:focus-visible { background-color: var(--glass-2); }
 .ptech-out { position: relative; width: max-content; max-width: 100%; margin-top: 0.7rem; }
 .ptech-row { display: flex; align-items: center; gap: 0.6rem; min-width: 0; }
 .ptech-out .ptech { margin: 0; }
-.ptech-info { flex: none; width: 2rem; height: 2rem; padding: 0; display: grid; place-items: center; border-radius: 50%; border: 1.5px solid rgba(255, 255, 255, 0.7); background: transparent; color: #fff; cursor: pointer; transition: background 0.15s; }
+.ptech-info { flex: none; width: 1.75rem; height: 1.75rem; padding: 0; display: grid; place-items: center; border-radius: 50%; border: 1.5px solid rgba(255, 255, 255, 0.7); background: transparent; color: #fff; cursor: pointer; transition: background 0.15s; }
+/* Même hauteur que les pastilles, et un « i » qui occupe le cercle (l'icône ne dessine pas de second cercle). */
+.ptech-info .icon { width: 72%; height: 72%; }
 .ptech-info:hover, .ptech-info:focus-visible, .ptech-info[aria-expanded='true'] { background: rgba(255, 255, 255, 0.18); }
 .ptech-panel { position: absolute; left: calc(100% + 1.1rem); top: -0.6rem; z-index: 3; width: min(23rem, 45vw); padding: 0.95rem 1.15rem; border-radius: 0.9rem; background: rgba(16, 18, 22, 0.94); border: 1px solid rgba(255, 255, 255, 0.2); box-shadow: 0 12px 36px rgba(0, 0, 0, 0.55); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); text-shadow: none; font-size: 0.92rem; line-height: 1.4; color: #fff; }
 .ptech-panel::before { content: ''; position: absolute; left: -0.45rem; top: 1.05rem; width: 0.8rem; height: 0.8rem; transform: rotate(45deg); background: inherit; border-left: 1px solid rgba(255, 255, 255, 0.2); border-bottom: 1px solid rgba(255, 255, 255, 0.2); }
 .ptech-panel dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 0.5rem 0.9rem; }
 .ptech-panel dt { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(255, 255, 255, 0.6); padding-top: 0.2em; }
-.ptech-panel dd { margin: 0; }
-.ptech-notes { list-style: none; margin: 0.75rem 0 0; padding: 0.7rem 0 0; border-top: 1px solid rgba(255, 255, 255, 0.18); display: grid; gap: 0.35rem; color: rgba(255, 255, 255, 0.82); }
+.ptech-panel dd { margin: 0; display: grid; gap: 0.2rem; }
+.ptech-conv { font-weight: 600; }
+.ptech-conv > i { font-style: normal; opacity: 0.75; }
+.ptech-panel dd small { font-size: 0.85em; color: rgba(255, 255, 255, 0.78); }
+.ptech-notes { list-style: none; margin: 0.75rem 0 0; padding: 0.7rem 0 0; font-size: 0.85em; border-top: 1px solid rgba(255, 255, 255, 0.18); display: grid; gap: 0.35rem; color: rgba(255, 255, 255, 0.82); }
 @media (max-width: 900px) {
   .ptech-panel { left: 0; top: calc(100% + 0.6rem); transform: none; width: min(23rem, calc(100vw - 2rem)); }
   .ptech-panel::before { display: none; }
 }
 @media (max-width: 700px), (orientation: landscape) and (max-height: 500px) {
   .ptech-out { margin-top: 0.4rem; }
-  .ptech-info { width: 1.6rem; height: 1.6rem; }
+  .ptech-info { width: 1.4rem; height: 1.4rem; }
   .ptech-panel { font-size: 0.8rem; }
 }
 

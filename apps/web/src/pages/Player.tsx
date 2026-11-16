@@ -854,10 +854,7 @@ export function Player({ id }: { id: string }) {
           <strong>{head.title}</strong>
           {head.sub && <PlayerSub text={head.sub} />}
           {item && (
-            <PlayerOutput
-              badges={liveTechWeb(video.current, plan.current, techBadges(item.Media?.[choice.current.media]))}
-              source={techBadges(item.Media?.[choice.current.media])}
-            />
+            <PlayerOutput live={liveTechWeb(video.current, plan.current, techBadges(item.Media?.[choice.current.media]))} />
           )}
         </div>
         <PlayerClock remaining={ui.duration - ui.time} speed={choice.current.speed} />

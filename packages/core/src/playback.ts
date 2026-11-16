@@ -232,6 +232,18 @@ export interface TechBadge {
 const VIDEO_LABEL: Record<string, string> = { hevc: 'HEVC', h265: 'HEVC', h264: 'H.264', av1: 'AV1', vp9: 'VP9', mpeg2video: 'MPEG-2', vc1: 'VC-1', mpeg4: 'MPEG-4' };
 const AUDIO_LABEL: Record<string, string> = { truehd: 'Dolby TrueHD', eac3: 'Dolby Digital+', ac3: 'Dolby Digital', dca: 'DTS', dts: 'DTS', aac: 'AAC', flac: 'FLAC', mp3: 'MP3', opus: 'Opus', pcm: 'PCM', alac: 'ALAC', vorbis: 'Vorbis' };
 
+/** Nom courant d'un codec vidéo (« hevc » → « HEVC »), tel que les pastilles l'affichent. */
+export function videoCodecLabel(codec: string | undefined): string | undefined {
+  const c = (codec ?? '').toLowerCase();
+  return c ? VIDEO_LABEL[c] ?? c.toUpperCase() : undefined;
+}
+
+/** Nom courant d'un codec audio (« eac3 » → « Dolby Digital+ »), tel que les pastilles l'affichent. */
+export function audioCodecLabel(codec: string | undefined): string | undefined {
+  const c = (codec ?? '').toLowerCase().replace(/-ma$/, '');
+  return c ? AUDIO_LABEL[c] ?? c.toUpperCase() : undefined;
+}
+
 /**
  * Caractéristiques techniques d'un fichier, dans l'ordre d'affichage : définition,
  * codec vidéo, plage dynamique, format et canaux de la piste audio retenue.
