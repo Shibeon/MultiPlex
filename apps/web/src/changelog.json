@@ -1,6 +1,22 @@
 [
   {
     "versions": {
+      "desktop": "0.1.39",
+      "web": "0.1.39",
+      "android": "0.1.39",
+      "tv": "0.1.39"
+    },
+    "fr": [
+      "Nouvelle page « Confidentialité » (Réglages → Compte, et sur l’écran de connexion) : ce que MultiPlex envoie, à qui et quand, ce qui reste sur l’appareil et comment l’effacer. Le développeur ne reçoit rien.",
+      "La politique complète est aussi dans le dépôt (PRIVACY.md)."
+    ],
+    "en": [
+      "New “Privacy” page (Settings → Account, and on the sign-in screen): what MultiPlex sends, to whom and when, what stays on the device and how to erase it. The developer receives nothing.",
+      "The full policy is also in the repository (PRIVACY.md)."
+    ]
+  },
+  {
+    "versions": {
       "desktop": "0.1.38",
       "web": "0.1.38",
       "android": "0.1.38",
