@@ -2,7 +2,10 @@
 #   docker build -f apps/web/Dockerfile -t multiplex-web .
 # Image publiée : ghcr.io/shibeon/multiplex-web (voir apps/web/compose.yml).
 
-FROM node:22-alpine AS build
+# La compilation donne des fichiers statiques, identiques pour toutes les architectures : elle tourne
+# sur la machine de build ($BUILDPLATFORM), jamais sous émulation (un pnpm arm64 sous QEMU est déjà
+# resté bloqué plus d'une heure). Seule l'image nginx finale est par architecture, sans RUN.
+FROM --platform=$BUILDPLATFORM node:22-alpine AS build
 RUN corepack enable
 WORKDIR /src
 # Manifestes d'abord (couche d'installation réutilisée tant qu'ils ne changent pas). Tous ceux de
