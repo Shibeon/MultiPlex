@@ -99,7 +99,7 @@ Une fois le dépôt poussé sur GitHub, `.github/workflows/build.yml` lance les 
 
 ## Mises à jour automatiques
 
-L'application de bureau vérifie au démarrage, puis toutes les six heures, si une version plus récente a été publiée sur GitHub. Elle l'annonce par un bandeau ; rien n'est téléchargé ni installé sans accord (« Mettre à jour », puis « Redémarrer »). La vérification peut être désactivée dans Réglages → Mises à jour.
+L'application de bureau vérifie au démarrage, puis toutes les six heures, si une version plus récente a été publiée sur GitHub. Par défaut, la nouvelle version se télécharge en arrière-plan, puis l'application propose de redémarrer ; sans redémarrage, elle s'installe au lancement suivant. Couper « Installer automatiquement les mises à jour » (Réglages → Mises à jour) fait seulement annoncer la version, téléchargée sur demande (« Mettre à jour », puis « Redémarrer »). La vérification elle-même a toujours lieu.
 
 Chaque plateforme a son propre numéro de version, dans `versions.json` : `desktop` (Windows, macOS, Linux), `web`, `android` (téléphone, tablette, Android TV, Fire TV) et `tv` (LG webOS, Samsung Tizen). L'application affiche celui de la plateforme où elle tourne (Réglages → Mises à jour).
 
