@@ -1,6 +1,28 @@
 [
   {
     "versions": {
+      "desktop": "0.1.40",
+      "web": "0.1.40",
+      "android": "0.1.40",
+      "tv": "0.1.40"
+    },
+    "fr": [
+      "Lecteur : la pastille SDR n’apparaît plus pour un média déjà en SDR ; elle reste quand du HDR est converti.",
+      "Lecteur : le bouton ⓘ n’apparaît que si la vidéo ou le son est réellement converti, et son détail ne montre que ces conversions (format d’origine → format obtenu), avec une courte explication.",
+      "Lecteur : le bouton ⓘ a la même hauteur que les pastilles, avec une icône plus lisible.",
+      "Accueil : le logo du film ou de la série remplace son nom dans le bandeau du haut et sur les vignettes On deck et Reprendre.",
+      "Fiche d’une saison ou d’un épisode : le logo de la série ne reste plus invisible ; à défaut, son nom s’affiche."
+    ],
+    "en": [
+      "Player: the SDR chip no longer shows for media that is already SDR; it stays when HDR is converted.",
+      "Player: the ⓘ button only appears when video or audio is actually converted, and its details list only those conversions (original format → output format) with a short explanation.",
+      "Player: the ⓘ button now matches the chips’ height, with a more legible icon.",
+      "Home: the movie or show logo replaces its name in the top banner and on the On Deck and Continue cards.",
+      "Season or episode page: the show logo no longer stays invisible; its name shows instead when there is none."
+    ]
+  },
+  {
+    "versions": {
       "desktop": "0.1.39",
       "web": "0.1.39",
       "android": "0.1.39",
