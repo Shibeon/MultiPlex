@@ -1,6 +1,20 @@
 [
   {
     "versions": {
+      "desktop": "0.1.42",
+      "web": "0.1.42",
+      "android": "0.1.42",
+      "tv": "0.1.42"
+    },
+    "fr": [
+      "Fiche d’une série ou d’une saison : nouveau bouton « Aléatoire » qui lit ses épisodes dans le désordre (la série entière sans les épisodes spéciaux, ou la saison) ; « Lecture » reprend l’ordre normal."
+    ],
+    "en": [
+      "Show or season page: new “Shuffle” button that plays its episodes in random order (the whole show without specials, or the season); “Play” goes back to normal order."
+    ]
+  },
+  {
+    "versions": {
       "desktop": "0.1.41",
       "web": "0.1.41",
       "android": "0.1.41",
