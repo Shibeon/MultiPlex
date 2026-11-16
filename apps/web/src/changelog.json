@@ -1,6 +1,24 @@
 [
   {
     "versions": {
+      "desktop": "0.1.38",
+      "web": "0.1.38",
+      "android": "0.1.38",
+      "tv": "0.1.38"
+    },
+    "fr": [
+      "Réglages réorganisés : Apparence, Lecture, Son puis Écran d’accueil, sur deux colonnes plus larges ; la liste de l’écran d’accueil défile dans sa carte, réorganisation conservée.",
+      "Lecteur : les boutons d’avance et de retour affichent et appliquent le pas choisi dans les réglages (et non plus toujours 30 s), y compris en diffusion.",
+      "Le CSS personnalisé est retiré : les thèmes le remplacent."
+    ],
+    "en": [
+      "Settings reorganised: Appearance, Playback, Sound then Home screen, in two wider columns; the home screen list scrolls inside its card, reordering kept.",
+      "Player: the skip back / forward buttons show and use the seek step chosen in settings (no longer always 30 s), casting included.",
+      "Custom CSS is removed: themes replace it."
+    ]
+  },
+  {
+    "versions": {
       "desktop": "0.1.37",
       "web": "0.1.37",
       "android": "0.1.37",
