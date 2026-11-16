@@ -1582,13 +1582,29 @@ input.search-input:focus-visible { background-color: var(--glass-2); }
 .settings h2 { margin: 0.9rem 0 0.3rem; padding: 0; border: 0; font-size: 0.8rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
 .settings .set-row, .settings .set-col { border-top: 1px solid var(--glass); }
 .settings h2 + .set-row, .settings h2 + .set-col { border-top: 0; }
-/* Assez de place : les sections se répartissent en colonnes (deux, trois sur un très grand écran)
-   au lieu de laisser le reste de la largeur vide ; une section n'est jamais coupée en deux.
-   C'est la largeur de la page qui décide, en rem : l'échelle de l'interface et le mode TV comptent. */
+/* Une colonne (téléphone, fenêtre étroite) : les piles s'effacent et les sections suivent l'ordre
+   des réglages — Apparence, Lecture, Son, Écran d'accueil, puis le reste.
+   Assez de place : deux piles côte à côte (Apparence, Son… à gauche ; Lecture, Écran d'accueil… à
+   droite), assez larges pour que les libellés et les commandes respirent. C'est la largeur de la
+   page qui décide, en rem : l'échelle de l'interface et le mode TV comptent. */
 .settings { container-type: inline-size; }
+.settings-cols { display: flex; flex-direction: column; }
+.set-stack { display: contents; }
+.set-appearance { order: 1; }
+.set-playback { order: 2; }
+.set-sound { order: 3; }
+.set-home { order: 4; }
+.set-advanced { order: 5; }
+.set-updates { order: 6; }
+.set-account { order: 7; }
+/* Écran d'accueil : jamais plus haut que l'apparence (mesurée), la liste défile à l'intérieur. */
+.settings .set-home { display: flex; flex-direction: column; max-height: min(var(--set-appearance-h, 38rem), 70vh); }
+.set-home .hub-list { flex: 1 1 auto; min-height: 6rem; overflow-y: auto; overscroll-behavior: contain; margin: 0 -0.5rem; padding: 0.1rem 0.5rem 0.4rem; scrollbar-gutter: stable; }
 @container (min-width: 62rem) {
-  .settings-cols { max-width: none; padding-top: 1.4rem; column-width: 30rem; column-count: 3; column-gap: 1.4rem; }
-  .settings-cols > section { break-inside: avoid; margin: 0 0 1.4rem; }
+  .settings-cols { max-width: 96rem; padding-top: 1.4rem; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.4rem; align-items: start; }
+  .set-stack { display: flex; flex-direction: column; gap: 1.4rem; min-width: 0; }
+  .settings-cols section { margin: 0; }
+  .settings .set-home { max-height: var(--set-appearance-h, 38rem); }
 }
 .set-row { min-height: 3.4rem; padding: 0.6rem 0; }
 .set-row:focus-within > span:first-child { color: var(--text); }
@@ -1736,3 +1752,4 @@ input.search-input:focus-visible { background-color: var(--glass-2); }
 .tv-device .shell.top .nav-profile:focus-visible { outline-offset: -4px; }
 /* Animations décoratives permanentes : elles occupent la télé en continu. */
 .tv-device .hero-art, .tv-device .hero-rays, .tv-device .theme-art, .tv-device .nav-art, .tv-device body { animation: none !important; }
+.set-row:has(> .relay-setting) { flex-direction: column; align-items: stretch; gap: 0.4rem; }

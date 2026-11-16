@@ -36,7 +36,6 @@ export interface Settings {
   accent: string;
   /** Surcharges de variables CSS (thème importé / personnalisé). */
   customVars: Record<string, string>;
-  customCss: string;
   cardSize: number;
   radius: number;
   uiScale: number;
@@ -107,7 +106,6 @@ export const DEFAULTS: Settings = {
   layout: 'top',
   accent: '',
   customVars: {},
-  customCss: '',
   cardSize: 160,
   radius: 14,
   uiScale: 100,
@@ -159,11 +157,21 @@ export function save(key: string, value: unknown): void {
   }
 }
 
+/** Pas d'avance / retour du lecteur : de 5 à 60 s par pas de 5, comme le curseur des réglages. */
+export function seekStepOf(v: unknown): number {
+  const n = Math.round(Number(v) / 5) * 5;
+  return Number.isFinite(n) ? Math.min(60, Math.max(5, n)) : DEFAULTS.seekStep;
+}
+
 function initial(): Settings {
   const stored = load<Partial<Settings>>(KEY);
   // Réglages d'avant la disposition « barre flottante » : on adopte le nouveau style une fois.
   if (stored && stored.layout === undefined) Object.assign(stored, { theme: DEFAULTS.theme, radius: DEFAULTS.radius, accent: '', customVars: {} });
-  return { ...DEFAULTS, ...stored };
+  // Le CSS personnalisé a été retiré (les thèmes le remplacent) : l'ancienne valeur ne s'applique plus et s'efface.
+  if (stored) delete (stored as Record<string, unknown>).customCss;
+  const merged = { ...DEFAULTS, ...stored };
+  merged.seekStep = seekStepOf(merged.seekStep);
+  return merged;
 }
 
 export const settings = signal<Settings>(initial());
@@ -187,6 +195,8 @@ export function sanitize(input: unknown): Partial<Settings> {
           Object.entries(v as Record<string, unknown>).filter(([name, val]) => name.startsWith('--') && typeof val === 'string'),
         );
       }
+    } else if (k === 'seekStep') {
+      if (typeof v === 'number') out[k] = seekStepOf(v);
     } else if (k === 'audioMode') {
       if (AUDIO_MODES.includes(v as AudioMode)) out[k] = v;
     } else if (typeof v === typeof def) out[k] = v;
@@ -220,11 +230,8 @@ export function cardWidth(): number {
   return Math.round(settings.value.cardSize * (viewport.value.tv ? 0.72 : 1) * (couchOn.value ? COUCH_SCALE : 1));
 }
 
-/** Applique thème, variables et CSS personnalisé au document, et persiste. */
+/** Applique thème et variables au document, et persiste. */
 export function initSettings(): void {
-  const style = document.createElement('style');
-  style.id = 'custom-css';
-  document.head.appendChild(style);
   let applied: string[] = [];
   addEventListener('resize', () => {
     if (viewport.value.tv !== isTv() || viewport.value.wide !== isWide()) viewport.value = { tv: isTv(), wide: isWide() };
@@ -292,7 +299,6 @@ export function initSettings(): void {
     root.style.colorScheme = (luminance(vars['--bg']) ?? 0) > 0.5 ? 'light' : 'dark';
     root.classList.toggle('reduce-motion', s.reduceMotion);
     root.classList.toggle('no-titles', !s.showTitles);
-    style.textContent = s.customCss;
     document.querySelector('meta[name=theme-color]')?.setAttribute('content', vars['--bg']);
   });
 }

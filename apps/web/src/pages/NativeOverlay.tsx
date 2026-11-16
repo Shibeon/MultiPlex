@@ -438,13 +438,13 @@ export function NativeOverlay() {
         <div class="transport">
           <span class="tr-side tr-left">
             {meta.hasPrev && <Pill icon="prev" act="prev" label={t('player.prevEp')} onClick={() => n.action('prev')} />}
-            <SkipButton seconds={-30} act="back" onClick={() => void n.command('seekBy', -30)} />
+            <SkipButton seconds={-settings.value.seekStep} act="back" onClick={() => void n.command('seekBy', -settings.value.seekStep)} />
           </span>
           <button class="btn icon-btn play" data-act="toggle" aria-label={paused ? t('item.play') : 'Pause'} onClick={() => void n.command('toggle')}>
             <Icon name={paused ? 'play' : 'pause'} size={26} />
           </button>
           <span class="tr-side tr-right">
-            <SkipButton seconds={30} act="fwd" onClick={() => void n.command('seekBy', 30)} />
+            <SkipButton seconds={settings.value.seekStep} act="fwd" onClick={() => void n.command('seekBy', settings.value.seekStep)} />
             {meta.hasNext && <Pill icon="next" act="next" label={meta.nextTitle ? t('player.upNext') : t('player.next')} title={meta.nextTitle} onClick={() => n.action('next')} />}
           </span>
         </div>

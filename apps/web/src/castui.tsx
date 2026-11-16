@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { castApi, castControl, castEnabled, casting, castPick, openCast, startCast, stopCast } from './cast';
 import { t } from './i18n';
 import type { CastDevice } from './native';
+import { settings } from './settings';
 import { server } from './store';
 import { Icon, labels } from './ui';
 
@@ -122,6 +123,7 @@ export function CastBar() {
   const playing = now.state === 'playing' || now.state === 'buffering';
   const state = now.state === 'connecting' ? t('cast.connecting') : now.state === 'buffering' ? t('cast.buffering') : now.state === 'paused' ? t('cast.paused') : t('cast.playing');
   const shown = scrub ?? now.time;
+  const step = settings.value.seekStep;
   return (
     <div class="cast-bar" role="region" aria-label={t('cast.title')}>
       {srv && poster && <img class="cast-poster" src={srv.image(poster, 120, 180)} alt="" />}
@@ -133,14 +135,14 @@ export function CastBar() {
         </small>
       </div>
       <div class="cast-transport">
-        <button class="btn icon-btn" aria-label={t('player.back10')} onClick={() => castControl('seek', Math.max(0, now.time - 10))}>
-          −10
+        <button class="btn icon-btn" aria-label={t('player.backN').replace('{n}', String(step))} onClick={() => castControl('seek', Math.max(0, now.time - step))}>
+          −{step}
         </button>
         <button class="btn icon-btn primary" aria-label={playing ? t('cast.pause') : t('cast.play')} onClick={() => castControl(playing ? 'pause' : 'play')}>
           <Icon name={playing ? 'pause' : 'play'} />
         </button>
-        <button class="btn icon-btn" aria-label={t('player.fwd30')} onClick={() => castControl('seek', now.time + 30)}>
-          +30
+        <button class="btn icon-btn" aria-label={t('player.fwdN').replace('{n}', String(step))} onClick={() => castControl('seek', now.time + step)}>
+          +{step}
         </button>
       </div>
       <div class="cast-seek">
