@@ -7,7 +7,7 @@ import { discover, libraries, server, useData } from '../store';
 import { DiscoverResults } from './Discover';
 import { PeopleRow, PersonSpotlight } from './Person';
 import { clearSearches, forgetSearch, rememberSearch, searchHistory } from '../searchHistory';
-import { Card, ErrorBox, HubRow, Icon, Spinner, VirtualGrid, artSize, labels } from '../ui';
+import { Card, ErrorBox, HubRow, Icon, Spinner, VirtualGrid, artSize, labels, useClearLogo } from '../ui';
 
 export interface KnownHub {
   id: string;
@@ -40,6 +40,8 @@ function Hero({ hub }: { hub: Hub }) {
     return () => clearInterval(timer);
   }, [items.length, reduce]);
   const item = items[index % Math.max(1, items.length)];
+  // Le logo du titre (celui de la série pour un épisode) à la place de son nom, comme la fiche.
+  const logo = useClearLogo(item ?? ({} as Metadata), 1000, 300);
   if (!item) return null;
   const { title, sub } = labels(item);
   const playable = item.type === 'movie' || item.type === 'episode';
@@ -55,7 +57,14 @@ function Hero({ hub }: { hub: Hub }) {
       </div>
       <div class="hero-info">
         <span class="hero-kicker">{hub.title}</span>
-        <h1>{title}</h1>
+        {logo.ok ? (
+          <h1 class={`hero-logo${logo.loaded ? ' is-loaded' : ''}`}>
+            <img key={logo.src} src={logo.src} alt="" decoding="async" onLoad={logo.onLoad} onError={logo.onError} />
+            <span class="sr-only">{title}</span>
+          </h1>
+        ) : (
+          <h1>{title}</h1>
+        )}
         {facts && <p class="hero-facts">{facts}</p>}
         {item.summary && <p class="hero-summary">{item.summary}</p>}
         <div class="actions">
