@@ -18,6 +18,8 @@ import { CastRow, PeopleLinks } from './Person';
 
 /** Logos déjà en échec pendant la session : on n'en refait pas la demande. */
 const failedLogos = new Set<string>();
+/** Au-delà, un logo pas encore arrivé cède la place au titre en texte. */
+const LOGO_WAIT_MS = 2500;
 
 /**
  * Logo de la fiche quand le serveur en a un : `src` vide, en échec ou illisible → null,
@@ -27,24 +29,34 @@ function useLogo(item: Metadata): { src: string; ok: boolean; loaded: boolean; i
   const srv = server.value!;
   const path = clearLogoPath(item);
   const src = path ? srv.image(path, 1000, 300, { png: true }) : '';
-  const [failed, setFailed] = useState(() => !src || failedLogos.has(src));
-  const [loaded, setLoaded] = useState(false);
-  useEffect(() => {
-    setFailed(!src || failedLogos.has(src));
-    setLoaded(false);
-  }, [src]);
+  // L'état est rattaché à l'adresse du logo, sans effet qui le remette à zéro : un logo déjà en
+  // cache (venu de la page de la série) se charge avant les effets du premier rendu, et une remise
+  // à zéro après coup le laissait invisible, sans texte de secours.
+  const [loadedSrc, setLoadedSrc] = useState('');
+  const [failedSrc, setFailedSrc] = useState('');
   const fail = () => {
     failedLogos.add(src);
-    setFailed(true);
+    setFailedSrc(src);
   };
+  // Un logo qui ne vient pas (serveur lent, réponse qui ne finit pas) ne laisse pas la place vide :
+  // le titre en texte le remplace.
+  const [slowSrc, setSlowSrc] = useState('');
+  useEffect(() => {
+    if (!src) return;
+    const timer = setTimeout(() => setSlowSrc(src), LOGO_WAIT_MS);
+    return () => clearTimeout(timer);
+  }, [src]);
+  const loaded = !!src && loadedSrc === src;
+  const failed = !src || failedSrc === src || failedLogos.has(src) || (!loaded && slowSrc === src);
   const img = (
     <img
+      key={src}
       class="dx-logo"
       src={src}
       alt=""
       decoding="async"
       // Une image vide ou minuscule ne vaut pas un titre lisible.
-      onLoad={(e) => (e.currentTarget.naturalWidth < 40 || e.currentTarget.naturalHeight < 10 ? fail() : setLoaded(true))}
+      onLoad={(e) => (e.currentTarget.naturalWidth < 40 || e.currentTarget.naturalHeight < 10 ? fail() : setLoadedSrc(src))}
       onError={fail}
     />
   );
