@@ -1,4 +1,4 @@
-import { imdbIdOf, ratingBadges, techBadges, type Hub, type Metadata } from '@multiplex/core';
+import { clearLogoPath, imdbIdOf, ratingBadges, techBadges, type Hub, type Metadata } from '@multiplex/core';
 import { Carousel } from './carousel';
 import { tvDevice } from './platform';
 import type { ComponentChildren, JSX } from 'preact';
@@ -315,10 +315,52 @@ export function Card({ item }: { item: Metadata }) {
 }
 
 /** Vignette paysage (rangée « Reprendre ») : image large, titre incrusté, progression. */
+const failedLogos = new Set<string>();
+/** Au-delà, un logo pas encore arrivé cède la place au titre en texte. */
+const LOGO_WAIT_MS = 2500;
+
+/**
+ * Logo officiel d'un titre (celui de la série pour une saison ou un épisode), demandé au serveur
+ * à la taille voulue. `ok` faux : pas de logo, en échec, illisible ou trop lent ; l'appelant
+ * affiche alors le titre en texte. `loaded` : l'image est là et peut apparaître.
+ */
+export function useClearLogo(item: Metadata, width: number, height: number) {
+  const srv = server.value!;
+  const path = clearLogoPath(item);
+  const src = path ? srv.image(path, width, height, { png: true }) : '';
+  // L'état est rattaché à l'adresse du logo, sans effet qui le remette à zéro : un logo déjà en
+  // cache se charge avant les effets du premier rendu, et une remise à zéro après coup le
+  // laissait invisible, sans texte de secours.
+  const [loadedSrc, setLoadedSrc] = useState('');
+  const [failedSrc, setFailedSrc] = useState('');
+  const [slowSrc, setSlowSrc] = useState('');
+  useEffect(() => {
+    if (!src) return;
+    const timer = setTimeout(() => setSlowSrc(src), LOGO_WAIT_MS);
+    return () => clearTimeout(timer);
+  }, [src]);
+  const fail = () => {
+    failedLogos.add(src);
+    setFailedSrc(src);
+  };
+  const loaded = !!src && loadedSrc === src;
+  const ok = !!src && failedSrc !== src && !failedLogos.has(src) && (loaded || slowSrc !== src);
+  return {
+    src,
+    ok,
+    loaded,
+    // Une image vide ou minuscule ne vaut pas un titre lisible.
+    onLoad: (e: JSX.TargetedEvent<HTMLImageElement>) => (e.currentTarget.naturalWidth < 40 || e.currentTarget.naturalHeight < 10 ? fail() : setLoadedSrc(src)),
+    onError: fail,
+  };
+}
+
 export function WideCard({ item }: { item: Metadata }) {
   const srv = server.value!;
   const w = imgWidth(cardWidth() * 1.9);
   const { title, sub } = labels(item);
+  // Le logo du titre à la place de son nom, comme sur la fiche ; le nom revient s'il n'y en a pas.
+  const logo = useClearLogo(item, 480, 160);
   const image = item.type === 'episode' ? (item.thumb ?? item.art) : (item.art ?? item.thumb);
   const progress = item.viewOffset && item.duration ? Math.min(1, item.viewOffset / item.duration) : 0;
   return (
@@ -327,7 +369,14 @@ export function WideCard({ item }: { item: Metadata }) {
         <span class="poster-fallback">{title}</span>
         {image && <img loading="lazy" decoding="async" src={srv.image(image, w, Math.round((w * 9) / 16))} alt="" />}
         <span class="wide-caption">
-          <strong>{title}</strong>
+          {logo.ok ? (
+            <span class={`wide-logo${logo.loaded ? ' is-loaded' : ''}`}>
+              <img key={logo.src} src={logo.src} alt="" decoding="async" onLoad={logo.onLoad} onError={logo.onError} />
+              <span class="sr-only">{title}</span>
+            </span>
+          ) : (
+            <strong>{title}</strong>
+          )}
           <small>{sub}</small>
         </span>
         <MoreButton item={item} />

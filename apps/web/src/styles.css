@@ -376,6 +376,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter'
 .wide-caption { position: absolute; inset: auto 0 0 0; display: grid; padding: 2rem 0.9rem 0.75rem; color: #fff; background: linear-gradient(transparent, rgba(0, 0, 0, 0.88)); }
 .wide-caption strong, .wide-caption small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .wide-caption small { opacity: 0.75; }
+.wide-logo { display: flex; align-items: flex-end; height: 2.6rem; margin-bottom: 0.3rem; }
+.wide-logo img { position: static; display: block; width: auto; height: auto; max-width: 70%; max-height: 100%; object-fit: contain; object-position: left bottom; opacity: 0; transition: opacity 0.25s ease; filter: drop-shadow(0 1px 6px rgba(0, 0, 0, 0.6)); }
+.wide-logo.is-loaded img { opacity: 1; }
 .card.wide .progress { height: 3px; }
 
 /* --- affiche vedette --- */
