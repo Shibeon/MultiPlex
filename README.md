@@ -4,6 +4,8 @@ Client Plex **communautaire**, rapide et personnalisable, pensé pour tourner pa
 
 > Projet non officiel, sans lien avec Plex Inc. Nécessite votre propre Plex Media Server.
 
+Confidentialité : MultiPlex n'envoie rien à son développeur ; ce qui part vers Plex et les autres services, et ce qui reste sur l'appareil, est décrit dans [PRIVACY.md](PRIVACY.md) (aussi dans l'application : Réglages → Compte → Confidentialité).
+
 ## Démarrer
 
 ```bash

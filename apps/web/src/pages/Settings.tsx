@@ -366,7 +366,12 @@ export function SettingsPage() {
                 {t('set.logout')}
               </button>
             </div>
-            <p class="muted small">{t('set.about')}</p>
+            <p class="muted small">
+              {t('set.about')}{' '}
+              <a class="link" href="#/privacy">
+                {t('priv.link')}
+              </a>
+            </p>
           </section>
         </div>
         <div class="set-stack">

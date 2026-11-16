@@ -22,6 +22,17 @@ function Shell({ children, wide }: { children: ComponentChildren; wide?: boolean
   );
 }
 
+/** Pied de l'écran de connexion : la page Confidentialité se lit avant de se connecter. */
+function PrivacyLink() {
+  return (
+    <p class="gate-links small">
+      <a class="link" href="#/privacy">
+        {t('priv.link')}
+      </a>
+    </p>
+  );
+}
+
 export function Connecting() {
   return (
     <Shell>
@@ -113,6 +124,7 @@ export function Login() {
           <Spinner />
         )}
         {pins && <p class="muted">{slow ? t('login.slow') : t('login.waiting')}</p>}
+        <PrivacyLink />
         {err && (
           <p class="error-text" role="alert">
             {err}{' '}
@@ -152,6 +164,7 @@ export function Login() {
         </p>
       )}
       <p class="muted small">{t('set.about')}</p>
+      <PrivacyLink />
     </Shell>
   );
 }

@@ -1753,3 +1753,19 @@ input.search-input:focus-visible { background-color: var(--glass-2); }
 /* Animations décoratives permanentes : elles occupent la télé en continu. */
 .tv-device .hero-art, .tv-device .hero-rays, .tv-device .theme-art, .tv-device .nav-art, .tv-device body { animation: none !important; }
 .set-row:has(> .relay-setting) { flex-direction: column; align-items: stretch; gap: 0.4rem; }
+
+/* Confidentialité : sections des réglages en une seule colonne de lecture. Chaque section prend
+   le focus (télécommande) : un liseré la signale. */
+.privacy-body { max-width: 52rem; display: flex; flex-direction: column; }
+.privacy-lead { max-width: 52rem; margin: 0; }
+.settings.privacy section { padding-bottom: 1rem; }
+.settings.privacy section p { margin: 0.5rem 0 0; line-height: 1.55; overflow-wrap: anywhere; }
+.settings.privacy section:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--accent); }
+.privacy-links .btn { flex-direction: column; align-items: flex-start; gap: 0.1rem; }
+.privacy-links .btn small { color: var(--muted); font-size: 0.75rem; overflow-wrap: anywhere; }
+.privacy-standalone { min-height: 100vh; margin-left: 0; padding-bottom: 0; }
+.privacy-back { margin-bottom: 1rem; }
+.gate-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.4rem 1rem; }
+@media (max-width: 760px), (orientation: landscape) and (max-height: 500px) {
+  .shell .page.privacy { padding-top: 4.4rem; }
+}

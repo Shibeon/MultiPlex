@@ -16,6 +16,7 @@ import { offlineApi } from './offline';
 import { DownloadsPanel } from './downloads';
 import { nativeAvailable } from './native';
 import { SettingsPage } from './pages/Settings';
+import { PrivacyPage } from './pages/Privacy';
 import { ThemesPage } from './pages/Themes';
 import { UpdateBanner, WhatsNew } from './pages/Update';
 import { back, go, route } from './router';
@@ -94,7 +95,7 @@ function useFitNav() {
 }
 
 /** Pages où l'on arrive depuis une autre : elles ont un bouton Retour. Les pages de la navigation n'en ont pas. */
-const DEEP = new Set(['item', 'discover', 'person', 'themes', 'profiles']);
+const DEEP = new Set(['item', 'discover', 'person', 'themes', 'profiles', 'privacy']);
 
 function BackBar() {
   const [kind] = route.value.parts;
@@ -128,6 +129,7 @@ function Page() {
   if (kind === 'watchlist') return <WatchlistPage />;
   if (kind === 'discover' && id) return <DiscoverDetails key={id} id={id} />;
   if (kind === 'settings') return <SettingsPage />;
+  if (kind === 'privacy') return <PrivacyPage />;
   if (kind === 'themes') return <ThemesPage />;
   if (kind === 'profiles') return <ProfilesPage />;
   if (kind === 'person' && id) return <PersonPage key={id} id={id} />;
@@ -149,7 +151,7 @@ function OfflineShell() {
         <i class="nav-divider" aria-hidden="true" />
         <NavLink href="#/settings" icon="settings" label={t('nav.settings')} iconOnly />
       </nav>
-      <main class="content">{route.value.parts[0] === 'settings' ? <SettingsPage /> : <OfflinePage />}</main>
+      <main class="content">{route.value.parts[0] === 'settings' ? <SettingsPage /> : route.value.parts[0] === 'privacy' ? <PrivacyPage /> : <OfflinePage />}</main>
       <DownloadsPanel />
     </div>
   );
@@ -179,7 +181,8 @@ function Routes() {
     );
   }
   if (status.value === 'offline') return <OfflineShell />;
-  if (status.value !== 'ready' || !server.value) return <Gate />;
+  // Confidentialité : lisible avant de se connecter (lien de l'écran de connexion).
+  if (status.value !== 'ready' || !server.value) return kind === 'privacy' ? <PrivacyPage standalone /> : <Gate />;
   if (kind === 'play' && id) {
     if (resumeAfter.peek()) resumeAfter.value = null;
     // Dans l'application de bureau, mpv lit le fichier d'origine ; « ?web=1 » force le lecteur intégré.
