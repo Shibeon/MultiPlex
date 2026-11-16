@@ -1,6 +1,22 @@
 [
   {
     "versions": {
+      "desktop": "0.1.41",
+      "web": "0.1.41",
+      "android": "0.1.41",
+      "tv": "0.1.41"
+    },
+    "fr": [
+      "Amis : votre propre compte s’appelle « Vous » dans la rangée des amis, au lieu de votre nom Plex.",
+      "Lecteur : dans le détail du bouton ⓘ, la conversion (format d’origine → format obtenu) s’affiche en entier au lieu d’être coupée."
+    ],
+    "en": [
+      "Friends: your own account is shown as “You” in the friends row, instead of your Plex name.",
+      "Player: in the ⓘ details, the conversion (original format → output format) is shown in full instead of being cut off."
+    ]
+  },
+  {
+    "versions": {
       "desktop": "0.1.40",
       "web": "0.1.40",
       "android": "0.1.40",
